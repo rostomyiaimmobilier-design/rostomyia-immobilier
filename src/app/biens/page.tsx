@@ -9,19 +9,23 @@ type PropertyRow = {
   ref: string;
   title: string;
   type: "Vente" | "Location";
+  category?: string | null;
   price: string;
   location: string;
   beds: number;
   baths: number;
   area: number;
   created_at: string;
+
+  // OPTIONAL (recommended): if you have this column
+  // amenities?: string[] | null;
+
   property_images?: { path: string; sort: number }[];
 };
 
 export default async function BiensPage() {
   const supabase = await createClient();
 
-  // ✅ One query: properties + related images
   const { data, error } = await supabase
     .from("properties")
     .select(
@@ -30,6 +34,7 @@ export default async function BiensPage() {
       ref,
       title,
       type,
+      category,
       price,
       location,
       beds,
@@ -40,7 +45,9 @@ export default async function BiensPage() {
         path,
         sort
       )
-    `
+      `
+      // If you have amenities column (text[]), add it here:
+      // + ", amenities"
     )
     .order("created_at", { ascending: false });
 
@@ -48,7 +55,7 @@ export default async function BiensPage() {
     return (
       <main className="mx-auto max-w-6xl p-10">
         <h1 className="text-2xl font-bold text-slate-900">Erreur</h1>
-        <pre className="mt-4 rounded-xl bg-slate-900 p-4 text-white overflow-auto">
+        <pre className="mt-4 overflow-auto rounded-xl bg-slate-900 p-4 text-white">
           {error.message}
         </pre>
       </main>
@@ -56,13 +63,6 @@ export default async function BiensPage() {
   }
 
   const propsList = (data ?? []) as PropertyRow[];
-
-  // DEBUG: log a small sample of properties and whether they include property_images
-  try {
-    console.log("[biens.page] properties sample:", JSON.stringify(propsList.slice(0, 5).map(p => ({ id: p.id, ref: p.ref, imagesCount: (p.property_images ?? []).length })), null, 2));
-  } catch (e) {
-    console.log("[biens.page] logging failed", e);
-  }
 
   // ✅ Normalize: sort images by sort and convert path -> public URL
   const items = propsList.map((p) => {
@@ -77,12 +77,20 @@ export default async function BiensPage() {
       ref: p.ref,
       title: p.title,
       type: p.type,
+      category: p.category ?? null,
       price: p.price,
       location: p.location,
       beds: Number(p.beds ?? 0),
       baths: Number(p.baths ?? 0),
       area: Number(p.area ?? 0),
+
+      // ✅ add createdAt so client can sort accurately
+      createdAt: p.created_at,
+
       images: sorted.map((img) => propertyImageUrl(img.path)),
+
+      // OPTIONAL (recommended): pass amenities if you have them
+      // amenities: Array.isArray(p.amenities) ? (p.amenities as string[]) : [],
     };
   });
 

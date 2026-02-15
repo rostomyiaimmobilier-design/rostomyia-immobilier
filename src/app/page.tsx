@@ -8,6 +8,7 @@ import CoreValue from "../components/home/CoreValue";
 import FeaturedListings from "../components/home/Featured";
 import ValuePillars from "../components/home/ValuePillars";
 import HomeCTA from "../components/home/HomeCTA";
+import VerifiedUltraLuxury from "../components/home/VerifiedUltraLuxury";
 
 type Lang = "fr" | "ar";
 
@@ -86,6 +87,7 @@ export default async function HomePage() {
   return (
     <main dir={lang === "ar" ? "rtl" : "ltr"}>
       <HomeHero lang={lang} />
+      <VerifiedUltraLuxury />
       <CoreValue lang={lang} />
       <FeaturedListings lang={lang} items={safeProps} />
       <ValuePillars lang={lang} />

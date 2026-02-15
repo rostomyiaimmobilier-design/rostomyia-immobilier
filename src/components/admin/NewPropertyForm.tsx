@@ -43,8 +43,31 @@ const APARTMENT_TYPES = [
   "T6",
 ];
 
+type TransactionType =
+  | "Vente"
+  | "Location"
+  | "par_mois"
+  | "six_mois"
+  | "douze_mois"
+  | "par_nuit"
+  | "court_sejour";
+
+const TRANSACTION_OPTIONS: Array<{ value: TransactionType; label: string }> = [
+  { value: "Vente", label: "Vente" },
+  { value: "Location", label: "Location" },
+  { value: "par_mois", label: "Location / par mois" },
+  { value: "six_mois", label: "Location / 6 mois" },
+  { value: "douze_mois", label: "Location / 12 mois" },
+  { value: "par_nuit", label: "Location / par nuit" },
+  { value: "court_sejour", label: "Location / court sejour" },
+];
+
 const AMENITY_OPTIONS = [
   { key: "residence_fermee", label: "Residence fermee" },
+  { key: "parking_sous_sol", label: "Parking sous-sol" },
+  { key: "box", label: "Box" },
+  { key: "luxe", label: "Luxe" },
+  { key: "haut_standing", label: "Haut standing" },
   { key: "double_ascenseur", label: "Double ascenseur" },
   { key: "chauffage_central", label: "Chauffage central" },
   { key: "climatisation", label: "Climatisation" },
@@ -59,11 +82,22 @@ const AMENITY_OPTIONS = [
   { key: "vue_mer", label: "Vue mer" },
 ] as const;
 
+const TYPE_LABELS: Record<string, string> = {
+  appartement: "Appartement",
+  villa: "Villa",
+  terrain: "Terrain",
+  local: "Local",
+  bureau: "Bureau",
+};
+
+const TITLE_AMENITY_KEYS = new Set(["parking_sous_sol", "box", "luxe", "haut_standing"]);
+
 type FormState = {
   ref: string;
   title: string;
+  autoTitle: boolean;
   type: string;
-  transactionType: string;
+  transactionType: TransactionType;
   apartmentType: string;
   suiteParentale: boolean;
   price: string;
@@ -83,6 +117,14 @@ type FormState = {
   description: string;
 };
 
+function isLocationTransaction(transactionType: TransactionType) {
+  return transactionType !== "Vente";
+}
+
+function transactionTypeLabel(transactionType: TransactionType) {
+  return TRANSACTION_OPTIONS.find((x) => x.value === transactionType)?.label ?? transactionType;
+}
+
 function buildLocation(commune: string, detail: string) {
   const c = commune.trim();
   const d = detail.trim();
@@ -100,8 +142,37 @@ function inferRoomLine(apartmentType: string) {
   return `${apartmentType} (salon + ${n - 1} chambre${n - 1 > 1 ? "s" : ""})`;
 }
 
+function generateTitle(form: FormState) {
+  const parts: string[] = [];
+  const typeLabel = form.type ? TYPE_LABELS[form.type] ?? form.type : "";
+
+  if (typeLabel) {
+    if (form.type === "appartement" && form.apartmentType) {
+      parts.push(`${typeLabel} ${form.apartmentType}`);
+    } else {
+      parts.push(typeLabel);
+    }
+  }
+
+  if (form.commune.trim()) parts.push(form.commune.trim());
+  if (form.residenceName.trim()) parts.push(`Residence ${form.residenceName.trim()}`);
+
+  const titleAmenities = AMENITY_OPTIONS
+    .filter((x) => TITLE_AMENITY_KEYS.has(x.key) && form.amenities.includes(x.key))
+    .map((x) => x.label);
+
+  if (titleAmenities.length) parts.push(titleAmenities.join(" | "));
+
+  return parts.join(" - ");
+}
+
 function generateDescription(form: FormState) {
   const location = buildLocation(form.commune, form.locationDetail);
+  const transactionLabel = transactionTypeLabel(form.transactionType);
+  const locationModeSuffix =
+    form.transactionType === "Location" || form.transactionType === "Vente"
+      ? ""
+      : ` (${transactionLabel})`;
   const labelType =
     form.type === "appartement" && form.apartmentType
       ? `appartement ${form.apartmentType}`
@@ -112,7 +183,7 @@ function generateDescription(form: FormState) {
   const residenceBlock = [form.residenceName, form.promotionName].filter(Boolean).join(" - ");
 
   const introParts = [
-    `L'agence Rostomyia Immobilier vous propose ${form.transactionType === "Location" ? "a la location" : "a la vente"} un ${labelType}`,
+    `L'agence Rostomyia Immobilier vous propose ${isLocationTransaction(form.transactionType) ? "a la location" : "a la vente"}${locationModeSuffix} un ${labelType}`,
     form.neverHabited ? "neuf jamais habite" : "",
     form.floor ? `situe au ${form.floor}e etage` : "",
     residenceBlock ? `au sein de ${residenceBlock}` : "",
@@ -124,6 +195,7 @@ function generateDescription(form: FormState) {
 
   const features = [
     form.type === "appartement" && form.apartmentType ? `Type : ${form.apartmentType}` : null,
+    isLocationTransaction(form.transactionType) ? `Modalite : ${transactionLabel}` : null,
     roomLine ? `Configuration : ${roomLine}` : null,
     form.area ? `Superficie : ${form.area} m2` : null,
     form.floor ? `Etage : ${form.floor}e` : null,
@@ -131,7 +203,7 @@ function generateDescription(form: FormState) {
     ...selectedAmenities,
   ].filter(Boolean) as string[];
 
-  const finalPriceLabel = form.transactionType === "Location" ? "Loyer" : "Prix";
+  const finalPriceLabel = isLocationTransaction(form.transactionType) ? "Loyer" : "Prix";
 
   return [
     `${introParts.join(", ")}.`,
@@ -156,6 +228,7 @@ export default function NewPropertyForm() {
   const [form, setForm] = useState<FormState>({
     ref: "",
     title: "",
+    autoTitle: true,
     type: "",
     transactionType: "Vente",
     apartmentType: "",
@@ -180,6 +253,7 @@ export default function NewPropertyForm() {
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { autoTitle, type, apartmentType, commune, residenceName, amenities } = form;
 
   function generateRef() {
     const ts = Date.now().toString().slice(-6);
@@ -190,6 +264,14 @@ export default function NewPropertyForm() {
   useEffect(() => {
     setForm((s) => ({ ...s, ref: generateRef() }));
   }, []);
+
+  useEffect(() => {
+    if (!autoTitle) return;
+    setForm((s) => {
+      const nextTitle = generateTitle(s);
+      return s.autoTitle && s.title !== nextTitle ? { ...s, title: nextTitle } : s;
+    });
+  }, [autoTitle, type, apartmentType, commune, residenceName, amenities]);
 
   function toggleAmenity(key: string) {
     setForm((s) => ({
@@ -213,6 +295,7 @@ export default function NewPropertyForm() {
       const generatedRef = generateRef();
       const location = buildLocation(form.commune, form.locationDetail);
       const description = form.description.trim() || generateDescription(form);
+      const dbType = form.transactionType === "Vente" ? "Vente" : "Location";
 
       const res = await fetch("/api/admin/properties", {
         method: "POST",
@@ -221,7 +304,7 @@ export default function NewPropertyForm() {
         body: JSON.stringify({
           ref: generatedRef,
           title: form.title.trim(),
-          type: form.transactionType ? form.transactionType.trim() : null,
+          type: dbType,
           category: form.type ? form.type.trim() : null,
           apartment_type: form.apartmentType ? form.apartmentType.trim() : null,
           price: form.price.trim() || null,
@@ -292,23 +375,59 @@ export default function NewPropertyForm() {
         </Field>
 
         <Field label="Titre" required>
-          <Input
-            className="h-11 rounded-2xl border-0 bg-white/80 px-4 ring-1 ring-black/10"
-            value={form.title}
-            onChange={(e) => setForm((s) => ({ ...s, title: e.target.value }))}
-            required
-            placeholder="Appartement F3..."
-          />
+          <div>
+            <Input
+              className="h-11 rounded-2xl border-0 bg-white/80 px-4 ring-1 ring-black/10"
+              value={form.title}
+              onChange={(e) => setForm((s) => ({ ...s, title: e.target.value, autoTitle: false }))}
+              required
+              placeholder="Appartement F3..."
+            />
+            <div className="mt-2 flex items-center justify-between text-xs text-slate-600">
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={form.autoTitle}
+                  onChange={(e) =>
+                    setForm((s) => ({
+                      ...s,
+                      autoTitle: e.target.checked,
+                      title: e.target.checked ? generateTitle(s) : s.title,
+                    }))
+                  }
+                />
+                Titre auto (categorie + commune + residence + points forts)
+              </label>
+              <button
+                type="button"
+                className="rounded-lg bg-black/5 px-2 py-1 hover:bg-black/10"
+                onClick={() =>
+                  setForm((s) => ({
+                    ...s,
+                    autoTitle: true,
+                    title: generateTitle(s),
+                  }))
+                }
+              >
+                Regenerer
+              </button>
+            </div>
+          </div>
         </Field>
 
         <Field label="Transaction" required>
           <select
             className="h-11 w-full rounded-2xl border-0 bg-white/80 px-4 text-sm ring-1 ring-black/10 outline-none"
             value={form.transactionType}
-            onChange={(e) => setForm((s) => ({ ...s, transactionType: e.target.value }))}
+            onChange={(e) =>
+              setForm((s) => ({ ...s, transactionType: e.target.value as TransactionType }))
+            }
           >
-            <option value="Vente">Vente</option>
-            <option value="Location">Location</option>
+            {TRANSACTION_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </Field>
 
@@ -349,7 +468,7 @@ export default function NewPropertyForm() {
             className="h-11 rounded-2xl border-0 bg-white/80 px-4 ring-1 ring-black/10"
             value={form.price}
             onChange={(e) => setForm((s) => ({ ...s, price: e.target.value }))}
-            placeholder={form.transactionType === "Location" ? "75 000 DA / mois" : "12 000 000 DA"}
+            placeholder={isLocationTransaction(form.transactionType) ? "75 000 DA / mois" : "12 000 000 DA"}
           />
         </Field>
 
