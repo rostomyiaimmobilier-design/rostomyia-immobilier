@@ -10,7 +10,7 @@ export default function LeadsHome() {
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <Link
-          href="/admin/leads/owners"
+          href="/admin/protected/leads/owners"
           className="rounded-2xl border border-black/10 bg-white/70 p-6 shadow-sm hover:bg-white"
         >
           <div className="text-lg font-semibold">Owner Leads</div>
@@ -20,7 +20,7 @@ export default function LeadsHome() {
         </Link>
 
         <Link
-          href="/admin/leads/visits"
+          href="/admin/protected/leads/visits"
           className="rounded-2xl border border-black/10 bg-white/70 p-6 shadow-sm hover:bg-white"
         >
           <div className="text-lg font-semibold">Viewing Requests</div>

@@ -33,7 +33,7 @@ export default async function ViewingRequestsPage() {
           <p className="mt-1 text-sm text-black/60">Demandes de visite</p>
         </div>
         <Link
-          href="/admin/leads"
+          href="/admin/protected/leads"
           className="rounded-xl border border-black/10 bg-white/70 px-3 py-2 text-sm hover:bg-white"
         >
           Back

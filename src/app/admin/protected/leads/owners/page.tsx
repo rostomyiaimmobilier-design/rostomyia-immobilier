@@ -2,18 +2,196 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { updateOwnerLeadStatus } from "../actions";
 
-const STATUS = ["new", "contacted", "scheduled", "closed"] as const;
+const STATUS = [
+  "new",
+  "in_review",
+  "contacted",
+  "scheduled",
+  "validated",
+  "rejected",
+  "closed",
+] as const;
+
+type OwnerLeadRow = {
+  id: string;
+  created_at: string;
+  lang: string | null;
+  status: string | null;
+  validation_note: string | null;
+  validated_at: string | null;
+  intent: string | null;
+  property_type: string | null;
+  transaction_type: string | null;
+  location_type: string | null;
+  title: string | null;
+  city: string | null;
+  commune: string | null;
+  district: string | null;
+  address: string | null;
+  residence_name: string | null;
+  price: number | null;
+  surface: number | null;
+  rooms: number | null;
+  baths: number | null;
+  floor: number | null;
+  year_built: number | null;
+  furnishing_type: string | null;
+  property_condition: string | null;
+  availability: string | null;
+  legal_docs: string | null;
+  payment_terms: string | null;
+  has_parking: boolean | null;
+  has_elevator: boolean | null;
+  has_security: boolean | null;
+  has_balcony: boolean | null;
+  has_central_heating: boolean | null;
+  has_air_conditioning: boolean | null;
+  has_fiber: boolean | null;
+  name: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  email: string | null;
+  preferred_contact_method: string | null;
+  photo_links: string | null;
+  message: string | null;
+};
+
+function isMissingColumnError(message: string | undefined) {
+  const m = (message || "").toLowerCase();
+  return m.includes("column") && m.includes("does not exist");
+}
+
+function statusBadgeClass(status: string | null) {
+  switch (status) {
+    case "validated":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "rejected":
+      return "border-red-200 bg-red-50 text-red-700";
+    case "contacted":
+    case "scheduled":
+      return "border-blue-200 bg-blue-50 text-blue-700";
+    case "in_review":
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    default:
+      return "border-slate-200 bg-slate-100 text-slate-700";
+  }
+}
+
+function formatPrice(value: number | null | undefined) {
+  if (typeof value !== "number") return "-";
+  return `${value.toLocaleString("fr-FR")} DZD`;
+}
+
+function fmt(value: string | number | null | undefined) {
+  if (value === null || value === undefined) return "-";
+  const s = String(value).trim();
+  return s || "-";
+}
+
+function yesNo(value: boolean | null | undefined) {
+  if (value === null || value === undefined) return "-";
+  return value ? "Oui" : "Non";
+}
+
+function boolFeatures(lead: OwnerLeadRow) {
+  const items = [
+    lead.has_parking ? "Parking" : null,
+    lead.has_elevator ? "Ascenseur" : null,
+    lead.has_security ? "Securite" : null,
+    lead.has_balcony ? "Balcon" : null,
+    lead.has_central_heating ? "Chauffage central" : null,
+    lead.has_air_conditioning ? "Climatisation" : null,
+    lead.has_fiber ? "Fibre" : null,
+  ].filter(Boolean) as string[];
+
+  return items.length ? items.join(" | ") : "-";
+}
 
 export default async function OwnerLeadsPage() {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("owner_leads")
-    .select(
-      "id, created_at, lang, intent, property_type, city, district, price, surface, rooms, name, phone, message, status"
-    )
-    .order("created_at", { ascending: false })
-    .limit(200);
+  const richSelect = `
+    id,
+    created_at,
+    lang,
+    status,
+    validation_note,
+    validated_at,
+    intent,
+    property_type,
+    transaction_type,
+    location_type,
+    title,
+    city,
+    commune,
+    district,
+    address,
+    residence_name,
+    price,
+    surface,
+    rooms,
+    baths,
+    floor,
+    year_built,
+    furnishing_type,
+    property_condition,
+    availability,
+    legal_docs,
+    payment_terms,
+    has_parking,
+    has_elevator,
+    has_security,
+    has_balcony,
+    has_central_heating,
+    has_air_conditioning,
+    has_fiber,
+    name,
+    phone,
+    whatsapp,
+    email,
+    preferred_contact_method,
+    photo_links,
+    message
+  `;
+
+  const legacySelect = `
+    id,
+    created_at,
+    lang,
+    intent,
+    property_type,
+    city,
+    district,
+    price,
+    surface,
+    rooms,
+    name,
+    phone,
+    message,
+    status
+  `;
+
+  const queryRich = async () =>
+    supabase
+      .from("owner_leads")
+      .select(richSelect)
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+  const queryLegacy = async () =>
+    supabase
+      .from("owner_leads")
+      .select(legacySelect)
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+  let { data, error } = await queryRich();
+
+  if (error && isMissingColumnError(error.message)) {
+    const fallback = await queryLegacy();
+    data = fallback.data;
+    error = fallback.error;
+  }
 
   if (error) {
     return (
@@ -25,111 +203,181 @@ export default async function OwnerLeadsPage() {
     );
   }
 
+  const leads = (data ?? []) as OwnerLeadRow[];
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Owner Leads</h1>
           <p className="mt-1 text-sm text-black/60">
-            Dépôts de biens (vendeurs/bailleurs)
+            Validation des propositions de biens clients.
           </p>
         </div>
         <Link
-          href="/admin/leads"
+          href="/admin/protected/leads"
           className="rounded-xl border border-black/10 bg-white/70 px-3 py-2 text-sm hover:bg-white"
         >
           Back
         </Link>
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-2xl border border-black/10 bg-white/70">
-        <table className="w-full text-sm">
-          <thead className="bg-white/80">
-            <tr className="text-left">
-              <th className="p-3">Date</th>
-              <th className="p-3">Client</th>
-              <th className="p-3">Bien</th>
-              <th className="p-3">Détails</th>
-              <th className="p-3">Statut</th>
-            </tr>
-          </thead>
+      <div className="mt-6 space-y-4">
+        {leads.map((lead) => (
+          <article
+            key={lead.id}
+            className="rounded-2xl border border-black/10 bg-white/75 p-5 shadow-sm"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-sm text-black/60">
+                  {new Date(lead.created_at).toLocaleString("fr-FR")}
+                  {lead.lang ? ` | ${lead.lang.toUpperCase()}` : ""}
+                </div>
+                <h2 className="mt-1 text-lg font-semibold text-slate-900">
+                  {fmt(lead.title) !== "-" ? lead.title : fmt(lead.property_type)}
+                </h2>
+                <div className="mt-1 text-sm text-black/65">
+                  {[lead.address, lead.district, lead.commune, lead.city].filter(Boolean).join(" | ") || "-"}
+                </div>
+              </div>
 
-          <tbody>
-            {(data ?? []).map((x) => (
-              <tr key={x.id} className="border-t border-black/5 align-top">
-                <td className="p-3 text-black/70">
-                  {new Date(x.created_at).toLocaleString("fr-FR")}
-                  <div className="text-xs text-black/50">
-                    {x.lang?.toUpperCase()} • {x.intent}
+              <span
+                className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${statusBadgeClass(
+                  lead.status
+                )}`}
+              >
+                {lead.status ?? "new"}
+              </span>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-4">
+              <Metric label="Prix" value={formatPrice(lead.price)} />
+              <Metric label="Surface" value={lead.surface ? `${lead.surface} m2` : "-"} />
+              <Metric label="Pieces" value={fmt(lead.rooms)} />
+              <Metric label="SDB" value={fmt(lead.baths)} />
+            </div>
+
+            <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+              <Info label="Client" value={fmt(lead.name)} />
+              <Info label="Telephone" value={fmt(lead.phone)} />
+              <Info label="WhatsApp" value={fmt(lead.whatsapp)} />
+              <Info label="Email" value={fmt(lead.email)} />
+              <Info label="Contact prefere" value={fmt(lead.preferred_contact_method)} />
+              <Info label="Objectif" value={fmt(lead.intent)} />
+              <Info label="Transaction" value={fmt(lead.transaction_type || lead.location_type)} />
+              <Info label="Type de bien" value={fmt(lead.property_type)} />
+              <Info label="Ameublement" value={fmt(lead.furnishing_type)} />
+              <Info label="Etat" value={fmt(lead.property_condition)} />
+              <Info label="Disponibilite" value={fmt(lead.availability)} />
+              <Info label="Etage" value={fmt(lead.floor)} />
+              <Info label="Annee construction" value={fmt(lead.year_built)} />
+              <Info label="Docs legaux" value={fmt(lead.legal_docs)} />
+              <Info label="Paiement" value={fmt(lead.payment_terms)} />
+              <Info label="Residence" value={fmt(lead.residence_name)} />
+              <Info label="Parking" value={yesNo(lead.has_parking)} />
+              <Info label="Ascenseur" value={yesNo(lead.has_elevator)} />
+              <Info label="Securite" value={yesNo(lead.has_security)} />
+              <Info label="Balcon" value={yesNo(lead.has_balcony)} />
+              <Info label="Chauffage central" value={yesNo(lead.has_central_heating)} />
+              <Info label="Climatisation" value={yesNo(lead.has_air_conditioning)} />
+              <Info label="Fibre" value={yesNo(lead.has_fiber)} />
+              <Info label="Equipements actifs" value={boolFeatures(lead)} />
+            </div>
+
+            {(lead.photo_links || lead.message) && (
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <div className="rounded-xl border border-black/10 bg-white p-3 text-sm">
+                  <div className="font-medium text-black/70">Liens photos/videos</div>
+                  <div className="mt-1 whitespace-pre-wrap break-words text-black/70">
+                    {fmt(lead.photo_links)}
                   </div>
-                </td>
-
-                <td className="p-3">
-                  <div className="font-medium">{x.name}</div>
-                  <div className="text-black/70">{x.phone}</div>
-                </td>
-
-                <td className="p-3">
-                  <div className="font-medium">{x.property_type ?? "-"}</div>
-                  <div className="text-black/60">
-                    {[x.district, x.city].filter(Boolean).join(" • ") || "-"}
+                </div>
+                <div className="rounded-xl border border-black/10 bg-white p-3 text-sm">
+                  <div className="font-medium text-black/70">Description client</div>
+                  <div className="mt-1 whitespace-pre-wrap break-words text-black/70">
+                    {fmt(lead.message)}
                   </div>
-                </td>
-
-                <td className="p-3 text-black/70">
-                  <div className="text-xs">
-                    Prix:{" "}
-                    {typeof x.price === "number"
-                      ? `${x.price.toLocaleString("fr-FR")} DZD`
-                      : "-"}
-                    {" • "}Surface: {x.surface ?? "-"}
-                    {" • "}Pièces: {x.rooms ?? "-"}
-                  </div>
-                  {x.message ? (
-                    <div className="mt-2 line-clamp-3 text-xs text-black/60">
-                      {x.message}
-                    </div>
-                  ) : null}
-                </td>
-
-                <td className="p-3">
-                  <form
-                    action={async (formData) => {
-                      "use server";
-                      const status = String(formData.get("status") || "new");
-                      await updateOwnerLeadStatus(x.id, status);
-                    }}
-                  >
-                    <select
-                      name="status"
-                      defaultValue={x.status ?? "new"}
-                      className="w-full rounded-xl border border-black/10 bg-white px-3 py-2"
-                    >
-                      {STATUS.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-
-                    <button className="mt-2 w-full rounded-xl bg-black px-3 py-2 text-xs font-medium text-white hover:opacity-95">
-                      Save
-                    </button>
-                  </form>
-                </td>
-              </tr>
-            ))}
-
-            {(!data || data.length === 0) && (
-              <tr>
-                <td className="p-6 text-black/60" colSpan={5}>
-                  No owner leads yet.
-                </td>
-              </tr>
+                </div>
+              </div>
             )}
-          </tbody>
-        </table>
+
+            <form
+              className="mt-4 rounded-xl border border-black/10 bg-white p-3"
+              action={async (formData) => {
+                "use server";
+                const status = String(formData.get("status") || "new");
+                const note = String(formData.get("validation_note") || "");
+                await updateOwnerLeadStatus(lead.id, status, note);
+              }}
+            >
+              <div className="grid gap-3 md:grid-cols-[220px_1fr_auto]">
+                <label className="text-sm">
+                  <div className="mb-1 font-medium text-black/70">Statut</div>
+                  <select
+                    name="status"
+                    defaultValue={lead.status ?? "new"}
+                    className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none"
+                  >
+                    {STATUS.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-sm">
+                  <div className="mb-1 font-medium text-black/70">Note de validation</div>
+                  <textarea
+                    name="validation_note"
+                    defaultValue={lead.validation_note ?? ""}
+                    placeholder="Remarques internes, corrections demandees, etat du dossier..."
+                    className="min-h-10 w-full rounded-xl border border-black/10 bg-white px-3 py-2 outline-none"
+                  />
+                </label>
+
+                <button
+                  type="submit"
+                  className="h-10 self-end rounded-xl bg-black px-4 text-xs font-semibold text-white hover:opacity-95"
+                >
+                  Save
+                </button>
+              </div>
+
+              {lead.validated_at && (
+                <div className="mt-2 text-xs text-emerald-700">
+                  Valide le {new Date(lead.validated_at).toLocaleString("fr-FR")}
+                </div>
+              )}
+            </form>
+          </article>
+        ))}
+
+        {leads.length === 0 && (
+          <div className="rounded-2xl border border-black/10 bg-white/75 p-6 text-sm text-black/60">
+            No owner leads yet.
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-black/10 bg-white px-3 py-2">
+      <div className="text-xs uppercase tracking-wide text-black/50">{label}</div>
+      <div className="mt-0.5 text-sm font-semibold text-slate-900">{value}</div>
+    </div>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-black/10 bg-white px-3 py-2">
+      <div className="text-xs uppercase tracking-wide text-black/50">{label}</div>
+      <div className="mt-0.5 text-sm text-slate-900">{value}</div>
     </div>
   );
 }
