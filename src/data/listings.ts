@@ -1,0 +1,47 @@
+export const listings = [
+  {
+    id: "OR-001",
+    title: "Appartement T3 lumineux — Bel Air",
+    type: "Vente",
+    price: "18.5 M DA",
+    location: "Oran · Bel Air",
+    beds: 2,
+    baths: 1,
+    area: 92,
+    images: [
+      "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=1600&auto=format&fit=crop&q=60",
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1600&auto=format&fit=crop&q=60",
+      "https://images.unsplash.com/photo-1484154218962-a197022b5858?w=1600&auto=format&fit=crop&q=60",
+    ],
+  },
+  {
+    id: "OR-002",
+    title: "Villa moderne avec vue mer — Canastel",
+    type: "Vente",
+    price: "85 M DA",
+    location: "Oran · Canastel",
+    beds: 5,
+    baths: 3,
+    area: 320,
+    images: [
+      "https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=1600&auto=format&fit=crop&q=60",
+      "https://images.unsplash.com/photo-1502005229762-cf1b2da7c5d6?w=1600&auto=format&fit=crop&q=60",
+      "https://images.unsplash.com/photo-1501183638710-841dd1904471?w=1600&auto=format&fit=crop&q=60",
+    ],
+  },
+  {
+    id: "OR-003",
+    title: "Local commercial — Akid Lotfi",
+    type: "Location",
+    price: "250k DA / mois",
+    location: "Oran · Akid Lotfi",
+    beds: 0,
+    baths: 1,
+    area: 75,
+    images: [
+      "https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=1600&auto=format&fit=crop&q=60",
+      "https://images.unsplash.com/photo-1527192491265-7e15c55b1ed2?w=1600&auto=format&fit=crop&q=60",
+      "https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=1600&auto=format&fit=crop&q=60",
+    ],
+  },
+] as const;

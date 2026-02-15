@@ -1,0 +1,48 @@
+:root {
+  --brand-primary: 17 24 39;     /* dark slate */
+  --brand-accent: 180 145 80;    /* change to your gold / accent */
+  --brand-bg: 250 250 249;
+    --bg: 11 15 20;         /* #0B0F14 */
+  --card: 255 255 255;    /* used as rgba */
+  --muted: 148 163 184;   /* slate-ish */
+  --border: 255 255 255;
+  --emerald: 16 185 129;
+  --amber: 251 191 36;       /* off white */
+}
+
+body {
+    background: rgb(var(--bg));
+  color: white;
+}
+/* Premium sticky glass navbar */
+.nav-glass {
+  position: relative;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.78),
+    rgba(255, 255, 255, 0.55)
+  );
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* soft top highlight */
+.nav-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 20% 0%,
+    rgba(201, 167, 98, 0.14),
+    transparent 42%
+  );
+}
+
+/* subtle shadow when sticky */
+.nav-glass {
+  box-shadow:
+    0 1px 0 rgba(15, 23, 42, 0.06),
+    0 10px 30px rgba(15, 23, 42, 0.06);
+}
