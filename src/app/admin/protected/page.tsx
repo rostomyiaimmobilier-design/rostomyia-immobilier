@@ -150,10 +150,10 @@ export default async function AdminPage() {
 
                     <div className="flex gap-2">
                       <Link
-                        href={`/admin/${p.id}`}
+                        href={`/admin/protected/${p.id}`}
                         className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-50"
                       >
-                        Ouvrir
+                        Modifier
                       </Link>
 
                       <DeletePropertyForm propertyId={p.id} action={deleteProperty} />

@@ -125,6 +125,12 @@ function transactionTypeLabel(transactionType: TransactionType) {
   return TRANSACTION_OPTIONS.find((x) => x.value === transactionType)?.label ?? transactionType;
 }
 
+function transactionTypeToStorageValue(transactionType: TransactionType): string {
+  if (transactionType === "Vente") return "vente";
+  if (transactionType === "Location") return "location";
+  return transactionType;
+}
+
 function buildLocation(commune: string, detail: string) {
   const c = commune.trim();
   const d = detail.trim();
@@ -296,6 +302,7 @@ export default function NewPropertyForm() {
       const location = buildLocation(form.commune, form.locationDetail);
       const description = form.description.trim() || generateDescription(form);
       const dbType = form.transactionType === "Vente" ? "Vente" : "Location";
+      const locationType = transactionTypeToStorageValue(form.transactionType);
 
       const res = await fetch("/api/admin/properties", {
         method: "POST",
@@ -305,6 +312,7 @@ export default function NewPropertyForm() {
           ref: generatedRef,
           title: form.title.trim(),
           type: dbType,
+          location_type: locationType,
           category: form.type ? form.type.trim() : null,
           apartment_type: form.apartmentType ? form.apartmentType.trim() : null,
           price: form.price.trim() || null,

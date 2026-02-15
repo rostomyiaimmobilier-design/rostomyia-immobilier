@@ -154,6 +154,7 @@ export type PropertyItem = {
   ref: string;
   title: string;
   type: "Vente" | "Location";
+  locationType?: string | null;
   category?: string | null;
   price: string;
   location: string; // examples: "Canastel, Bir El Djir" OR "Oran/Maraval"
@@ -341,6 +342,72 @@ function normalizeText(s: string): string {
     .trim();
 }
 
+function normalizeStoredLocationType(value: string | null | undefined): DealType | null {
+  const normalized = normalizeText(value || "");
+  if (!normalized) return null;
+
+  if (normalized.includes("vente") || normalized.includes("sale")) return "Vente";
+  if (
+    normalized.includes("par_nuit") ||
+    normalized.includes("par nuit") ||
+    normalized.includes("par nuite") ||
+    normalized.includes("night")
+  ) {
+    return "par_nuit";
+  }
+  if (
+    normalized.includes("court_sejour") ||
+    normalized.includes("court sejour") ||
+    normalized.includes("short stay") ||
+    normalized.includes("vacance") ||
+    normalized.includes("weekend")
+  ) {
+    return "court_sejour";
+  }
+  if (
+    normalized.includes("douze_mois") ||
+    normalized.includes("douze mois") ||
+    normalized.includes("12 mois") ||
+    normalized.includes("12mois") ||
+    normalized.includes("annuel") ||
+    normalized.includes("year")
+  ) {
+    return "douze_mois";
+  }
+  if (
+    normalized.includes("six_mois") ||
+    normalized.includes("six mois") ||
+    normalized.includes("6 mois") ||
+    normalized.includes("6mois")
+  ) {
+    return "six_mois";
+  }
+  if (
+    normalized.includes("par_mois") ||
+    normalized.includes("par mois") ||
+    normalized.includes("mensuel") ||
+    normalized.includes("monthly")
+  ) {
+    return "par_mois";
+  }
+  if (
+    normalized.includes("location") ||
+    normalized.includes("louer") ||
+    normalized.includes("rent") ||
+    normalized.includes("rental") ||
+    normalized.includes("lease") ||
+    normalized.includes("كراء") ||
+    normalized.includes("ايجار")
+  ) {
+    return "Location";
+  }
+
+  const fromSuggestion = TRANSACTION_SUGGESTIONS.find((entry) =>
+    entry.terms.some((term) => normalized.includes(normalizeText(term)))
+  );
+  return fromSuggestion?.dealType ?? null;
+}
+
 const ORAN_COMMUNES_NORM = ORAN_COMMUNES.map((c) => ({
   raw: c,
   norm: normalizeText(c),
@@ -421,22 +488,26 @@ function buildSearchableListingText(item: PropertyItem): string {
     .map((key) => AMENITY_OPTIONS.find((a) => a.key === key)?.label)
     .filter((label): label is string => Boolean(label));
 
-  const transactionTerms =
-    item.type === "Vente"
-      ? TRANSACTION_SUGGESTIONS[0].terms
-      : TRANSACTION_SUGGESTIONS[1].terms;
+  const normalizedLocationType = normalizeStoredLocationType(item.locationType);
+  const effectiveDealType = normalizedLocationType ?? item.type;
+  const transactionTerms = (
+    TRANSACTION_SUGGESTIONS.find((entry) => entry.dealType === effectiveDealType)?.terms ?? []
+  ).join(" ");
+  const transactionLabel = effectiveDealType === "Vente" ? "Vente" : effectiveDealType;
 
   return normalizeText(
     [
       item.title,
       item.category ?? "",
       item.type,
+      item.locationType ?? "",
       item.price,
       item.location,
       parsed.commune,
       parsed.district,
       categories.join(" "),
-      transactionTerms.join(" "),
+      transactionLabel,
+      transactionTerms,
       amenityLabels.join(" "),
       `${item.beds} chambres beds`,
       `${item.baths} salles bain baths`,
@@ -1129,17 +1200,20 @@ export default function ListingsClient({ items }: { items: PropertyItem[] }) {
 
     let list = items.filter((p) => {
       const hay = buildSearchableListingText(p);
+      const normalizedLocationType = normalizeStoredLocationType(p.locationType);
+      const effectiveDealType = normalizedLocationType ?? p.type;
       const byDeal =
         filters.dealType === "Tous"
           ? true
           : filters.dealType === "Vente"
-          ? p.type === "Vente"
+          ? effectiveDealType === "Vente"
           : filters.dealType === "Location"
-          ? p.type === "Location"
-          : p.type === "Location" &&
-            (TRANSACTION_SUGGESTIONS.find((entry) => entry.dealType === filters.dealType)?.terms ?? []).some(
-              (term) => hay.includes(normalizeText(term))
-            );
+          ? effectiveDealType !== "Vente"
+          : effectiveDealType === filters.dealType ||
+            (effectiveDealType === "Location" &&
+              (TRANSACTION_SUGGESTIONS.find((entry) => entry.dealType === filters.dealType)?.terms ?? []).some(
+                (term) => hay.includes(normalizeText(term))
+              ));
       const byQ = qTokens.length > 0 ? qTokens.every((token) => hay.includes(token)) : true;
 
       const parsed = smartParseLocation(p.location);

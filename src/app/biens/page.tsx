@@ -9,6 +9,7 @@ type PropertyRow = {
   ref: string;
   title: string;
   type: "Vente" | "Location";
+  location_type?: string | null;
   category?: string | null;
   price: string;
   location: string;
@@ -23,13 +24,15 @@ type PropertyRow = {
   property_images?: { path: string; sort: number }[];
 };
 
+function isMissingLocationTypeColumn(message: string | undefined) {
+  const m = (message || "").toLowerCase();
+  return m.includes("location_type") && (m.includes("does not exist") || m.includes("column"));
+}
+
 export default async function BiensPage() {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("properties")
-    .select(
-      `
+  const selectWithoutLocationType = `
       id,
       ref,
       title,
@@ -45,11 +48,46 @@ export default async function BiensPage() {
         path,
         sort
       )
-      `
-      // If you have amenities column (text[]), add it here:
-      // + ", amenities"
-    )
-    .order("created_at", { ascending: false });
+    `;
+
+  const selectWithLocationType = `
+      id,
+      ref,
+      title,
+      type,
+      location_type,
+      category,
+      price,
+      location,
+      beds,
+      baths,
+      area,
+      created_at,
+      property_images (
+        path,
+        sort
+      )
+    `;
+
+  const queryWithLocationType = async () =>
+    supabase
+      .from("properties")
+      .select(selectWithLocationType)
+      .order("created_at", { ascending: false });
+
+  const queryWithoutLocationType = async () =>
+    supabase
+      .from("properties")
+      .select(selectWithoutLocationType)
+      .order("created_at", { ascending: false });
+
+  let { data, error } = await queryWithLocationType();
+
+  if (error && isMissingLocationTypeColumn(error.message)) {
+    const fallback = await queryWithoutLocationType();
+    data = fallback.data;
+    error = fallback.error;
+  }
 
   if (error) {
     return (
@@ -77,6 +115,7 @@ export default async function BiensPage() {
       ref: p.ref,
       title: p.title,
       type: p.type,
+      locationType: p.location_type ?? null,
       category: p.category ?? null,
       price: p.price,
       location: p.location,

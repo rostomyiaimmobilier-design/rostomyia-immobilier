@@ -3,10 +3,16 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 
+function isMissingLocationTypeColumn(message: string | undefined) {
+  const m = (message || "").toLowerCase();
+  return m.includes("location_type") && (m.includes("does not exist") || m.includes("column"));
+}
+
 type Payload = {
   ref: string;
   title: string;
   type: "Vente" | "Location";
+  locationType?: string;
   price: string;
   location: string;
   beds: number;
@@ -22,21 +28,36 @@ export async function createProperty(payload: Payload) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: prop, error } = await supabase
+  const insertPayload = {
+    ref: payload.ref,
+    title: payload.title,
+    type: payload.type,
+    location_type: payload.locationType ?? null,
+    price: payload.price,
+    location: payload.location,
+    beds: payload.beds,
+    baths: payload.baths,
+    area: payload.area,
+    description: payload.description,
+  };
+
+  let { data: prop, error } = await supabase
     .from("properties")
-    .insert({
-      ref: payload.ref,
-      title: payload.title,
-      type: payload.type,
-      price: payload.price,
-      location: payload.location,
-      beds: payload.beds,
-      baths: payload.baths,
-      area: payload.area,
-      description: payload.description,
-    })
+    .insert(insertPayload)
     .select("id")
     .single();
+
+  if (error && isMissingLocationTypeColumn(error.message)) {
+    const legacyPayload = { ...insertPayload };
+    delete (legacyPayload as { location_type?: string | null }).location_type;
+    const fallback = await supabase
+      .from("properties")
+      .insert(legacyPayload)
+      .select("id")
+      .single();
+    prop = fallback.data;
+    error = fallback.error;
+  }
 
   if (error) {
     return { ok: false as const, message: error.message };
