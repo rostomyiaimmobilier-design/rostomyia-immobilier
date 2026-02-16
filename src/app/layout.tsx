@@ -1,9 +1,17 @@
 import type { Metadata } from "next";
-import { Manrope, Cormorant_Garamond, Geist_Mono } from "next/font/google";
+import {
+  Manrope,
+  Cormorant_Garamond,
+  Geist_Mono,
+  Noto_Naskh_Arabic,
+  Amiri,
+} from "next/font/google";
+import { cookies } from "next/headers";
 import "./globals.css";
 
 import { LanguageProvider } from "@/components/LanguageProvider";
 import AppLayoutShell from "@/components/AppLayoutShell";
+import { LANG_COOKIE_KEY, LEGACY_LANG_COOKIE_KEY, langToDir, normalizeLang } from "@/lib/i18n";
 
 
 const manrope = Manrope({
@@ -22,20 +30,39 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const arabicSans = Noto_Naskh_Arabic({
+  variable: "--font-arabic-sans",
+  subsets: ["arabic"],
+  weight: ["400", "500", "600", "700"],
+});
+
+const arabicDisplay = Amiri({
+  variable: "--font-arabic-display",
+  subsets: ["arabic"],
+  weight: ["400", "700"],
+});
+
 export const metadata: Metadata = {
   title: "Rostomyia Immobilier",
   description: "Agence immobilière à Oran, Algérie",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cookieStore = await cookies();
+  const lang = normalizeLang(
+    cookieStore.get(LANG_COOKIE_KEY)?.value ?? cookieStore.get(LEGACY_LANG_COOKIE_KEY)?.value
+  );
+
   return (
-    <html lang="fr" className="dark">
-      <body className={`${manrope.variable} ${cormorant.variable} ${geistMono.variable} min-h-screen bg-[rgb(var(--bg))] text-[rgb(var(--text))] antialiased`}>
-        <LanguageProvider>
+    <html lang={lang} dir={langToDir(lang)} className="dark">
+      <body
+        className={`${manrope.variable} ${cormorant.variable} ${geistMono.variable} ${arabicSans.variable} ${arabicDisplay.variable} min-h-screen bg-[rgb(var(--bg))] text-[rgb(var(--text))] antialiased`}
+      >
+        <LanguageProvider initialLang={lang}>
           <AppLayoutShell>{children}</AppLayoutShell>
         </LanguageProvider>
       </body>

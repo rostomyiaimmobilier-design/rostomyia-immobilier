@@ -33,11 +33,27 @@ export default function HomeHero({ lang }: { lang: "fr" | "ar" }) {
 
   return (
     <section className="relative overflow-hidden">
+      {/* Hero background image */}
+      <div className="pointer-events-none absolute inset-0">
+        <Image
+          src="/images/background.png"
+          alt={lang === "ar" ? "خلفية وهران" : "Oran background"}
+          fill
+          priority
+          className="object-cover object-center saturate-[1.2] contrast-110 brightness-[0.9]"
+          sizes="100vw"
+        />
+      </div>
+
+      {/* Readability overlay */}
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(112deg,rgba(249,244,235,0.94)_0%,rgba(243,232,214,0.8)_38%,rgba(24,34,66,0.38)_100%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,rgba(186,154,92,0.28),transparent_40%),radial-gradient(circle_at_82%_15%,rgba(114,133,213,0.28),transparent_42%),linear-gradient(to_top,rgba(8,15,32,0.32),transparent_55%)]" />
+
       {/* Ambient */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -left-40 -top-40 h-[520px] w-[520px] rounded-full bg-[rgb(var(--gold))] blur-3xl opacity-15" />
         <div className="absolute -right-52 top-0 h-[620px] w-[620px] rounded-full bg-[rgb(var(--navy))] blur-3xl opacity-[0.06]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_25%_10%,rgba(255,255,255,0.75),transparent_45%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_28%_12%,rgba(255,255,255,0.55),transparent_45%)]" />
       </div>
 
       <div className="relative mx-auto max-w-6xl px-4 py-14 md:py-20">
@@ -128,7 +144,7 @@ export default function HomeHero({ lang }: { lang: "fr" | "ar" }) {
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.7, ease: "easeOut", delay: 0.08 }}
-              className="relative aspect-[4/5] overflow-hidden rounded-[28px] bg-white/50 backdrop-blur"
+              className="relative aspect-[4/5] overflow-hidden bg-white/50 backdrop-blur"
             >
               {/* If you have a hero photo, put it in /public/images/hero-oran.jpg */}
                <Image src="/images/hero-oran.jpg" alt="Oran" fill priority className="object-cover" />

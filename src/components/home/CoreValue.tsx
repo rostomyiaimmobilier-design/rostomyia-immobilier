@@ -10,6 +10,11 @@ import {
   Video,
   CreditCard,
   Globe,
+  Megaphone,
+  UserRoundCheck,
+  Camera,
+  Clapperboard,
+  BadgeCheck,
 } from "lucide-react";
 
 type Lang = "fr" | "ar";
@@ -23,6 +28,7 @@ type Copy = {
   mission: string;
   problemKicker: string;
   problemsTitle: string;
+  problemsLeadIn: string;
   problems: string[];
   trifectaTitle: string;
   trifectaSub: string;
@@ -30,6 +36,13 @@ type Copy = {
   auditTitle: string;
   auditLead: string;
   auditItems: string[];
+  leadStudioKicker: string;
+  leadStudioTitle: string;
+  leadStudioIntro: string;
+  leadStudioCards: { t: string; d: string }[];
+  leadStudioChecklist: string[];
+  leadStudioBadge: string;
+  leadStudioCaption: string;
 };
 
 const copy: Record<Lang, Copy> = {
@@ -48,6 +61,7 @@ const copy: Record<Lang, Copy> = {
       "Revolutionner le marche immobilier algerien avec une place de marche Validation-First: des biens verifies, une transparence technique complete, et la possibilite de reserver depuis l'etranger en toute certitude.",
     problemKicker: "Contexte",
     problemsTitle: "Le fosse Confiance & Transaction",
+    problemsLeadIn: "Quatre blocages majeurs ralentissent la decision et la reservation.",
     problems: [
       "Deficit de confiance: trop d'annonces sont obsoletes, trompeuses ou non verifiees.",
       "Barriere distance: la diaspora depend souvent de relais informels peu fiables.",
@@ -83,6 +97,31 @@ const copy: Record<Lang, Copy> = {
       "Etat technique: reseaux, finitions, points de vigilance batiment",
       "Lecture terrain: accessibilite, nuisances, contraintes d'usage",
     ],
+    leadStudioKicker: "Studio d'activation des leads",
+    leadStudioTitle: "Clients et leads proprietaires, pris en charge par notre equipe media",
+    leadStudioIntro:
+      "Rostomyia pilote la chaine complete: qualification des leads, shooting photo, video et mise en avant professionnelle de chaque bien.",
+    leadStudioCards: [
+      {
+        t: "Notification clients",
+        d: "Alerte ciblee des nouveaux biens verifies vers les clients les plus compatibles.",
+      },
+      {
+        t: "Cellule leads proprietaires",
+        d: "Traitement rapide des demandes proprietaires avec plan d'action et calendrier clair.",
+      },
+      {
+        t: "Production photo et video",
+        d: "Notre equipe prend en charge chaque photo shooting et video shooting de vos biens, de la captation au rendu final.",
+      },
+    ],
+    leadStudioChecklist: [
+      "Shooting photo HD avec cadrage professionnel",
+      "Video walkthrough et formats reels pour les plateformes sociales",
+      "Pack visuel livre puis diffuse en priorite",
+    ],
+    leadStudioBadge: "Production terrain",
+    leadStudioCaption: "Un seul workflow: captation, edition, publication, conversion.",
   },
   ar: {
     badge: "نموذج Validation-First",
@@ -99,6 +138,7 @@ const copy: Record<Lang, Copy> = {
       "إعادة تشكيل السوق العقاري الجزائري من خلال منصة Validation-First: عقارات موثقة، شفافية تقنية كاملة، وإمكانية الحجز من الخارج بثقة عالية.",
     problemKicker: "السياق",
     problemsTitle: "فجوة الثقة والمعاملات",
+    problemsLeadIn: "اربعة عوائق رئيسية تبطئ القرار وتؤخر الحجز.",
     problems: [
       "ضعف الثقة: عدد كبير من الإعلانات غير محدث أو غير موثق أو مضلل.",
       "حاجز المسافة: الجالية تعتمد على وسطاء غير موثوقين للتحقق من العقار.",
@@ -132,12 +172,33 @@ const copy: Record<Lang, Copy> = {
       "تقييم الحالة التقنية: الشبكات والتشطيبات ومؤشرات المبنى",
       "تحليل البيئة المحيطة: الوصول، الإزعاج، والقيود العملية",
     ],
+    leadStudioKicker: "استوديو تفعيل الطلبات",
+    leadStudioTitle: "العملاء وطلبات الملاك تحت إشراف فريقنا الإعلامي المحترف",
+    leadStudioIntro:
+      "روستوميا تدير السلسلة كاملة: تأهيل الطلبات، التصوير الفوتوغرافي، تصوير الفيديو، وإبراز كل عقار بجودة احترافية.",
+    leadStudioCards: [
+      {
+        t: "تنبيه العملاء",
+        d: "إشعارات موجهة للعقارات الموثقة نحو العملاء المطابقين.",
+      },
+      {
+        t: "خلية طلبات الملاك",
+        d: "معالجة سريعة لطلبات الملاك مع خطة عمل وجدول نشر واضح.",
+      },
+      {
+        t: "إنتاج الصور والفيديو",
+        d: "فريقنا يتكفل بكل عمليات التصوير الفوتوغرافي وتصوير الفيديو لكل عقار.",
+      },
+    ],
+    leadStudioChecklist: [
+      "تصوير فوتوغرافي عالي الدقة بزوايا مدروسة",
+      "جولة فيديو داخل العقار ونسخ قصيرة للمنصات الاجتماعية",
+      "تسليم الحزمة البصرية ثم نشرها بأولوية",
+    ],
+    leadStudioBadge: "إيضاح الإنتاج",
+    leadStudioCaption: "سير عمل واحد: تصوير، مونتاج، نشر، ثم تحويل.",
   },
 };
-
-function cn(...classes: Array<string | false | null | undefined>) {
-  return classes.filter(Boolean).join(" ");
-}
 
 function FeatureIcon({ idx }: { idx: number }) {
   const common = "h-4 w-4";
@@ -149,18 +210,28 @@ function FeatureIcon({ idx }: { idx: number }) {
 export default function CoreValue({ lang }: { lang: Lang }) {
   const t = copy[lang];
   const missionImage = "/images/hero-oran.jpg";
+  const problemIcons = [ShieldCheck, Globe, ScanSearch, CreditCard] as const;
+  const leadStudioIcons = [Megaphone, UserRoundCheck, Camera] as const;
+  const parsedProblems = t.problems.map((line) => {
+    const idx = line.indexOf(":");
+    if (idx === -1) return { title: line, detail: "" };
+    return {
+      title: line.slice(0, idx).trim(),
+      detail: line.slice(idx + 1).trim(),
+    };
+  });
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-18 md:py-24">
       <div className="space-y-10">
         {/* ================= HERO VALUE CARD ================= */}
-        <article className="relative overflow-hidden rounded-[34px] bg-[radial-gradient(circle_at_10%_20%,rgba(186,154,92,0.28),transparent_36%),linear-gradient(130deg,rgba(10,18,35,0.98),rgba(15,28,53,0.94))] p-6 md:p-10">
+        <article className="relative overflow-hidden rounded-none bg-[radial-gradient(circle_at_10%_20%,rgba(186,154,92,0.28),transparent_36%),linear-gradient(130deg,rgba(10,18,35,0.98),rgba(15,28,53,0.94))] p-6 md:p-10">
           <div className="pointer-events-none absolute -right-14 -top-14 h-48 w-48 rounded-full bg-[rgb(var(--gold))]/25 blur-3xl" />
           <div className="pointer-events-none absolute -left-20 bottom-0 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
 
           <div className="grid gap-6 md:grid-cols-2 md:items-center">
             <div>
-              <span className="inline-flex items-center gap-2 rounded-full bg-white/14 px-3 py-1 text-xs tracking-[0.18em] text-white/85">
+              <span className="inline-flex items-center gap-2 rounded-none bg-white/14 px-3 py-1 text-xs tracking-[0.18em] text-white/85">
                 <ShieldCheck className="h-4 w-4 text-[rgb(var(--gold))]" />
                 {t.badge}
               </span>
@@ -177,7 +248,7 @@ export default function CoreValue({ lang }: { lang: Lang }) {
                 {t.metrics.map((m) => (
                   <div
                     key={m.l}
-                    className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 shadow-[0_12px_36px_rgba(0,0,0,0.18)] backdrop-blur"
+                    className="rounded-none border border-white/10 bg-white/10 px-3 py-2 shadow-[0_12px_36px_rgba(0,0,0,0.18)] backdrop-blur"
                   >
                     <div className="text-sm font-semibold text-white">{m.v}</div>
                     <div className="text-[11px] text-white/72">{m.l}</div>
@@ -191,7 +262,7 @@ export default function CoreValue({ lang }: { lang: Lang }) {
               <p className="mt-2 text-sm leading-relaxed text-white/78">{t.mission}</p>
             </div>
 
-            <div className="relative aspect-[5/4] overflow-hidden rounded-2xl bg-black/5">
+            <div className="relative aspect-[5/4] overflow-hidden rounded-none bg-black/5">
               <Image
                 src={missionImage}
                 alt="Oran"
@@ -201,7 +272,7 @@ export default function CoreValue({ lang }: { lang: Lang }) {
               />
               <div className="absolute inset-0 bg-[linear-gradient(to_top,rgba(10,18,35,0.55),transparent_55%)]" />
 
-              <div className="absolute bottom-3 left-3 rounded-xl bg-white/82 px-3 py-2 text-xs text-[rgb(var(--navy))] backdrop-blur">
+              <div className="absolute bottom-3 left-3 rounded-none bg-white/82 px-3 py-2 text-xs text-[rgb(var(--navy))] backdrop-blur">
                 {lang === "ar"
                   ? "تحقق • مشاهدة • حجز"
                   : "Validation • Visualisation • Reservation"}
@@ -210,35 +281,131 @@ export default function CoreValue({ lang }: { lang: Lang }) {
           </div>
         </article>
 
-        {/* ================= PROBLEM CARD ================= */}
-        <article className="rounded-[28px] bg-white/60 p-6 backdrop-blur md:p-8">
-          <div className="grid gap-6 lg:grid-cols-5">
-            <div className="lg:col-span-2">
-              <p className="text-xs uppercase tracking-[0.15em] text-[rgb(var(--navy))]/65">
-                {t.problemKicker}
-              </p>
-              <h3 className="font-display mt-2 text-2xl text-[rgb(var(--navy))] md:text-3xl">
-                {t.problemsTitle}
+        {/* ================= LEAD STUDIO ================= */}
+        <article className="relative overflow-hidden border border-[rgb(var(--gold))]/18 bg-[linear-gradient(130deg,rgba(10,18,35,0.98),rgba(17,31,57,0.96))] p-6 md:p-8">
+          <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-[rgb(var(--gold))]/24 blur-3xl" />
+          <div className="pointer-events-none absolute -left-20 bottom-0 h-56 w-56 rounded-full bg-white/8 blur-3xl" />
+
+          <div className="relative grid gap-6 lg:grid-cols-12">
+            <div className="lg:col-span-8">
+              <div className="inline-flex items-center gap-2 rounded-none bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-white/80">
+                <Sparkles className="h-4 w-4 text-[rgb(var(--gold))]" />
+                {t.leadStudioKicker}
+              </div>
+
+              <h3 className="font-display mt-3 text-3xl leading-tight text-white md:text-4xl">
+                {t.leadStudioTitle}
               </h3>
+
+              <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/78 md:text-base">
+                {t.leadStudioIntro}
+              </p>
+
+              <div className="mt-6 grid gap-4 md:grid-cols-3">
+                {t.leadStudioCards.map((item, idx) => {
+                  const Icon = leadStudioIcons[idx] ?? Camera;
+                  return (
+                    <motion.div
+                      key={item.t}
+                      whileHover={{ y: -6, scale: 1.01 }}
+                      transition={{ duration: 0.25, ease: "easeOut" }}
+                      className="rounded-none border border-white/12 bg-white/8 p-4 backdrop-blur"
+                    >
+                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-none bg-[rgb(var(--gold))]/22 text-[rgb(var(--gold))]">
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <h4 className="mt-3 text-sm font-semibold text-white">{item.t}</h4>
+                      <p className="mt-2 text-sm leading-relaxed text-white/72">{item.d}</p>
+                    </motion.div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-6 rounded-none border border-white/12 bg-white/8 p-4 backdrop-blur md:p-5">
+                <p className="inline-flex items-center gap-2 rounded-none bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-white/78">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[rgb(var(--gold))]" />
+                  {t.problemKicker}
+                </p>
+
+                <h4 className="font-display mt-3 text-2xl leading-tight text-white md:text-3xl">
+                  {t.problemsTitle}
+                </h4>
+
+                <p className="mt-2 text-sm leading-relaxed text-white/74">{t.problemsLeadIn}</p>
+
+                <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {parsedProblems.map((x, i) => {
+                    const Icon = problemIcons[i] ?? ShieldCheck;
+                    return (
+                      <motion.li
+                        key={x.title + x.detail}
+                        whileHover={{ y: -4, scale: 1.01 }}
+                        transition={{ duration: 0.25, ease: "easeOut" }}
+                        className="rounded-none border border-white/12 bg-white/7 p-4"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="inline-flex h-7 w-7 items-center justify-center rounded-none bg-white/10 text-[11px] font-semibold text-white">
+                            {i + 1}
+                          </span>
+                          <span className="inline-flex h-8 w-8 items-center justify-center rounded-none bg-[rgb(var(--gold))]/22 text-[rgb(var(--gold))]">
+                            <Icon className="h-4 w-4" />
+                          </span>
+                        </div>
+
+                        <h5 className="mt-3 text-sm font-semibold text-white">{x.title}</h5>
+                        {x.detail ? (
+                          <p className="mt-2 text-sm leading-relaxed text-white/72">{x.detail}</p>
+                        ) : null}
+                      </motion.li>
+                    );
+                  })}
+                </ul>
+              </div>
             </div>
-            <ul className="space-y-2 lg:col-span-3">
-              {t.problems.map((x, i) => (
-                <li
-                  key={x}
-                  className="rounded-xl border border-black/5 bg-white/62 px-3 py-2 text-sm leading-relaxed text-black/70"
-                >
-                  <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-[rgb(var(--navy))]/10 text-[11px] font-semibold text-[rgb(var(--navy))]">
-                    {i + 1}
-                  </span>
-                  {x}
-                </li>
-              ))}
-            </ul>
+
+            <motion.div
+              initial={{ opacity: 0, x: 12 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true, amount: 0.3 }}
+              transition={{ duration: 0.45, ease: "easeOut" }}
+              className="lg:col-span-4"
+            >
+              <div className="relative overflow-hidden rounded-none border border-white/12 bg-white/8 p-4 shadow-[0_26px_80px_rgba(0,0,0,0.2)] backdrop-blur">
+                <div className="inline-flex items-center gap-2 rounded-none bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-white/78">
+                  <Clapperboard className="h-4 w-4 text-[rgb(var(--gold))]" />
+                  {t.leadStudioBadge}
+                </div>
+
+                <div className="relative mt-3 aspect-[4/3] overflow-hidden rounded-none border border-white/10">
+                  <Image
+                    src="/images/experience-360-homesitting.jpg"
+                    alt={lang === "ar" ? "تصوير احترافي للعقار" : "Professional property media production"}
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 1024px) 100vw, 28vw"
+                  />
+                  <div className="absolute inset-0 bg-[linear-gradient(to_top,rgba(10,18,35,0.62),transparent_60%)]" />
+                </div>
+
+                <ul className="mt-4 space-y-2">
+                  {t.leadStudioChecklist.map((line) => (
+                    <li key={line} className="flex items-start gap-2 text-sm text-white/78">
+                      <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-[rgb(var(--gold))]" />
+                      <span>{line}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <p className="mt-4 border-t border-white/12 pt-3 text-xs leading-relaxed text-white/65">
+                  {t.leadStudioCaption}
+                </p>
+              </div>
+            </motion.div>
           </div>
         </article>
 
         {/* ================= TRIFECTA (ENHANCED) ================= */}
-        <article className="rounded-[30px] bg-white/58 p-6 backdrop-blur md:p-8">
+        <article className="rounded-none bg-white/58 p-6 backdrop-blur md:p-8">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -254,7 +421,7 @@ export default function CoreValue({ lang }: { lang: Lang }) {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, amount: 0.3 }}
                 transition={{ duration: 0.5, ease: "easeOut" }}
-                className="relative overflow-hidden rounded-2xl bg-[linear-gradient(120deg,rgba(10,18,35,0.96),rgba(18,34,66,0.92))] p-5 md:p-6"
+                className="relative overflow-hidden rounded-none bg-[linear-gradient(120deg,rgba(10,18,35,0.96),rgba(18,34,66,0.92))] p-5 md:p-6"
               >
                 <motion.div
                   animate={{ x: [0, 14, 0], y: [0, -10, 0] }}
@@ -265,7 +432,7 @@ export default function CoreValue({ lang }: { lang: Lang }) {
 
                 <div className="relative flex items-start justify-between gap-4">
                   <div>
-                    <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-white/70">
+                    <div className="inline-flex items-center gap-2 rounded-none bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-white/70">
                       <ScanSearch className="h-4 w-4 text-[rgb(var(--gold))]" />
                       PropTech Layer
                     </div>
@@ -277,7 +444,7 @@ export default function CoreValue({ lang }: { lang: Lang }) {
                     </p>
                   </div>
 
-                  <div className="hidden md:flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
+                  <div className="hidden md:flex items-center gap-2 rounded-none bg-white/5 px-3 py-2 text-xs text-white/70">
                     <Globe className="h-4 w-4 text-[rgb(var(--gold))]" />
                     {lang === "ar" ? "للجالية + المحلي" : "Diaspora + Local"}
                   </div>
@@ -320,7 +487,7 @@ export default function CoreValue({ lang }: { lang: Lang }) {
                       }}
                       transition={{ duration: 0.55, ease: "easeOut" }}
                       whileHover={{ y: -10, scale: 1.02 }}
-                      className="group relative overflow-hidden rounded-2xl border border-black/5 bg-[rgb(var(--navy))]/92 p-4 text-white shadow-[0_26px_80px_rgba(10,18,35,0.16)]"
+                      className="group relative overflow-hidden rounded-none border border-black/5 bg-[rgb(var(--navy))]/92 p-4 text-white shadow-[0_26px_80px_rgba(10,18,35,0.16)]"
                     >
                       {/* glow on hover */}
                       <div className="pointer-events-none absolute -inset-20 opacity-0 blur-3xl transition-opacity duration-700 group-hover:opacity-100">
@@ -329,7 +496,7 @@ export default function CoreValue({ lang }: { lang: Lang }) {
 
                       <div className="mb-2 flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
-                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/12 text-[11px] font-semibold">
+                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-none bg-white/12 text-[11px] font-semibold">
                             {idx + 1}
                           </span>
                           <span className="text-[11px] uppercase tracking-[0.16em] text-white/70">
@@ -337,14 +504,14 @@ export default function CoreValue({ lang }: { lang: Lang }) {
                           </span>
                         </div>
 
-                        <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] text-white/75">
+                        <span className="inline-flex items-center gap-2 rounded-none bg-white/10 px-3 py-1 text-[11px] text-white/75">
                           <FeatureIcon idx={idx} />
                           {idx === 0 ? (lang === "ar" ? "360" : "360°") : idx === 1 ? "AI" : "Pay"}
                         </span>
                       </div>
 
                       {x.image ? (
-                        <div className="relative mt-2 aspect-[4/3] overflow-hidden rounded-xl bg-black/10">
+                        <div className="relative mt-2 aspect-[4/3] overflow-hidden rounded-none bg-black/10">
                           <Image
                             src={x.image}
                             alt={x.t}
@@ -375,7 +542,7 @@ export default function CoreValue({ lang }: { lang: Lang }) {
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true, amount: 0.2 }}
               transition={{ duration: 0.6, ease: "easeOut", delay: 0.12 }}
-              className="relative overflow-hidden rounded-2xl bg-black/5 lg:col-span-4"
+              className="relative overflow-hidden rounded-none bg-black/5 lg:col-span-4"
             >
               <motion.div whileHover={{ scale: 1.03 }} transition={{ duration: 0.55, ease: "easeOut" }} className="absolute inset-0">
                 <Image
@@ -390,7 +557,7 @@ export default function CoreValue({ lang }: { lang: Lang }) {
               <div className="absolute inset-0 bg-[linear-gradient(to_top,rgba(10,18,35,0.62),rgba(10,18,35,0.08)_55%)]" />
 
               {/* floating workflow dots */}
-              <div className="pointer-events-none absolute left-6 top-10 hidden items-center gap-2 rounded-full border border-white/12 bg-white/10 px-3 py-2 text-xs text-white/80 backdrop-blur md:flex">
+              <div className="pointer-events-none absolute left-6 top-10 hidden items-center gap-2 rounded-none bg-white/10 px-3 py-2 text-xs text-white/80 backdrop-blur md:flex">
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-[rgb(var(--gold))]">
                   <span className="absolute inset-0 rounded-full bg-[rgb(var(--gold))]/70 animate-ping" />
                 </span>
@@ -402,7 +569,7 @@ export default function CoreValue({ lang }: { lang: Lang }) {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, amount: 0.4 }}
                 transition={{ duration: 0.45, ease: "easeOut", delay: 0.22 }}
-                className="absolute inset-x-3 bottom-3 rounded-xl border border-white/25 bg-white/84 p-3 text-sm leading-relaxed text-[rgb(var(--navy))] backdrop-blur"
+                className="absolute inset-x-3 bottom-3 rounded-none bg-white/84 p-3 text-sm leading-relaxed text-[rgb(var(--navy))] backdrop-blur"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="font-medium">
@@ -410,7 +577,7 @@ export default function CoreValue({ lang }: { lang: Lang }) {
                       ? "من البحث إلى الحجز: تجربة واحدة مترابطة، موثقة، وسريعة."
                       : "From discovery to reservation: one continuous, verified, and fast workflow."}
                   </div>
-                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[rgb(var(--navy))]/10">
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-none bg-[rgb(var(--navy))]/10">
                     <ArrowRight className="h-4 w-4 text-[rgb(var(--navy))]" />
                   </span>
                 </div>

@@ -2,7 +2,16 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { CheckCircle2, Loader2, ShieldCheck, Sparkles } from "lucide-react";
+import {
+  BadgeCheck,
+  Camera,
+  CheckCircle2,
+  Clapperboard,
+  Loader2,
+  ShieldCheck,
+  Sparkles,
+  Video,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useLang } from "@/components/LanguageProvider";
 
@@ -213,6 +222,28 @@ export default function SubmitPropertyPage() {
   const isSubmitting = submitStatus === "loading";
 
   const isArabic = lang === "ar";
+  const mediaStudioCard =
+    lang === "ar"
+      ? {
+          title: "تغطية إعلامية احترافية لعقارك",
+          intro: "فريق روستوميا يتكفل بالتصوير الفوتوغرافي وتصوير الفيديو بجودة عالية قبل النشر.",
+          items: [
+            "تصوير فوتوغرافي بزوايا احترافية",
+            "فيديو walkthrough داخل العقار",
+            "تجهيز المحتوى للنشر والتحويل",
+          ],
+        }
+      : {
+          title: "Couverture media professionnelle de votre bien",
+          intro:
+            "L'equipe Rostomyia prend en charge le shooting photo et video HD de votre bien avant publication.",
+          items: [
+            "Shooting photo avec cadrage pro",
+            "Video walkthrough du bien",
+            "Contenu prepare pour diffusion et conversion",
+          ],
+        };
+  const mediaStudioIcons = [Camera, Video, Clapperboard] as const;
   const transactionOptions = useMemo(
     () =>
       TRANSACTION_OPTIONS.filter((x) => {
@@ -370,6 +401,34 @@ export default function SubmitPropertyPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[rgb(var(--navy))]">{t.badge}</p>
           <h1 className="mt-3 text-3xl font-extrabold text-[rgb(var(--navy))] md:text-4xl">{t.title}</h1>
           <p className="mt-3 max-w-3xl text-sm text-black/65">{t.subtitle}</p>
+          <div className="relative mt-4 overflow-hidden rounded-2xl border border-[rgb(var(--gold))]/35 bg-[linear-gradient(130deg,rgba(255,255,255,0.86),rgba(248,244,235,0.92))] p-4 shadow-sm md:p-5">
+            <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-[rgb(var(--gold))]/20 blur-2xl" />
+            <div className="pointer-events-none absolute -left-8 -bottom-10 h-24 w-24 rounded-full bg-[rgb(var(--navy))]/10 blur-2xl" />
+
+            <div className="relative">
+              <div className="inline-flex items-center gap-2 rounded-full bg-[rgb(var(--navy))]/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--navy))]/80">
+                <BadgeCheck size={14} />
+                {isArabic ? "خدمة مدمجة" : "Service inclus"}
+              </div>
+              <h3 className="mt-2 text-base font-bold text-[rgb(var(--navy))] md:text-lg">{mediaStudioCard.title}</h3>
+              <p className="mt-1.5 max-w-3xl text-sm text-black/70">{mediaStudioCard.intro}</p>
+
+              <div className="mt-3 grid gap-2 md:grid-cols-3">
+                {mediaStudioCard.items.map((item, idx) => {
+                  const Icon = mediaStudioIcons[idx] ?? Camera;
+                  return (
+                    <div
+                      key={item}
+                      className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white/88 px-3 py-2 text-xs text-[rgb(var(--navy))] shadow-[0_1px_1px_rgba(2,6,23,0.03)]"
+                    >
+                      <Icon size={14} className="text-[rgb(var(--gold))]" />
+                      <span>{item}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
 
           <div className="mt-6 grid gap-3 md:grid-cols-3">
             <HighlightCard

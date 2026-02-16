@@ -34,6 +34,15 @@ type Dict = {
   ref: string;
   desc: string;
   descText: string;
+  keyFeaturesTitle: string;
+  keyFeatureSurface: string;
+  keyFeatureParking: string;
+  keyFeatureResidence: string;
+  keyFeatureSeaView: string;
+  keyFeatureYes: string;
+  keyFeatureNotSpecified: string;
+  viewMore: string;
+  viewLess: string;
   details: string;
   locationLabel: string;
   priceLabel: string;
@@ -94,6 +103,8 @@ export default function PropertyDetailClient({
   sections,
   relatedProperties,
 }: Props) {
+  const isArabic = dir === "rtl";
+
   function normalizeText(input?: string) {
     return (input ?? "")
       .normalize("NFD")
@@ -196,6 +207,69 @@ export default function PropertyDetailClient({
       return { icon: FileText, chip: "bg-black/5 text-[rgb(var(--navy))] ring-black/10" };
     }
     return { icon: FileText, chip: "bg-black/5 text-[rgb(var(--navy))] ring-black/10" };
+  }
+
+  const featureLineArabicMap: Record<string, string> = {
+    "suite parentale": "جناح رئيسي",
+    "residence fermee": "إقامة مغلقة",
+    box: "مرآب",
+    luxe: "فاخر",
+    "haut standing": "رفيع المستوى",
+    "double ascenseur": "مصعدان",
+    "chauffage central": "تدفئة مركزية",
+    climatisation: "تكييف",
+    "cuisine equipee": "مطبخ مجهز",
+    "salle de bain italienne": "حمام عصري",
+    "deux balcons": "شرفتان",
+    interphone: "إنترفون",
+  };
+
+  function translateTransactionValue(value: string) {
+    const n = normalizeText(value);
+    if ((n.includes("location") && n.includes("nuit")) || n.includes("par_nuit")) return "كراء / بالليلة";
+    if ((n.includes("location") && n.includes("par mois")) || n.includes("par_mois")) return "كراء / بالشهر";
+    if (n.includes("location") && (n.includes("6 mois") || n.includes("six mois") || n.includes("six_mois"))) {
+      return "كراء / 6 أشهر";
+    }
+    if (
+      n.includes("location") &&
+      (n.includes("12 mois") || n.includes("douze mois") || n.includes("douze_mois"))
+    ) {
+      return "كراء / 12 شهر";
+    }
+    if (n.includes("vente")) return "بيع";
+    if (n.includes("location")) return "كراء";
+    return value;
+  }
+
+  function localizeFeatureLine(input: string) {
+    if (!isArabic) return input;
+    const raw = input.trim();
+    const normalized = normalizeText(raw).replace(/\s+/g, " ");
+    if (!normalized) return raw;
+
+    const mapped = featureLineArabicMap[normalized];
+    if (mapped) return mapped;
+
+    if (normalized.startsWith("modalite")) {
+      const parts = raw.split(":");
+      if (parts.length > 1) {
+        const value = parts.slice(1).join(":").trim();
+        return `نوع المعاملة: ${translateTransactionValue(value)}`;
+      }
+      return "نوع المعاملة";
+    }
+
+    if (normalized.startsWith("etage")) {
+      const parts = raw.split(":");
+      if (parts.length > 1) {
+        const value = parts.slice(1).join(":").trim();
+        return `الطابق: ${value}`;
+      }
+      return "الطابق";
+    }
+
+    return raw;
   }
 
   function extractSidebarDetails() {
@@ -323,10 +397,22 @@ export default function PropertyDetailClient({
   const hasResidence = normalizedDetails.includes("residence");
   const hasVueSurMer = /vue\s+(sur\s+)?mer/.test(normalizedDetails);
   const keyCharacteristics = [
-    { icon: <Ruler size={15} />, label: "Surface", value: `${property.area} m2` },
-    { icon: <CarFront size={15} />, label: "Parking sous-sol", value: hasParkingSousSol ? "Oui" : "Non precise" },
-    { icon: <Building2 size={15} />, label: "Residence", value: hasResidence ? "Oui" : "Non precise" },
-    { icon: <MapPin size={15} />, label: "Vue sur mer", value: hasVueSurMer ? "Oui" : "" },
+    { icon: <Ruler size={15} />, label: t.keyFeatureSurface, value: `${property.area} m2` },
+    {
+      icon: <CarFront size={15} />,
+      label: t.keyFeatureParking,
+      value: hasParkingSousSol ? t.keyFeatureYes : t.keyFeatureNotSpecified,
+    },
+    {
+      icon: <Building2 size={15} />,
+      label: t.keyFeatureResidence,
+      value: hasResidence ? t.keyFeatureYes : t.keyFeatureNotSpecified,
+    },
+    {
+      icon: <MapPin size={15} />,
+      label: t.keyFeatureSeaView,
+      value: hasVueSurMer ? t.keyFeatureYes : t.keyFeatureNotSpecified,
+    },
   ];
 
   return (
@@ -395,7 +481,7 @@ export default function PropertyDetailClient({
             className="mt-6 overflow-hidden bg-[rgb(var(--navy))]/95 ring-1 ring-[rgb(var(--gold))]/35"
           >
             <div className="border-b border-[rgb(var(--gold))]/40 bg-[rgb(var(--gold))]/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--gold))]">
-              Caracteristiques principales
+              {t.keyFeaturesTitle}
             </div>
 
             <div className="grid grid-cols-1 divide-y divide-white/15 bg-[rgb(var(--navy))]/95 text-white sm:grid-cols-2 sm:divide-x sm:divide-y-0">
@@ -409,7 +495,7 @@ export default function PropertyDetailClient({
                 {topFeatureBullets.map((item) => (
                   <div key={item} className="inline-flex items-center gap-2 px-4 py-3 text-sm font-medium">
                     <CheckCircle2 size={14} className="shrink-0 text-[rgb(var(--gold))]" />
-                    <span>{item}</span>
+                    <span>{localizeFeatureLine(item)}</span>
                   </div>
                 ))}
               </div>
@@ -445,7 +531,7 @@ export default function PropertyDetailClient({
                                 <span className={`inline-flex rounded-full px-2 py-1 ring-1 ${meta.chip}`}>
                                   <Icon size={14} />
                                 </span>
-                                {s.title}
+                                {isFeatureSectionTitle(s.title) ? t.keyFeaturesTitle : s.title}
                               </>
                             );
                           })()}
@@ -457,7 +543,7 @@ export default function PropertyDetailClient({
                             onClick={() => setExpandedSections((prev) => ({ ...prev, [idx]: !prev[idx] }))}
                             className="rounded-lg border border-black/10 bg-white px-2 py-1 text-[11px] font-semibold text-[rgb(var(--navy))] hover:bg-black/5"
                           >
-                            {expandedSections[idx] ? "Voir moins" : "Voir plus"}
+                            {expandedSections[idx] ? t.viewLess : t.viewMore}
                           </button>
                         ) : null}
                       </div>
@@ -465,7 +551,7 @@ export default function PropertyDetailClient({
 
                     {s.paragraphs.map((p) => (
                       <p key={p} className="mt-2 text-sm leading-relaxed text-slate-700">
-                        {p}
+                        {isFeatureSectionTitle(s.title) ? localizeFeatureLine(p) : p}
                       </p>
                     ))}
 
@@ -478,7 +564,7 @@ export default function PropertyDetailClient({
                               className="flex items-start gap-2 rounded-xl bg-white px-3 py-2 ring-1 ring-black/10"
                             >
                               <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-[rgb(var(--gold))]" />
-                              <span>{b}</span>
+                              <span>{localizeFeatureLine(b)}</span>
                             </li>
                           ))}
                         </ul>

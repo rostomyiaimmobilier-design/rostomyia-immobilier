@@ -157,3 +157,16 @@ body::before{
   font-family: var(--font-display), serif;
   letter-spacing: 0.01em;
 }
+
+html[lang="ar"] body {
+  font-family: var(--font-arabic-sans), "Noto Naskh Arabic", serif;
+}
+
+html[lang="ar"] .font-display,
+html[lang="ar"] h1,
+html[lang="ar"] h2,
+html[lang="ar"] h3,
+html[lang="ar"] h4 {
+  font-family: var(--font-arabic-display), var(--font-arabic-sans), serif;
+  letter-spacing: 0;
+}

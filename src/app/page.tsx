@@ -2,6 +2,7 @@
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { propertyImageUrl } from "@/lib/property-image-url";
+import { LANG_COOKIE_KEY, LEGACY_LANG_COOKIE_KEY, langToDir, normalizeLang, type Lang } from "@/lib/i18n";
 
 import HomeHero from "../components/home/Hero";
 import CoreValue from "../components/home/CoreValue";
@@ -10,12 +11,11 @@ import ValuePillars from "../components/home/ValuePillars";
 import HomeCTA from "../components/home/HomeCTA";
 import VerifiedUltraLuxury from "../components/home/VerifiedUltraLuxury";
 
-type Lang = "fr" | "ar";
-
 async function getLang(): Promise<Lang> {
   const cookieStore = await cookies();
-  const lang = cookieStore.get("lang")?.value;
-  return lang === "ar" ? "ar" : "fr";
+  return normalizeLang(
+    cookieStore.get(LANG_COOKIE_KEY)?.value ?? cookieStore.get(LEGACY_LANG_COOKIE_KEY)?.value
+  );
 }
 
 type HomeProperty = {
@@ -85,9 +85,9 @@ export default async function HomePage() {
   });
 
   return (
-    <main dir={lang === "ar" ? "rtl" : "ltr"}>
+    <main dir={langToDir(lang)}>
       <HomeHero lang={lang} />
-      <VerifiedUltraLuxury />
+      <VerifiedUltraLuxury lang={lang} />
       <CoreValue lang={lang} />
       <FeaturedListings lang={lang} items={safeProps} />
       <ValuePillars lang={lang} />

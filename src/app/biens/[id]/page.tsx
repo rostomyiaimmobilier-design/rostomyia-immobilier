@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 import PropertyDetailClient from "@/components/PropertyDetailClient";
 
-type Lang = "fr" | "ar";
+import { LANG_COOKIE_KEY, LEGACY_LANG_COOKIE_KEY, langToDir, normalizeLang, type Lang } from "@/lib/i18n";
 
 type DescriptionSection = {
   title?: string;
@@ -37,6 +37,15 @@ const dict = {
     ref: "Reference",
     desc: "Description",
     descText: "Description du bien.",
+    keyFeaturesTitle: "Caractéristiques principales",
+    keyFeatureSurface: "Surface",
+    keyFeatureParking: "Parking sous-sol",
+    keyFeatureResidence: "Residence",
+    keyFeatureSeaView: "Vue sur mer",
+    keyFeatureYes: "Oui",
+    keyFeatureNotSpecified: "Non precise",
+    viewMore: "Voir plus",
+    viewLess: "Voir moins",
     details: "Details",
     locationLabel: "Emplacement",
     otherOptions: "Autres biens",
@@ -57,6 +66,15 @@ const dict = {
     ref: "المرجع",
     desc: "الوصف",
     descText: "وصف العقار.",
+    keyFeaturesTitle: "الخصائص الرئيسية",
+    keyFeatureSurface: "المساحة",
+    keyFeatureParking: "موقف سيارات تحت الأرض",
+    keyFeatureResidence: "الإقامة",
+    keyFeatureSeaView: "إطلالة على البحر",
+    keyFeatureYes: "نعم",
+    keyFeatureNotSpecified: "غير محدد",
+    viewMore: "عرض المزيد",
+    viewLess: "عرض أقل",
     details: "التفاصيل",
     locationLabel: "الموقع",
     otherOptions: "عقارات اخرى",
@@ -275,9 +293,10 @@ export default async function PropertyDetailPage({
     .slice(0, 8);
 
   const cookieStore = await cookies();
-  const cookieLang = cookieStore.get("rostomyia_lang")?.value;
-  const lang: Lang = cookieLang === "ar" ? "ar" : "fr";
-  const dir: "ltr" | "rtl" = lang === "ar" ? "rtl" : "ltr";
+  const cookieLang =
+    cookieStore.get(LANG_COOKIE_KEY)?.value ?? cookieStore.get(LEGACY_LANG_COOKIE_KEY)?.value;
+  const lang: Lang = normalizeLang(cookieLang);
+  const dir: "ltr" | "rtl" = langToDir(lang);
   const t = dict[lang];
 
   const phone = process.env.NEXT_PUBLIC_PHONE ?? "+213559712981";

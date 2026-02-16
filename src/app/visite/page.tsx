@@ -16,6 +16,7 @@ import {
   User2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useLang } from "@/components/LanguageProvider";
 
 function toOptionalText(v: FormDataEntryValue | null): string | null {
   const s = String(v || "").trim();
@@ -39,8 +40,55 @@ function FieldShell({
 
 export default function VisitePage() {
   const supabase = createClient();
+  const { lang, dir } = useLang();
   const searchParams = useSearchParams();
   const prefilledRef = (searchParams.get("ref") || "").trim();
+  const t =
+    lang === "ar"
+      ? {
+          sendError: "تعذر الارسال حاليا.",
+          sentTitle: "تم ارسال طلب الزيارة",
+          sentMessage: "شكرا. سنتواصل معك بسرعة لتأكيد الموعد.",
+          backListings: "العودة الى العقارات",
+          premium: "خدمة فاخرة",
+          title: "حجز زيارة",
+          subtitle: "طلب سريع وبسيط. نتصل بك لتأكيد افضل توقيت للزيارة.",
+          quickCheck: "تحقق سريع",
+          check1: "تاكيد عبر اتصال او واتساب",
+          check2: "اقتراح مواعيد مناسبة",
+          check3: "مرافقة ميدانية من روستوميا",
+          infoTitle: "معلوماتك",
+          infoSubtitle: "املأ النموذج وسنتواصل معك بسرعة.",
+          refPlaceholder: "مرجع العقار (اختياري)",
+          namePlaceholder: "الاسم الكامل",
+          phonePlaceholder: "الهاتف",
+          slotPlaceholder: "التوقيت المفضل (مثال: 14h-16h)",
+          messagePlaceholder: "معلومات اضافية (الدخول، التوفر...)",
+          submit: "ارسال الطلب",
+          illustrationAlt: "رسم توضيحي للزيارة",
+        }
+      : {
+          sendError: "Erreur: impossible d'envoyer.",
+          sentTitle: "Visite demandee",
+          sentMessage: "Merci. Notre equipe vous contacte rapidement pour confirmer le rendez-vous.",
+          backListings: "Retour aux biens",
+          premium: "Service Premium",
+          title: "Programmer une visite",
+          subtitle: "Demande simple et rapide. Nous vous rappelons pour confirmer le meilleur horaire de visite.",
+          quickCheck: "Verification rapide",
+          check1: "Confirmation par appel ou WhatsApp",
+          check2: "Propositions de creneaux adaptes",
+          check3: "Accompagnement sur place par Rostomyia",
+          infoTitle: "Vos informations",
+          infoSubtitle: "Renseignez le formulaire et nous revenons vers vous rapidement.",
+          refPlaceholder: "Reference du bien (optionnel)",
+          namePlaceholder: "Votre nom",
+          phonePlaceholder: "Telephone",
+          slotPlaceholder: "Creneau (ex: 14h-16h)",
+          messagePlaceholder: "Message complementaire (acces immeuble, disponibilite, etc.)",
+          submit: "Envoyer la demande",
+          illustrationAlt: "Illustration visite",
+        };
 
   const [sent, setSent] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -57,19 +105,19 @@ export default function VisitePage() {
       preferred_date: toOptionalText(form.get("date")),
       preferred_time: toOptionalText(form.get("time")),
       message: toOptionalText(form.get("message")),
-      lang: "fr",
+      lang,
       status: "new",
     };
 
     const { error } = await supabase.from("viewing_requests").insert(payload);
 
     if (!error) setSent(true);
-    else setErrorMsg(error.message || "Erreur: impossible d'envoyer.");
+    else setErrorMsg(error.message || t.sendError);
   }
 
   if (sent) {
     return (
-      <main className="relative min-h-screen overflow-hidden bg-[rgb(var(--brand-bg))] px-4 py-16">
+      <main dir={dir} className="relative min-h-screen overflow-hidden bg-[rgb(var(--brand-bg))] px-4 py-16">
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -left-28 top-0 h-72 w-72 rounded-full bg-[rgb(var(--gold))]/25 blur-3xl" />
           <div className="absolute right-0 top-24 h-72 w-72 rounded-full bg-[rgb(var(--navy))]/10 blur-3xl" />
@@ -78,15 +126,15 @@ export default function VisitePage() {
           <div className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
             <CheckCircle2 size={26} />
           </div>
-          <h1 className="mt-4 text-3xl font-extrabold text-[rgb(var(--navy))]">Visite demandee</h1>
+          <h1 className="mt-4 text-3xl font-extrabold text-[rgb(var(--navy))]">{t.sentTitle}</h1>
           <p className="mt-3 text-sm text-black/65">
-            Merci. Notre equipe vous contacte rapidement pour confirmer le rendez-vous.
+            {t.sentMessage}
           </p>
           <Link
             href="/biens"
             className="mt-7 inline-flex items-center justify-center rounded-2xl bg-[rgb(var(--navy))] px-5 py-3 text-sm font-semibold text-white hover:opacity-95"
           >
-            Retour aux biens
+            {t.backListings}
           </Link>
         </div>
       </main>
@@ -94,7 +142,7 @@ export default function VisitePage() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[rgb(var(--brand-bg))] px-4 py-10 md:py-14">
+    <main dir={dir} className="relative min-h-screen overflow-hidden bg-[rgb(var(--brand-bg))] px-4 py-10 md:py-14">
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -left-32 -top-16 h-80 w-80 rounded-full bg-[rgb(var(--gold))]/22 blur-3xl" />
         <div className="absolute right-0 top-16 h-80 w-80 rounded-full bg-[rgb(var(--navy))]/12 blur-3xl" />
@@ -109,37 +157,37 @@ export default function VisitePage() {
         >
           <div className="inline-flex items-center gap-2 rounded-full bg-[rgb(var(--gold))]/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]">
             <Sparkles size={14} />
-            Service Premium
+            {t.premium}
           </div>
 
-          <h1 className="mt-4 text-3xl font-extrabold text-[rgb(var(--navy))] md:text-4xl">Programmer une visite</h1>
+          <h1 className="mt-4 text-3xl font-extrabold text-[rgb(var(--navy))] md:text-4xl">{t.title}</h1>
           <p className="mt-3 text-sm text-black/65">
-            Demande simple et rapide. Nous vous rappelons pour confirmer le meilleur horaire de visite.
+            {t.subtitle}
           </p>
 
           <div className="mt-6 rounded-2xl bg-[rgb(var(--navy))]/95 p-4 text-white ring-1 ring-black/10">
             <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-white/75">
               <ShieldCheck size={14} className="text-[rgb(var(--gold))]" />
-              Verification rapide
+              {t.quickCheck}
             </div>
             <ul className="mt-3 space-y-2 text-sm">
               <li className="flex items-center gap-2">
                 <CheckCircle2 size={14} className="text-[rgb(var(--gold))]" />
-                Confirmation par appel ou WhatsApp
+                {t.check1}
               </li>
               <li className="flex items-center gap-2">
                 <CheckCircle2 size={14} className="text-[rgb(var(--gold))]" />
-                Propositions de creneaux adaptes
+                {t.check2}
               </li>
               <li className="flex items-center gap-2">
                 <CheckCircle2 size={14} className="text-[rgb(var(--gold))]" />
-                Accompagnement sur place par Rostomyia
+                {t.check3}
               </li>
             </ul>
           </div>
 
           <div className="mt-6 overflow-hidden rounded-3xl border border-black/10 bg-white/85 p-4">
-            <svg viewBox="0 0 520 220" className="h-full w-full" role="img" aria-label="Illustration visite">
+            <svg viewBox="0 0 520 220" className="h-full w-full" role="img" aria-label={t.illustrationAlt}>
               <defs>
                 <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="0%">
                   <stop offset="0%" stopColor="rgb(var(--gold))" stopOpacity="0.25" />
@@ -175,14 +223,14 @@ export default function VisitePage() {
           transition={{ duration: 0.45, delay: 0.08 }}
           className="rounded-3xl border border-black/10 bg-white/80 p-7 shadow-sm backdrop-blur md:p-8"
         >
-          <h2 className="text-xl font-bold text-[rgb(var(--navy))]">Vos informations</h2>
-          <p className="mt-2 text-sm text-black/60">Renseignez le formulaire et nous revenons vers vous rapidement.</p>
+          <h2 className="text-xl font-bold text-[rgb(var(--navy))]">{t.infoTitle}</h2>
+          <p className="mt-2 text-sm text-black/60">{t.infoSubtitle}</p>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <FieldShell icon={<Home size={16} />}>
               <input
                 name="ref"
-                placeholder="Reference du bien (optionnel)"
+                placeholder={t.refPlaceholder}
                 className="h-12 w-full rounded-2xl border border-black/10 bg-white px-11 text-sm outline-none ring-0 transition focus:border-[rgb(var(--gold))]/70"
                 defaultValue={prefilledRef}
               />
@@ -191,7 +239,7 @@ export default function VisitePage() {
             <FieldShell icon={<User2 size={16} />}>
               <input
                 name="name"
-                placeholder="Votre nom"
+                placeholder={t.namePlaceholder}
                 className="h-12 w-full rounded-2xl border border-black/10 bg-white px-11 text-sm outline-none ring-0 transition focus:border-[rgb(var(--gold))]/70"
                 required
               />
@@ -200,7 +248,7 @@ export default function VisitePage() {
             <FieldShell icon={<Phone size={16} />}>
               <input
                 name="phone"
-                placeholder="Telephone"
+                placeholder={t.phonePlaceholder}
                 className="h-12 w-full rounded-2xl border border-black/10 bg-white px-11 text-sm outline-none ring-0 transition focus:border-[rgb(var(--gold))]/70"
                 required
               />
@@ -217,7 +265,7 @@ export default function VisitePage() {
               <FieldShell icon={<Clock3 size={16} />}>
                 <input
                   name="time"
-                  placeholder="Creneau (ex: 14h-16h)"
+                  placeholder={t.slotPlaceholder}
                   className="h-12 w-full rounded-2xl border border-black/10 bg-white px-11 text-sm outline-none ring-0 transition focus:border-[rgb(var(--gold))]/70"
                 />
               </FieldShell>
@@ -229,7 +277,7 @@ export default function VisitePage() {
               </div>
               <textarea
                 name="message"
-                placeholder="Message complementaire (acces immeuble, disponibilite, etc.)"
+                placeholder={t.messagePlaceholder}
                 className="w-full rounded-2xl border border-black/10 bg-white px-11 py-3 text-sm outline-none transition focus:border-[rgb(var(--gold))]/70"
                 rows={4}
               />
@@ -241,7 +289,7 @@ export default function VisitePage() {
 
             <button className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[rgb(var(--navy))] text-sm font-semibold text-white shadow-sm transition hover:opacity-95">
               <CalendarDays size={16} />
-              Envoyer la demande
+              {t.submit}
             </button>
           </form>
         </motion.section>

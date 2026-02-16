@@ -3,10 +3,12 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useLang } from "@/components/LanguageProvider";
 
 export default function Navbar() {
   const { lang, setLang, dir } = useLang();
+  const router = useRouter();
 
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -48,8 +50,9 @@ export default function Navbar() {
   }[lang];
 
   const changeLang = (newLang: "fr" | "ar") => {
+    if (newLang === lang) return;
     setLang(newLang);
-    document.cookie = `rostomyia_lang=${newLang}; path=/; max-age=31536000`;
+    router.refresh();
   };
 
   return (
