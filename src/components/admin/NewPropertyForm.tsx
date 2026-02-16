@@ -117,6 +117,10 @@ type FormState = {
   description: string;
 };
 
+type NewPropertyFormProps = {
+  initialRef?: string;
+};
+
 function isLocationTransaction(transactionType: TransactionType) {
   return transactionType !== "Vente";
 }
@@ -223,12 +227,12 @@ function generateDescription(form: FormState) {
     location || "* A preciser",
     "",
     `${finalPriceLabel} : ${form.price || "A preciser"}`,
-    `Paiement : ${form.paymentTerms || "A definir"}`,
+    `Paiement : ${form.paymentTerms || "A preciser"}`,
     `Frais d'agence : ${form.agencyFees || "A preciser"} - Rostomyia Immobilier`,
   ].join("\n");
 }
 
-export default function NewPropertyForm() {
+export default function NewPropertyForm({ initialRef }: NewPropertyFormProps) {
   const router = useRouter();
 
   const [form, setForm] = useState<FormState>({
@@ -268,8 +272,8 @@ export default function NewPropertyForm() {
   }
 
   useEffect(() => {
-    setForm((s) => ({ ...s, ref: generateRef() }));
-  }, []);
+    setForm((s) => ({ ...s, ref: initialRef || generateRef() }));
+  }, [initialRef]);
 
   useEffect(() => {
     if (!autoTitle) return;
@@ -298,7 +302,7 @@ export default function NewPropertyForm() {
     setError(null);
 
     try {
-      const generatedRef = generateRef();
+      const submittedRef = form.ref.trim() || generateRef();
       const location = buildLocation(form.commune, form.locationDetail);
       const description = form.description.trim() || generateDescription(form);
       const dbType = form.transactionType === "Vente" ? "Vente" : "Location";
@@ -309,7 +313,7 @@ export default function NewPropertyForm() {
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          ref: generatedRef,
+          ref: submittedRef,
           title: form.title.trim(),
           type: dbType,
           location_type: locationType,

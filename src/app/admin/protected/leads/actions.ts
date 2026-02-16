@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 function isMissingValidationColumn(message: string | undefined) {
@@ -46,18 +47,30 @@ export async function updateOwnerLeadStatus(id: string, status: string, validati
 
   revalidatePath("/admin/protected/leads/owners");
   revalidatePath("/admin/leads/owners");
+
+  if (isValidated) {
+    const ts = Date.now().toString().slice(-6);
+    const rand = Math.floor(100 + Math.random() * 900).toString();
+    const ref = `OR-${ts}${rand}`;
+    redirect(`/admin/protected/new?ownerLeadId=${encodeURIComponent(id)}&ref=${encodeURIComponent(ref)}`);
+  }
 }
 
 export async function updateViewingRequestStatus(id: string, status: string) {
   const supabase = await createClient();
+  const normalizedStatus = status.trim() || "new";
 
   const { error } = await supabase
     .from("viewing_requests")
-    .update({ status })
+    .update({ status: normalizedStatus })
     .eq("id", id);
 
   if (error) throw new Error(error.message);
 
   revalidatePath("/admin/protected/leads/visits");
   revalidatePath("/admin/leads/visits");
+
+  if (normalizedStatus === "scheduled") {
+    redirect(`/admin/protected/leads/visits/plan/${encodeURIComponent(id)}`);
+  }
 }

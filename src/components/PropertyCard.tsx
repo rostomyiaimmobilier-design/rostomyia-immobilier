@@ -84,6 +84,7 @@ export default function PropertyCard({
             aspectClassName="aspect-[4/3]"
             sizes="(max-width: 768px) 100vw, 33vw"
             className="p-0"
+            enableZoom={false}
           />
 
           {/* image overlay */}

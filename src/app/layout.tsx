@@ -2,12 +2,8 @@ import type { Metadata } from "next";
 import { Manrope, Cormorant_Garamond, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-import Navbar from "@/components//ui/Navbar";
-
-import RostomyiaFooter from "@/components/ui/RostomyiaFooter";
-
-
 import { LanguageProvider } from "@/components/LanguageProvider";
+import AppLayoutShell from "@/components/AppLayoutShell";
 
 
 const manrope = Manrope({
@@ -40,9 +36,7 @@ export default function RootLayout({
     <html lang="fr" className="dark">
       <body className={`${manrope.variable} ${cormorant.variable} ${geistMono.variable} min-h-screen bg-[rgb(var(--bg))] text-[rgb(var(--text))] antialiased`}>
         <LanguageProvider>
-          <Navbar />
-          <main className="min-h-screen">{children}</main>
-           <RostomyiaFooter />
+          <AppLayoutShell>{children}</AppLayoutShell>
         </LanguageProvider>
       </body>
     </html>

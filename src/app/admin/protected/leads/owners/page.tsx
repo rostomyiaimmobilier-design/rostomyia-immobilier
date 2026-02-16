@@ -1,4 +1,12 @@
 import Link from "next/link";
+import {
+  ArrowLeft,
+  BadgeCheck,
+  Building2,
+  Clock3,
+  FileCheck2,
+  Hourglass,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { updateOwnerLeadStatus } from "../actions";
 
@@ -204,46 +212,77 @@ export default async function OwnerLeadsPage() {
   }
 
   const leads = (data ?? []) as OwnerLeadRow[];
+  const total = leads.length;
+  const fresh = leads.filter((x) => (x.status ?? "new") === "new").length;
+  const reviewing = leads.filter((x) => x.status === "in_review").length;
+  const validated = leads.filter((x) => x.status === "validated").length;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Owner Leads</h1>
-          <p className="mt-1 text-sm text-black/60">
-            Validation des propositions de biens clients.
-          </p>
-        </div>
-        <Link
-          href="/admin/protected/leads"
-          className="rounded-xl border border-black/10 bg-white/70 px-3 py-2 text-sm hover:bg-white"
-        >
-          Back
-        </Link>
-      </div>
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-10">
+      <section className="rounded-3xl border border-black/10 bg-white/75 p-6 shadow-sm backdrop-blur md:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full bg-[rgb(var(--gold))]/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]">
+              <Building2 size={14} />
+              Owner Validation Desk
+            </div>
+            <h1 className="mt-3 text-3xl font-extrabold text-[rgb(var(--navy))]">Owner Leads</h1>
+            <p className="mt-2 text-sm text-black/60">
+              Validation des propositions de biens clients.
+            </p>
+          </div>
 
-      <div className="mt-6 space-y-4">
+          <Link
+            href="/admin/protected/leads"
+            className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-medium text-[rgb(var(--navy))] hover:bg-black/5"
+          >
+            <ArrowLeft size={15} />
+            Back
+          </Link>
+        </div>
+
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+          <StatCard label="Total leads" value={String(total)} icon={<Building2 size={15} />} />
+          <StatCard label="Nouveaux" value={String(fresh)} icon={<Clock3 size={15} />} />
+          <StatCard label="En review" value={String(reviewing)} icon={<Hourglass size={15} />} />
+          <StatCard label="Valides" value={String(validated)} icon={<BadgeCheck size={15} />} />
+        </div>
+      </section>
+
+      <div className="space-y-4">
         {leads.map((lead) => (
           <article
             key={lead.id}
-            className="rounded-2xl border border-black/10 bg-white/75 p-5 shadow-sm"
+            className="rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm backdrop-blur md:p-6"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="text-sm text-black/60">
+                <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-2.5 py-1 text-xs text-black/65">
+                  <Clock3 size={12} />
                   {new Date(lead.created_at).toLocaleString("fr-FR")}
                   {lead.lang ? ` | ${lead.lang.toUpperCase()}` : ""}
                 </div>
-                <h2 className="mt-1 text-lg font-semibold text-slate-900">
+                <h2 className="mt-2 text-xl font-bold text-[rgb(var(--navy))]">
                   {fmt(lead.title) !== "-" ? lead.title : fmt(lead.property_type)}
                 </h2>
                 <div className="mt-1 text-sm text-black/65">
                   {[lead.address, lead.district, lead.commune, lead.city].filter(Boolean).join(" | ") || "-"}
                 </div>
+                <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                  <span className="rounded-full border border-black/10 bg-black/5 px-2.5 py-1 text-black/70">
+                    Intent: {fmt(lead.intent)}
+                  </span>
+                  <span className="rounded-full border border-black/10 bg-black/5 px-2.5 py-1 text-black/70">
+                    Type: {fmt(lead.property_type)}
+                  </span>
+                  <span className="rounded-full border border-black/10 bg-black/5 px-2.5 py-1 text-black/70">
+                    Transaction: {fmt(lead.transaction_type || lead.location_type)}
+                  </span>
+                </div>
               </div>
 
               <span
-                className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${statusBadgeClass(
+                className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${statusBadgeClass(
                   lead.status
                 )}`}
               >
@@ -251,7 +290,7 @@ export default async function OwnerLeadsPage() {
               </span>
             </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-4">
+            <div className="mt-5 grid gap-3 md:grid-cols-4">
               <Metric label="Prix" value={formatPrice(lead.price)} />
               <Metric label="Surface" value={lead.surface ? `${lead.surface} m2` : "-"} />
               <Metric label="Pieces" value={fmt(lead.rooms)} />
@@ -287,14 +326,20 @@ export default async function OwnerLeadsPage() {
 
             {(lead.photo_links || lead.message) && (
               <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <div className="rounded-xl border border-black/10 bg-white p-3 text-sm">
-                  <div className="font-medium text-black/70">Liens photos/videos</div>
+                <div className="rounded-2xl border border-black/10 bg-white p-3 text-sm">
+                  <div className="inline-flex items-center gap-2 font-medium text-black/70">
+                    <FileCheck2 size={14} />
+                    Liens photos/videos
+                  </div>
                   <div className="mt-1 whitespace-pre-wrap break-words text-black/70">
                     {fmt(lead.photo_links)}
                   </div>
                 </div>
-                <div className="rounded-xl border border-black/10 bg-white p-3 text-sm">
-                  <div className="font-medium text-black/70">Description client</div>
+                <div className="rounded-2xl border border-black/10 bg-white p-3 text-sm">
+                  <div className="inline-flex items-center gap-2 font-medium text-black/70">
+                    <FileCheck2 size={14} />
+                    Description client
+                  </div>
                   <div className="mt-1 whitespace-pre-wrap break-words text-black/70">
                     {fmt(lead.message)}
                   </div>
@@ -303,7 +348,7 @@ export default async function OwnerLeadsPage() {
             )}
 
             <form
-              className="mt-4 rounded-xl border border-black/10 bg-white p-3"
+              className="mt-4 rounded-2xl border border-black/10 bg-white p-3 md:p-4"
               action={async (formData) => {
                 "use server";
                 const status = String(formData.get("status") || "new");
@@ -311,7 +356,7 @@ export default async function OwnerLeadsPage() {
                 await updateOwnerLeadStatus(lead.id, status, note);
               }}
             >
-              <div className="grid gap-3 md:grid-cols-[220px_1fr_auto]">
+              <div className="grid gap-3 md:grid-cols-[220px_1fr]">
                 <label className="text-sm">
                   <div className="mb-1 font-medium text-black/70">Statut</div>
                   <select
@@ -337,16 +382,22 @@ export default async function OwnerLeadsPage() {
                   />
                 </label>
 
-                <button
-                  type="submit"
-                  className="h-10 self-end rounded-xl bg-black px-4 text-xs font-semibold text-white hover:opacity-95"
-                >
-                  Save
-                </button>
               </div>
 
+              {lead.status !== "validated" && (
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="submit"
+                    className="h-10 rounded-xl bg-[rgb(var(--navy))] px-4 text-xs font-semibold text-white hover:opacity-95"
+                  >
+                    Save
+                  </button>
+                </div>
+              )}
+
               {lead.validated_at && (
-                <div className="mt-2 text-xs text-emerald-700">
+                <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">
+                  <BadgeCheck size={12} />
                   Valide le {new Date(lead.validated_at).toLocaleString("fr-FR")}
                 </div>
               )}
@@ -364,9 +415,29 @@ export default async function OwnerLeadsPage() {
   );
 }
 
+function StatCard({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-black/10 bg-white p-4">
+      <div className="inline-flex items-center gap-2 text-xs uppercase tracking-wide text-black/50">
+        {icon}
+        {label}
+      </div>
+      <div className="mt-2 text-2xl font-extrabold text-[rgb(var(--navy))]">{value}</div>
+    </div>
+  );
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-black/10 bg-white px-3 py-2">
+    <div className="rounded-2xl border border-black/10 bg-white px-3 py-2">
       <div className="text-xs uppercase tracking-wide text-black/50">{label}</div>
       <div className="mt-0.5 text-sm font-semibold text-slate-900">{value}</div>
     </div>
@@ -375,7 +446,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function Info({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-black/10 bg-white px-3 py-2">
+    <div className="rounded-2xl border border-black/10 bg-white px-3 py-2">
       <div className="text-xs uppercase tracking-wide text-black/50">{label}</div>
       <div className="mt-0.5 text-sm text-slate-900">{value}</div>
     </div>

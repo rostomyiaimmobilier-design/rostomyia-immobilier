@@ -11,6 +11,22 @@ type DescriptionSection = {
   bullets: string[];
 };
 
+type RelatedImageRow = {
+  path: string | null;
+  sort: number | null;
+};
+
+type RelatedPropertyRow = {
+  ref: string | null;
+  title: string | null;
+  type: string | null;
+  location_type?: string | null;
+  price: string | number | null;
+  location: string | null;
+  description: string | null;
+  property_images?: RelatedImageRow[] | null;
+};
+
 const dict = {
   fr: {
     back: "Retour aux biens",
@@ -23,6 +39,7 @@ const dict = {
     descText: "Description du bien.",
     details: "Details",
     locationLabel: "Emplacement",
+    otherOptions: "Autres biens",
     priceLabel: "Prix",
     commissionLabel: "Commission",
     paymentLabel: "Paiement",
@@ -42,6 +59,7 @@ const dict = {
     descText: "وصف العقار.",
     details: "التفاصيل",
     locationLabel: "الموقع",
+    otherOptions: "عقارات اخرى",
     priceLabel: "السعر",
     commissionLabel: "العمولة",
     paymentLabel: "الدفع",
@@ -94,6 +112,56 @@ function parseDescription(raw?: string | null): DescriptionSection[] {
   return sections;
 }
 
+function normalizeText(input?: string | null) {
+  return (input ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function isPaymentLine(line: string) {
+  const n = normalizeText(line);
+  return (
+    n.startsWith("paiement") ||
+    n.startsWith("paiment") ||
+    n.startsWith("payment") ||
+    n.startsWith("modalites de paiement") ||
+    n.startsWith("modalites paiement") ||
+    n.startsWith("mode de paiement")
+  );
+}
+
+function extractLineValue(line: string) {
+  const byColon = line.split(":").slice(1).join(":").trim();
+  if (byColon) return byColon;
+  return line.split("-").slice(1).join("-").trim();
+}
+
+function extractPaymentTerms(raw?: string | null): string | null {
+  const text = (raw || "").trim();
+  if (!text) return null;
+
+  const lines = text
+    .split("\n")
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  for (const line of lines) {
+    if (isPaymentLine(line)) {
+      const value = extractLineValue(line);
+      if (value) return value;
+    }
+  }
+
+  return null;
+}
+
+function isMissingLocationTypeColumn(message: string | undefined) {
+  const m = (message || "").toLowerCase();
+  return m.includes("location_type") && (m.includes("does not exist") || m.includes("column"));
+}
+
 export default async function PropertyDetailPage({
   params,
 }: {
@@ -103,11 +171,27 @@ export default async function PropertyDetailPage({
 
   const supabase = await createClient();
 
-  const { data: property, error } = await supabase
-    .from("properties")
-    .select("id, ref, title, type, price, location, beds, baths, area, description")
-    .eq("ref", ref)
-    .single();
+  const queryPropertyWithLocationType = async () =>
+    supabase
+      .from("properties")
+      .select("id, ref, title, type, location_type, price, location, beds, baths, area, description")
+      .eq("ref", ref)
+      .single();
+
+  const queryPropertyWithoutLocationType = async () =>
+    supabase
+      .from("properties")
+      .select("id, ref, title, type, price, location, beds, baths, area, description")
+      .eq("ref", ref)
+      .single();
+
+  let { data: property, error } = await queryPropertyWithLocationType();
+
+  if (error && isMissingLocationTypeColumn(error.message)) {
+    const fallback = await queryPropertyWithoutLocationType();
+    property = fallback.data as typeof property;
+    error = fallback.error;
+  }
 
   if (error || !property) return notFound();
 
@@ -120,6 +204,75 @@ export default async function PropertyDetailPage({
   const images = (imgs ?? [])
     .map((x) => (x.path ? imageUrl(x.path) : null))
     .filter(Boolean) as string[];
+
+  const queryRelatedWithLocationType = async () =>
+    supabase
+      .from("properties")
+      .select(
+        `
+        ref,
+        title,
+        type,
+        location_type,
+        price,
+        location,
+        description,
+        property_images (
+          path,
+          sort
+        )
+      `
+      )
+      .neq("id", property.id)
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+  const queryRelatedWithoutLocationType = async () =>
+    supabase
+      .from("properties")
+      .select(
+        `
+        ref,
+        title,
+        type,
+        price,
+        location,
+        description,
+        property_images (
+          path,
+          sort
+        )
+      `
+      )
+      .neq("id", property.id)
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+  let { data: relatedRows, error: relatedError } = await queryRelatedWithLocationType();
+
+  if (relatedError && isMissingLocationTypeColumn(relatedError.message)) {
+    const fallback = await queryRelatedWithoutLocationType();
+    relatedRows = fallback.data;
+    relatedError = fallback.error;
+  }
+
+  const relatedProperties = ((relatedRows ?? []) as RelatedPropertyRow[])
+    .filter((x) => !!x.ref)
+    .map((x) => {
+      const sortedImages = (x.property_images ?? []).slice().sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+      const firstPath = sortedImages[0]?.path;
+      return {
+        ref: String(x.ref),
+        title: x.title ?? x.ref ?? "",
+        type: x.type ?? "",
+        price: x.price,
+        location: x.location ?? "",
+        paymentTerms: extractPaymentTerms(x.description) ?? null,
+        locationType: x.location_type ?? null,
+        imageUrl: firstPath ? imageUrl(firstPath) : null,
+      };
+    })
+    .slice(0, 8);
 
   const cookieStore = await cookies();
   const cookieLang = cookieStore.get("rostomyia_lang")?.value;
@@ -147,6 +300,7 @@ export default async function PropertyDetailPage({
         ref: property.ref,
         title: property.title,
         type: property.type,
+        locationType: (property as { location_type?: string | null }).location_type ?? null,
         price: property.price,
         location: property.location,
         beds: Number(property.beds ?? 0),
@@ -158,6 +312,7 @@ export default async function PropertyDetailPage({
       waLink={waLink}
       phone={phone}
       sections={sections}
+      relatedProperties={relatedProperties}
     />
   );
 }

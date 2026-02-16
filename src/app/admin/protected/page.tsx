@@ -1,6 +1,17 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import {
+  ArrowRight,
+  Bath,
+  BedDouble,
+  Building2,
+  Camera,
+  FileCheck2,
+  Home,
+  Plus,
+  Ruler,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import DeletePropertyForm from "@/components/admin/DeletePropertyForm";
 
@@ -70,11 +81,9 @@ export default async function AdminPage() {
 
   if (error) {
     return (
-      <main className="mx-auto max-w-5xl p-10">
-        <h1 className="text-3xl font-bold">Admin</h1>
-        <pre className="mt-6 overflow-auto rounded-xl bg-slate-900 p-4 text-white">
-          {error.message}
-        </pre>
+      <main className="rounded-3xl border border-red-200 bg-red-50 p-6">
+        <h1 className="text-2xl font-bold text-red-800">Admin loading error</h1>
+        <pre className="mt-4 overflow-auto rounded-xl bg-red-950 p-4 text-sm text-red-100">{error.message}</pre>
       </main>
     );
   }
@@ -95,104 +104,158 @@ export default async function AdminPage() {
     await supabase.from("properties").delete().eq("id", id);
 
     revalidatePath("/admin");
+    revalidatePath("/admin/protected");
   }
 
-  return (
-    <main className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-7xl px-6 py-12">
-        <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-          <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
-            <div>
-              <h1 className="text-3xl font-extrabold text-slate-900">Tableau d&apos;administration</h1>
-              <p className="mt-2 text-slate-600">Connecte: {user.email}</p>
-            </div>
+  const rows = (properties ?? []) as PropertyCardRow[];
+  const total = rows.length;
+  const withCover = rows.filter((p) => !!pickCoverPath(p)).length;
+  const withoutCover = total - withCover;
 
-            <div className="flex flex-wrap gap-2">
-              <Link
-                href="/admin/protected/leads/owners"
-                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-50 active:scale-[0.98]"
-              >
-                Leads proprietaires
-              </Link>
-              <Link
-                href="/admin/new"
-                className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:opacity-95 active:scale-[0.98]"
-              >
-                + Nouveau bien
-              </Link>
+  return (
+    <main>
+      <section className="rounded-3xl border border-black/10 bg-white/75 p-6 shadow-sm backdrop-blur md:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full bg-[rgb(var(--gold))]/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]">
+              <Building2 size={14} />
+              Admin Hub
             </div>
+            <h1 className="mt-3 text-3xl font-extrabold text-[rgb(var(--navy))]">Tableau d'administration</h1>
+            <p className="mt-2 text-sm text-black/60">Gerer le portefeuille biens, leads proprietaires et demandes de visite.</p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/admin/protected/leads/owners"
+              className="inline-flex items-center gap-2 rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-[rgb(var(--navy))] shadow-sm hover:bg-black/5"
+            >
+              <FileCheck2 size={15} />
+              Leads proprietaires
+            </Link>
+            <Link
+              href="/admin/new"
+              className="inline-flex items-center gap-2 rounded-2xl bg-[rgb(var(--navy))] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-95"
+            >
+              <Plus size={15} />
+              Nouveau bien
+            </Link>
           </div>
         </div>
 
-        <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {((properties ?? []) as PropertyCardRow[]).map((p) => {
-            const coverPath = pickCoverPath(p);
-            const coverUrl = coverPath ? imageUrl(coverPath) : null;
+        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-black/10 bg-white p-4">
+            <div className="text-xs uppercase tracking-wide text-black/50">Total biens</div>
+            <div className="mt-2 text-2xl font-extrabold text-[rgb(var(--navy))]">{total}</div>
+          </div>
+          <div className="rounded-2xl border border-black/10 bg-white p-4">
+            <div className="text-xs uppercase tracking-wide text-black/50">Avec visuel cover</div>
+            <div className="mt-2 text-2xl font-extrabold text-[rgb(var(--navy))]">{withCover}</div>
+          </div>
+          <div className="rounded-2xl border border-black/10 bg-white p-4">
+            <div className="text-xs uppercase tracking-wide text-black/50">Sans visuel cover</div>
+            <div className="mt-2 text-2xl font-extrabold text-[rgb(var(--navy))]">{withoutCover}</div>
+          </div>
+        </div>
+      </section>
 
-            return (
-              <div
-                key={p.id}
-                className="group overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-md"
-              >
-                <div className="relative h-48 w-full overflow-hidden bg-slate-100">
-                  {coverUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={coverUrl}
-                      alt={p.title ?? "Bien"}
-                      className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="h-full w-full bg-gradient-to-br from-slate-200 via-slate-100 to-white" />
-                  )}
+      <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        {rows.map((p) => {
+          const coverPath = pickCoverPath(p);
+          const coverUrl = coverPath ? imageUrl(coverPath) : null;
 
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
-                  <div className="absolute bottom-4 left-4 right-4 text-white">
-                    <div className="line-clamp-2 text-lg font-extrabold drop-shadow">
-                      {p.title ?? "Sans titre"}
+          return (
+            <article
+              key={p.id}
+              className="group overflow-hidden rounded-3xl border border-black/10 bg-white/82 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+            >
+              <div className="relative h-52 overflow-hidden bg-slate-100">
+                {coverUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={coverUrl}
+                    alt={p.title ?? "Bien"}
+                    className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-200 via-slate-100 to-white text-slate-500">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-3 py-1 text-xs font-medium">
+                      <Camera size={14} />
+                      Aucun cover
                     </div>
-                    <div className="mt-1 line-clamp-1 text-sm opacity-90">{p.location ?? ""}</div>
                   </div>
+                )}
+
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+                <div className="absolute left-4 right-4 top-4 flex items-center justify-between">
+                  <span className="rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-semibold text-[rgb(var(--navy))]">
+                    {p.ref ? `REF ${p.ref}` : "REF -"}
+                  </span>
+                  <span className="rounded-full bg-[rgb(var(--gold))]/85 px-2.5 py-1 text-[11px] font-semibold text-[rgb(var(--navy))]">
+                    {p.type || "Bien"}
+                  </span>
                 </div>
-
-                <div className="p-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-base font-bold text-slate-900">
-                      {p.price != null ? formatPrice(p.price) : "-"}
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Link
-                        href={`/admin/protected/${p.id}`}
-                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-50"
-                      >
-                        Modifier
-                      </Link>
-                      <DeletePropertyForm propertyId={p.id} action={deleteProperty} />
-                    </div>
-                  </div>
-
-                  <div className="mt-3 text-sm text-slate-600">
-                    {p.ref ? `REF ${p.ref} · ` : ""}
-                    {p.type ? `${p.type} · ` : ""}
-                    {p.beds != null ? `${p.beds} ch · ` : ""}
-                    {p.baths != null ? `${p.baths} sdb · ` : ""}
-                    {p.area != null ? `${p.area} m2` : ""}
-                  </div>
+                <div className="absolute bottom-4 left-4 right-4 text-white">
+                  <div className="line-clamp-2 text-lg font-extrabold drop-shadow">{p.title ?? "Sans titre"}</div>
+                  <div className="mt-1 line-clamp-1 text-sm text-white/90">{p.location ?? "-"}</div>
                 </div>
               </div>
-            );
-          })}
 
-          {(properties ?? []).length === 0 && (
-            <div className="col-span-full rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center">
-              <h2 className="text-xl font-semibold text-slate-900">Aucun bien disponible</h2>
-              <p className="mt-2 text-slate-600">Ajoutez votre premier bien pour commencer.</p>
-            </div>
-          )}
-        </div>
-      </div>
+              <div className="space-y-4 p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-lg font-extrabold text-[rgb(var(--navy))]">{p.price != null ? formatPrice(p.price) : "-"}</div>
+                  {p.ref ? (
+                    <Link
+                      href={`/biens/${p.ref}`}
+                      className="inline-flex items-center gap-1 rounded-xl border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-[rgb(var(--navy))] hover:bg-black/5"
+                    >
+                      Voir public
+                      <ArrowRight size={13} />
+                    </Link>
+                  ) : null}
+                </div>
+
+                <div className="flex flex-wrap gap-2 text-xs text-black/70">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-black/5 px-2.5 py-1 ring-1 ring-black/10">
+                    <BedDouble size={13} />
+                    {p.beds ?? "-"} ch
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-black/5 px-2.5 py-1 ring-1 ring-black/10">
+                    <Bath size={13} />
+                    {p.baths ?? "-"} sdb
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-black/5 px-2.5 py-1 ring-1 ring-black/10">
+                    <Ruler size={13} />
+                    {p.area ?? "-"} m2
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-black/5 px-2.5 py-1 ring-1 ring-black/10">
+                    <Home size={13} />
+                    {p.type || "-"}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Link
+                    href={`/admin/protected/${p.id}`}
+                    className="inline-flex items-center justify-center rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-semibold text-[rgb(var(--navy))] hover:bg-black/5"
+                  >
+                    Modifier
+                  </Link>
+                  <DeletePropertyForm propertyId={p.id} action={deleteProperty} />
+                </div>
+              </div>
+            </article>
+          );
+        })}
+
+        {rows.length === 0 && (
+          <div className="col-span-full rounded-3xl border border-dashed border-black/20 bg-white/75 p-12 text-center">
+            <h2 className="text-xl font-semibold text-[rgb(var(--navy))]">Aucun bien disponible</h2>
+            <p className="mt-2 text-black/60">Ajoutez votre premier bien pour commencer.</p>
+          </div>
+        )}
+      </section>
     </main>
   );
 }

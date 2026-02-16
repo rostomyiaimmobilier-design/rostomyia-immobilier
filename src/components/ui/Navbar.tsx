@@ -3,38 +3,15 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { useLang } from "@/components/LanguageProvider";
 
 export default function Navbar() {
   const { lang, setLang, dir } = useLang();
-  const supabase = createClient();
 
-  const [user, setUser] = useState<any>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
-    async function loadUser() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      setUser(user);
-
-      if (user) {
-        const { data } = await supabase
-          .from("profiles")
-          .select("is_admin")
-          .eq("id", user.id)
-          .single();
-
-        setIsAdmin(!!data?.is_admin);
-      }
-    }
-
-    loadUser();
-
     const handleScroll = () => {
       setScrolled(window.scrollY > 10);
     };
@@ -75,11 +52,6 @@ export default function Navbar() {
     document.cookie = `rostomyia_lang=${newLang}; path=/; max-age=31536000`;
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    window.location.href = "/";
-  };
-
   return (
     <div dir={dir}>
       <nav className="sticky top-0 z-50">
@@ -93,8 +65,7 @@ export default function Navbar() {
           {/* Gold ambient glow */}
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(201,167,98,0.15),transparent_40%)]" />
 
-          <div className="relative mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-            
+          <div className="relative mx-auto flex max-w-6xl items-center justify-between px-4 py-3 md:px-6 md:py-4">
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2">
               <Image
@@ -102,6 +73,7 @@ export default function Navbar() {
                 alt="Rostomyia"
                 width={120}
                 height={120}
+                className="h-10 w-auto md:h-12"
               />
             </Link>
 
@@ -116,54 +88,24 @@ export default function Navbar() {
 
             {/* Right Side */}
             <div className="flex items-center gap-3">
+              <div className="hidden items-center gap-3 md:flex">
+                <Link
+                  href="/auth/login"
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm transition hover:bg-slate-50"
+                >
+                  {t.login}
+                </Link>
 
-              {!user && (
-                <>
-                  <Link
-                    href="/auth/login"
-                    className="rounded-xl border border-slate-200 px-4 py-2 text-sm hover:bg-slate-50 transition"
-                  >
-                    {t.login}
-                  </Link>
-
-                  <Link
-                    href="/auth/signup"
-                    className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white hover:opacity-90 transition"
-                  >
-                    {t.signup}
-                  </Link>
-                </>
-              )}
-
-              {user && (
-                <>
-                  <Link
-                    href="/account"
-                    className="rounded-xl border border-slate-200 px-4 py-2 text-sm hover:bg-slate-50 transition"
-                  >
-                    {t.account}
-                  </Link>
-
-                  {isAdmin && (
-                    <Link
-                      href="/admin"
-                      className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white hover:opacity-90 transition"
-                    >
-                      {t.admin}
-                    </Link>
-                  )}
-
-                  <button
-                    onClick={handleLogout}
-                    className="rounded-xl border border-slate-200 px-4 py-2 text-sm hover:bg-slate-50 transition"
-                  >
-                    {t.logout}
-                  </button>
-                </>
-              )}
+                <Link
+                  href="/auth/signup"
+                  className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white transition hover:opacity-90"
+                >
+                  {t.signup}
+                </Link>
+              </div>
 
               {/* Language Switch */}
-              <div className="flex items-center gap-2">
+              <div className="hidden items-center gap-2 md:flex">
                 <button
                   onClick={() => changeLang("fr")}
                   className={`rounded-lg px-3 py-2 text-sm border transition ${
@@ -185,6 +127,115 @@ export default function Navbar() {
                 >
                   AR
                 </button>
+              </div>
+
+              {/* Mobile Controls */}
+              <div className="flex items-center gap-2 md:hidden">
+                <button
+                  onClick={() => changeLang("fr")}
+                  className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+                    lang === "fr"
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-200 bg-white text-slate-700"
+                  }`}
+                >
+                  FR
+                </button>
+                <button
+                  onClick={() => changeLang("ar")}
+                  className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+                    lang === "ar"
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-200 bg-white text-slate-700"
+                  }`}
+                >
+                  AR
+                </button>
+                <button
+                  type="button"
+                  aria-label={mobileOpen ? "Close navigation menu" : "Open navigation menu"}
+                  aria-expanded={mobileOpen}
+                  onClick={() => setMobileOpen((open) => !open)}
+                  className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
+                >
+                  <span
+                    className={`absolute h-0.5 w-4 bg-current transition ${
+                      mobileOpen ? "rotate-45" : "-translate-y-1.5"
+                    }`}
+                  />
+                  <span
+                    className={`absolute h-0.5 w-4 bg-current transition ${
+                      mobileOpen ? "opacity-0" : "opacity-100"
+                    }`}
+                  />
+                  <span
+                    className={`absolute h-0.5 w-4 bg-current transition ${
+                      mobileOpen ? "-rotate-45" : "translate-y-1.5"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Mobile Menu */}
+          <div
+            className={`overflow-hidden border-t border-black/5 transition-all duration-300 md:hidden ${
+              mobileOpen ? "max-h-[80vh] opacity-100" : "max-h-0 opacity-0"
+            }`}
+          >
+            <div className="space-y-2 bg-white/95 px-4 py-3 backdrop-blur-xl">
+              <Link
+                href="/"
+                onClick={() => setMobileOpen(false)}
+                className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+              >
+                {t.home}
+              </Link>
+              <Link
+                href="/biens"
+                onClick={() => setMobileOpen(false)}
+                className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+              >
+                {t.listings}
+              </Link>
+              <Link
+                href="/proposer"
+                onClick={() => setMobileOpen(false)}
+                className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+              >
+                {t.submit}
+              </Link>
+              <Link
+                href="/contact"
+                onClick={() => setMobileOpen(false)}
+                className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+              >
+                {t.contact}
+              </Link>
+              <Link
+                href="/a-propos"
+                onClick={() => setMobileOpen(false)}
+                className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+              >
+                {t.about}
+              </Link>
+
+              <div className="mt-2 space-y-2 border-t border-slate-200 pt-3">
+                <Link
+                  href="/auth/login"
+                  onClick={() => setMobileOpen(false)}
+                  className="block rounded-lg border border-slate-200 px-3 py-2 text-center text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  {t.login}
+                </Link>
+                <Link
+                  href="/auth/signup"
+                  onClick={() => setMobileOpen(false)}
+                  className="block rounded-lg bg-slate-900 px-3 py-2 text-center text-sm font-medium text-white transition hover:opacity-90"
+                >
+                  {t.signup}
+                </Link>
               </div>
             </div>
           </div>

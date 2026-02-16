@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { CheckCircle2, Loader2, ShieldCheck, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useLang } from "@/components/LanguageProvider";
 
@@ -209,6 +210,7 @@ export default function SubmitPropertyPage() {
 
   const [submitStatus, setSubmitStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [submitError, setSubmitError] = useState<string>("");
+  const isSubmitting = submitStatus === "loading";
 
   const isArabic = lang === "ar";
   const transactionOptions = useMemo(
@@ -369,7 +371,30 @@ export default function SubmitPropertyPage() {
           <h1 className="mt-3 text-3xl font-extrabold text-[rgb(var(--navy))] md:text-4xl">{t.title}</h1>
           <p className="mt-3 max-w-3xl text-sm text-black/65">{t.subtitle}</p>
 
-          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          <div className="mt-6 grid gap-3 md:grid-cols-3">
+            <HighlightCard
+              icon={<Sparkles size={15} />}
+              title={isArabic ? "تقييم سريع" : "Validation rapide"}
+              text={isArabic ? "فريقنا يراجع الطلب بسرعة." : "Notre equipe traite chaque demande rapidement."}
+            />
+            <HighlightCard
+              icon={<ShieldCheck size={15} />}
+              title={isArabic ? "بياناتك محمية" : "Donnees protegees"}
+              text={isArabic ? "معلوماتك للاستخدام المهني فقط." : "Vos informations sont utilisees uniquement pour le dossier."}
+            />
+            <HighlightCard
+              icon={<CheckCircle2 size={15} />}
+              title={isArabic ? "متابعة شخصية" : "Suivi personalise"}
+              text={isArabic ? "نتصل بك قبل النشر." : "Nous vous contactons avant toute publication."}
+            />
+          </div>
+
+          <div className="relative mt-8">
+            <form
+              aria-busy={isSubmitting}
+              className={`space-y-6 transition ${isSubmitting ? "pointer-events-none opacity-65" : ""}`}
+              onSubmit={handleSubmit}
+            >
             <FormSection title={t.ownerBlock}>
               <Field
                 label={isArabic ? "الاسم الكامل" : "Nom complet"}
@@ -452,9 +477,8 @@ export default function SubmitPropertyPage() {
               <Field
                 label={isArabic ? "المدينة" : "Ville"}
                 required
-                value={form.city}
-                onChange={(v) => updateField("city", v)}
-                placeholder="Oran"
+                value="Oran"
+                readOnly
               />
               <SelectField
                 label={isArabic ? "البلدية" : "Commune"}
@@ -535,10 +559,11 @@ export default function SubmitPropertyPage() {
                   {LEGAL_DOC_OPTIONS.map((option) => (
                     <label
                       key={option.value}
-                      className="flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2"
+                      className="flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 shadow-sm transition hover:border-[rgb(var(--gold))]/35 hover:bg-[rgb(var(--gold))]/10"
                     >
                       <input
                         type="checkbox"
+                        className="h-4 w-4 rounded border-black/20 accent-[rgb(var(--navy))]"
                         checked={form.legalDocs.includes(option.value)}
                         onChange={() => toggleLegalDoc(option.value)}
                       />
@@ -578,10 +603,10 @@ export default function SubmitPropertyPage() {
               />
             </FormSection>
 
-            <label className="flex items-start gap-3 rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm">
+            <label className="flex items-start gap-3 rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm shadow-sm transition hover:border-[rgb(var(--gold))]/35 hover:bg-[rgb(var(--gold))]/10">
               <input
                 type="checkbox"
-                className="mt-1"
+                className="mt-1 h-4 w-4 rounded border-black/20 accent-[rgb(var(--navy))]"
                 checked={form.consent}
                 onChange={(e) => updateField("consent", e.target.checked)}
               />
@@ -590,28 +615,59 @@ export default function SubmitPropertyPage() {
 
             <button
               type="submit"
-              disabled={submitStatus === "loading"}
-              className="inline-flex h-12 w-full items-center justify-center rounded-2xl bg-[rgb(var(--navy))] px-6 text-sm font-semibold text-white shadow-sm hover:opacity-95 disabled:opacity-60"
+              disabled={isSubmitting}
+              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[rgb(var(--navy))] px-6 text-sm font-semibold text-white shadow-sm hover:opacity-95 disabled:opacity-60"
             >
-              {submitStatus === "loading" ? t.sending : t.submit}
+              {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : null}
+              {isSubmitting ? t.sending : t.submit}
             </button>
 
-            {(submitStatus === "loading" || submitStatus === "error") && (
+            {submitStatus === "error" && (
               <div className={`rounded-2xl border px-4 py-3 text-sm ${statusTone(submitStatus)}`}>
-                {submitStatus === "loading" ? t.sending : submitError || t.error}
+                {submitError || t.error}
               </div>
             )}
-          </form>
+            </form>
+
+            {isSubmitting && (
+              <div className="absolute inset-0 z-10 grid place-items-center rounded-3xl bg-white/55 backdrop-blur-[2px]">
+                <div className="inline-flex items-center gap-3 rounded-2xl border border-black/10 bg-white px-5 py-3 text-sm font-medium text-[rgb(var(--navy))] shadow-sm">
+                  <Loader2 size={16} className="animate-spin" />
+                  {t.sending}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </main>
   );
 }
 
+function HighlightCard({
+  icon,
+  title,
+  text,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  text: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-black/10 bg-white/80 p-3 shadow-sm">
+      <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[rgb(var(--navy))]">
+        {icon}
+        {title}
+      </div>
+      <p className="mt-1.5 text-xs text-black/65">{text}</p>
+    </div>
+  );
+}
+
 function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-black/10 bg-white/70 p-4 md:p-5">
-      <h2 className="text-sm font-semibold uppercase tracking-[0.1em] text-black/60">{title}</h2>
+    <section className="rounded-3xl border border-black/10 bg-white/80 p-4 shadow-sm md:p-5">
+      <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-black/55">{title}</h2>
       <div className="mt-4 grid gap-3 md:grid-cols-2">{children}</div>
     </section>
   );
@@ -624,27 +680,40 @@ function Field({
   placeholder,
   required,
   type = "text",
+  readOnly = false,
 }: {
   label: string;
   value: string;
-  onChange: (next: string) => void;
+  onChange?: (next: string) => void;
   placeholder?: string;
   required?: boolean;
   type?: string;
+  readOnly?: boolean;
 }) {
   return (
-    <label className="space-y-1.5 text-sm">
-      <span className="font-medium text-black/70">
+    <label className="group space-y-2 text-sm">
+      <span className="inline-flex items-center gap-1 font-semibold text-[rgb(var(--navy))]/85">
         {label}
         {required ? <span className="text-red-600"> *</span> : null}
       </span>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="h-11 w-full rounded-xl border border-black/10 bg-white px-3 outline-none ring-[rgb(var(--navy))]/20 focus:ring"
-      />
+      <div
+        className={`rounded-2xl border border-black/10 shadow-[0_1px_1px_rgba(2,6,23,0.03)] transition duration-200 ${
+          readOnly
+            ? "bg-black/[0.03]"
+            : "bg-white/95 group-focus-within:border-[rgb(var(--gold))]/65 group-focus-within:shadow-[0_0_0_3px_rgba(201,167,98,0.22)]"
+        }`}
+      >
+        <input
+          type={type}
+          value={value}
+          readOnly={readOnly}
+          onChange={(e) => onChange?.(e.target.value)}
+          placeholder={placeholder}
+          className={`h-12 w-full rounded-2xl border-0 bg-transparent px-3.5 text-sm outline-none placeholder:text-black/40 ${
+            readOnly ? "cursor-not-allowed text-black/55" : "text-[rgb(var(--navy))]"
+          }`}
+        />
+      </div>
     </label>
   );
 }
@@ -663,22 +732,25 @@ function SelectField({
   required?: boolean;
 }) {
   return (
-    <label className="space-y-1.5 text-sm">
-      <span className="font-medium text-black/70">
+    <label className="group space-y-2 text-sm">
+      <span className="inline-flex items-center gap-1 font-semibold text-[rgb(var(--navy))]/85">
         {label}
         {required ? <span className="text-red-600"> *</span> : null}
       </span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-11 w-full rounded-xl border border-black/10 bg-white px-3 outline-none ring-[rgb(var(--navy))]/20 focus:ring"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+      <div className="relative rounded-2xl border border-black/10 bg-white/95 shadow-[0_1px_1px_rgba(2,6,23,0.03)] transition duration-200 group-focus-within:border-[rgb(var(--gold))]/65 group-focus-within:shadow-[0_0_0_3px_rgba(201,167,98,0.22)]">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-12 w-full appearance-none rounded-2xl border-0 bg-transparent px-3.5 pr-9 text-sm text-[rgb(var(--navy))] outline-none"
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <span className="pointer-events-none absolute inset-y-0 right-3 inline-flex items-center text-black/45">▾</span>
+      </div>
     </label>
   );
 }
@@ -695,14 +767,16 @@ function TextareaField({
   placeholder?: string;
 }) {
   return (
-    <label className="space-y-1.5 text-sm md:col-span-2">
-      <span className="font-medium text-black/70">{label}</span>
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="min-h-28 w-full rounded-xl border border-black/10 bg-white px-3 py-2 outline-none ring-[rgb(var(--navy))]/20 focus:ring"
-      />
+    <label className="group space-y-2 text-sm md:col-span-2">
+      <span className="inline-flex items-center gap-1 font-semibold text-[rgb(var(--navy))]/85">{label}</span>
+      <div className="rounded-2xl border border-black/10 bg-white/95 shadow-[0_1px_1px_rgba(2,6,23,0.03)] transition duration-200 group-focus-within:border-[rgb(var(--gold))]/65 group-focus-within:shadow-[0_0_0_3px_rgba(201,167,98,0.22)]">
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="min-h-32 w-full rounded-2xl border-0 bg-transparent px-3.5 py-3 text-sm text-[rgb(var(--navy))] outline-none placeholder:text-black/40"
+        />
+      </div>
     </label>
   );
 }
