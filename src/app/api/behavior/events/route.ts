@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 const ALLOWED_EVENT_TYPES = new Set(["view", "favorite", "contact", "search_click"]);
+const BEHAVIOR_EVENTS_ENABLED = process.env.BEHAVIOR_EVENTS_ENABLED === "true";
 
 function isMissingTableError(message: string | undefined, table: string) {
   const m = String(message ?? "").toLowerCase();
@@ -9,6 +10,10 @@ function isMissingTableError(message: string | undefined, table: string) {
 }
 
 export async function POST(request: Request) {
+  if (!BEHAVIOR_EVENTS_ENABLED) {
+    return NextResponse.json({ ok: true, paused: true, reason: "paused_by_config" });
+  }
+
   const supabase = await createClient();
   const {
     data: { user },

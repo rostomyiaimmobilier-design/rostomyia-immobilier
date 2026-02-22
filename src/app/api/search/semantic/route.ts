@@ -1,7 +1,17 @@
 import { NextResponse } from "next/server";
 import { semanticSearchByQuery } from "@/lib/semantic-search";
 
+const SEMANTIC_SEARCH_ENABLED = process.env.SEMANTIC_SEARCH_ENABLED === "true";
+
 export async function POST(request: Request) {
+  if (!SEMANTIC_SEARCH_ENABLED) {
+    return NextResponse.json({
+      enabled: false,
+      reason: "paused_by_config",
+      results: [],
+    });
+  }
+
   let body: unknown;
   try {
     body = await request.json();

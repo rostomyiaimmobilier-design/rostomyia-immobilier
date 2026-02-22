@@ -22,6 +22,7 @@ import {
   TrendingUp,
   Users,
   Waves,
+  X,
   Zap,
 } from "lucide-react";
 import PropertyCard from "@/components/PropertyCard";
@@ -552,6 +553,8 @@ const AI_CUSTOM_STORAGE_KEY = "rostomyia_ai_custom_presets_v1";
 const AI_MAX_CUSTOM_PRESETS = 12;
 const SEARCH_METRICS_STORAGE_KEY = "rostomyia_search_metrics_v1";
 const SEARCH_BEHAVIOR_STORAGE_KEY = "rostomyia_search_behavior_v1";
+const BEHAVIOR_EVENTS_ENABLED = process.env.NEXT_PUBLIC_BEHAVIOR_EVENTS_ENABLED === "true";
+const SEMANTIC_SEARCH_ENABLED = process.env.NEXT_PUBLIC_SEMANTIC_SEARCH_ENABLED === "true";
 const FAVORITES_STORAGE_KEYS = [
   "rostomyia_favorites",
   "rostomyia_favorite_properties",
@@ -898,6 +901,66 @@ function tokenizeSearchQuery(query: string): string[] {
     .filter(Boolean);
 }
 
+type RoomQueryInfo = {
+  raw: string;
+  family: "t" | "f" | "studio";
+  pieces: number | null;
+  plus: boolean;
+};
+
+function parseRoomQueryToken(value: string | null | undefined): RoomQueryInfo | null {
+  const normalized = normalizeText(value ?? "");
+  if (!normalized) return null;
+  if (normalized === "studio") {
+    return { raw: "Studio", family: "studio", pieces: 1, plus: false };
+  }
+
+  const tokenMatch = normalized.match(/^([tf])\s*([1-9])(\+)?$/);
+  if (tokenMatch) {
+    return {
+      raw: `${tokenMatch[1].toUpperCase()}${tokenMatch[2]}${tokenMatch[3] ?? ""}`,
+      family: tokenMatch[1] as "t" | "f",
+      pieces: Number(tokenMatch[2]),
+      plus: tokenMatch[3] === "+",
+    };
+  }
+
+  const piecesMatch = normalized.match(/\b([1-9])\s*(piece|pieces|pi[eè]ce|pi[eè]ces|room|rooms)\b/);
+  if (piecesMatch) {
+    const pieces = Number(piecesMatch[1]);
+    return {
+      raw: `F${pieces}`,
+      family: "f",
+      pieces,
+      plus: false,
+    };
+  }
+
+  return null;
+}
+
+function roomMatchesProperty(property: PropertyItem, roomQuery: string, searchableText: string): boolean {
+  const roomNorm = normalizeText(roomQuery);
+  if (!roomNorm) return true;
+  if (searchableText.includes(roomNorm)) return true;
+
+  const parsed = parseRoomQueryToken(roomQuery);
+  if (!parsed) return false;
+
+  const beds = Number(property.beds ?? 0);
+  if (parsed.family === "studio") {
+    if (searchableText.includes("studio")) return true;
+    return beds > 0 ? beds <= 1 : false;
+  }
+
+  const pieces = Number(parsed.pieces ?? 0);
+  if (!Number.isFinite(pieces) || pieces <= 0 || beds <= 0) return false;
+
+  const expectedBeds = Math.max(1, pieces - 1);
+  if (parsed.plus) return beds >= expectedBeds;
+  return beds === expectedBeds || beds === pieces;
+}
+
 function getTokenVariants(token: string): string[] {
   const norm = normalizeText(token);
   if (!norm) return [];
@@ -996,6 +1059,87 @@ function inferListingCategories(item: Pick<PropertyItem, "title" | "category">):
   ).map((category) => category.label);
 
   return Array.from(new Set(found));
+}
+
+function inferPrimaryCategory(item: Pick<PropertyItem, "title" | "category">): string {
+  const explicit = normalizeDisplayText(item.category ?? "");
+  if (explicit) return explicit;
+  return inferListingCategories(item)[0] ?? "";
+}
+
+function inferRoomLabelForSuggestion(item: Pick<PropertyItem, "title" | "beds">): string {
+  const title = normalizeDisplayText(item.title ?? "");
+  const fromTitle = title.match(/\b([TF]\s*[1-9]\+?|Studio)\b/i)?.[1];
+  if (fromTitle) {
+    const compact = fromTitle.replace(/\s+/g, "");
+    return compact.toLowerCase() === "studio" ? "Studio" : compact.toUpperCase();
+  }
+
+  const beds = Number(item.beds ?? 0);
+  if (Number.isFinite(beds) && beds > 0) {
+    const pieces = beds + 1;
+    if (pieces >= 6) return "F6+";
+    return `F${pieces}`;
+  }
+
+  return "";
+}
+
+function inferCategoryContext(query: string, explicitCategory?: string): string {
+  const explicit = normalizeDisplayText(explicitCategory ?? "");
+  if (explicit) return explicit;
+
+  const qNorm = normalizeText(query);
+  if (!qNorm) return "";
+  const matched = CATEGORY_SUGGESTIONS.find((category) =>
+    category.terms.some((term) => qNorm.includes(normalizeText(term)))
+  );
+  return matched?.label ?? "";
+}
+
+function categorySupportsRoomSuggestions(categoryText: string): boolean {
+  const n = normalizeText(categoryText);
+  if (!n) return true;
+
+  const nonRoomTerms = [
+    "terrain",
+    "lot",
+    "parcelle",
+    "land",
+    "local",
+    "commercial",
+    "commerce",
+    "shop",
+    "boutique",
+    "magasin",
+    "bureau",
+    "office",
+    "ارض",
+    "محل",
+    "مكتب",
+  ];
+  if (nonRoomTerms.some((term) => n.includes(normalizeText(term)))) return false;
+
+  return true;
+}
+
+function categoryAwareRoomOptions(categoryContext: string): string[] {
+  const rooms = ROOMS_OPTIONS.filter(Boolean) as string[];
+  if (!categoryContext) return rooms;
+  if (!categorySupportsRoomSuggestions(categoryContext)) return [];
+
+  const n = normalizeText(categoryContext);
+  const studio = rooms.filter((room) => normalizeText(room) === "studio");
+  const fRooms = rooms.filter((room) => normalizeText(room).startsWith("f"));
+  const tRooms = rooms.filter((room) => normalizeText(room).startsWith("t"));
+
+  if (["appartement", "appart", "apartment", "studio", "شقة"].some((term) => n.includes(normalizeText(term)))) {
+    return [...studio, ...fRooms, ...tRooms];
+  }
+  if (["villa", "maison", "house", "فيلا"].some((term) => n.includes(normalizeText(term)))) {
+    return [...tRooms, ...fRooms, ...studio];
+  }
+  return rooms;
 }
 
 function buildSearchableListingText(
@@ -1115,6 +1259,7 @@ type Filters = {
 };
 
 type SearchSuggestionType =
+  | "smart_query"
   | "commune"
   | "district"
   | "room"
@@ -1142,6 +1287,13 @@ type SemanticApiPayload = {
   results?: Array<{ ref?: string; score?: number }>;
 };
 
+type BackgroundRecommendation = {
+  ref: string;
+  score: number;
+  rank: number;
+  reason: string;
+};
+
 type BehaviorEventType = "view" | "favorite" | "contact" | "search_click";
 
 type BackgroundRecommendationApiPayload = {
@@ -1156,12 +1308,6 @@ type BackgroundRecommendationApiPayload = {
   }>;
 };
 
-type Recommendation = {
-  property: PropertyItem;
-  reason: string;
-  score: number;
-};
-
 type RecoveryAction = {
   key: string;
   label: string;
@@ -1174,6 +1320,7 @@ const SEARCH_SUGGESTION_LABELS: Record<
   Record<SearchSuggestionType, string>
 > = {
   fr: {
+    smart_query: "Recherche intelligente",
     commune: "Commune",
     district: "Quartier",
     room: "Pièces",
@@ -1182,6 +1329,7 @@ const SEARCH_SUGGESTION_LABELS: Record<
     category: "Catégorie",
   },
   ar: {
+    smart_query: "بحث ذكي",
     commune: "بلدية",
     district: "حي",
     room: "غرف",
@@ -1192,6 +1340,9 @@ const SEARCH_SUGGESTION_LABELS: Record<
 };
 
 function suggestionHint(suggestion: SearchSuggestion, lang: Lang): string {
+  if (suggestion.type === "smart_query") {
+    return lang === "ar" ? "اقتراح مبني على بيانات العقارات" : "Suggestion basee sur les biens";
+  }
   if (suggestion.type === "district" && suggestion.commune) {
     return lang === "ar" ? `بلدية: ${suggestion.commune}` : `Commune: ${suggestion.commune}`;
   }
@@ -1214,6 +1365,7 @@ function suggestionHint(suggestion: SearchSuggestion, lang: Lang): string {
 }
 
 function suggestionIcon(suggestion: SearchSuggestion) {
+  if (suggestion.type === "smart_query") return <Sparkles size={14} />;
   if (suggestion.type === "commune" || suggestion.type === "district") return <MapPin size={14} />;
   if (suggestion.type === "amenity") return <Shield size={14} />;
   if (suggestion.type === "transaction") return <Zap size={14} />;
@@ -1375,8 +1527,7 @@ export default function ListingsClient({
   const [semanticPending, setSemanticPending] = useState(false);
   const [semanticEnabled, setSemanticEnabled] = useState(false);
   const [semanticReason, setSemanticReason] = useState<string>("");
-  const [backgroundRecommendations, setBackgroundRecommendations] = useState<Recommendation[]>([]);
-  const [backgroundRecommendationSource, setBackgroundRecommendationSource] = useState<string>("none");
+  const [backgroundRecommendations, setBackgroundRecommendations] = useState<BackgroundRecommendation[]>([]);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const searchContainerRef = useRef<HTMLDivElement | null>(null);
   const lastTrackedQueryRef = useRef("");
@@ -1414,6 +1565,7 @@ export default function ListingsClient({
       payload?: Record<string, unknown>;
     }
   ) => {
+    if (!BEHAVIOR_EVENTS_ENABLED) return;
     if (!currentUserId) return;
     void fetch("/api/behavior/events", {
       method: "POST",
@@ -1737,8 +1889,72 @@ export default function ListingsClient({
     const qNorm = normalizeText(filters.q);
     if (!qNorm) return [] as SearchSuggestion[];
     const qTokens = tokenizeSearchQuery(filters.q);
+    const categoryContext = inferCategoryContext(filters.q, filters.category);
+    const roomOptionsForSuggestions = categoryAwareRoomOptions(categoryContext);
+
+    const dynamicCategoryLabels = Array.from(
+      new Set(
+        items
+          .flatMap((item) => [...inferListingCategories(item), normalizeDisplayText(item.category ?? "")])
+          .filter(Boolean)
+      )
+    );
+    const categoryOptions = Array.from(
+      new Set([...CATEGORY_SUGGESTIONS.map((entry) => entry.label), ...dynamicCategoryLabels])
+    );
+    const smartQueryProfiles = (() => {
+      const byKey = new Map<string, { label: string; searchText: string; matchCount: number }>();
+
+      const upsertPhrase = (parts: string[], searchTokens: string[]) => {
+        const cleanParts = parts.map((part) => normalizeDisplayText(part)).filter(Boolean);
+        if (cleanParts.length < 2) return;
+        const label = cleanParts.join(" ");
+        const key = normalizeText(label);
+        if (!key) return;
+
+        const searchText = normalizeDisplayText([label, ...searchTokens].filter(Boolean).join(" "));
+        const existing = byKey.get(key);
+        if (existing) {
+          existing.matchCount += 1;
+          return;
+        }
+        byKey.set(key, { label, searchText, matchCount: 1 });
+      };
+
+      items.forEach((item) => {
+        const parsed = smartParseLocation(item.location, communeMatchers);
+        const dealType = normalizeStoredLocationType(item.locationType) ?? item.type;
+        const dealLabel = dealType ? dealTypeLabelMap.get(dealType as DealType) ?? String(dealType) : "";
+        const category = inferPrimaryCategory(item);
+        const room = inferRoomLabelForSuggestion(item);
+        const district = normalizeDisplayText(parsed.district);
+        const commune = normalizeDisplayText(parsed.commune);
+
+        const baseTokens = [dealLabel, category, room, district, commune];
+        upsertPhrase(baseTokens, [
+          ...baseTokens,
+          ...getLocationAliases(district),
+          ...getLocationAliases(commune),
+        ]);
+
+        upsertPhrase([dealLabel, category, room, commune], [
+          dealLabel,
+          category,
+          room,
+          commune,
+          ...getLocationAliases(commune),
+        ]);
+      });
+
+      return Array.from(byKey.values()).sort(
+        (a, b) => b.matchCount - a.matchCount || a.label.localeCompare(b.label, "fr", { sensitivity: "base" })
+      );
+    })();
 
     const countMatches = (suggestion: Omit<SearchSuggestion, "matchCount">) => {
+      if (suggestion.type === "smart_query") {
+        return 1;
+      }
       if (suggestion.type === "transaction" && suggestion.dealType) {
         return items.reduce((count, item) => {
           const effectiveDealType = normalizeStoredLocationType(item.locationType) ?? item.type;
@@ -1772,16 +1988,10 @@ export default function ListingsClient({
         }, 0);
       }
       if (suggestion.type === "room" && suggestion.room) {
-        const roomNorm = normalizeText(suggestion.room);
+        const roomValue = suggestion.room;
         return items.reduce((count, item) => {
           const hay = buildSearchableListingText(item, communeMatchers);
-          return hay.includes(roomNorm) ? count + 1 : count;
-        }, 0);
-      }
-      if (suggestion.type === "amenity" && suggestion.amenity) {
-        const amenityKey = suggestion.amenity;
-        return items.reduce((count, item) => {
-          return Array.isArray(item.amenities) && item.amenities.includes(amenityKey) ? count + 1 : count;
+          return roomMatchesProperty(item, roomValue, hay) ? count + 1 : count;
         }, 0);
       }
       return 0;
@@ -1793,7 +2003,8 @@ export default function ListingsClient({
 
     const push = (
       base: Omit<SearchSuggestion, "matchCount">,
-      searchText: string
+      searchText: string,
+      matchCountOverride?: number
     ) => {
       const textNorm = normalizeText(searchText);
       const matchesQuery =
@@ -1801,7 +2012,9 @@ export default function ListingsClient({
         (qTokens.length > 0 && qTokens.every((token) => tokenMatchesListingText(textNorm, token)));
       if (!matchesQuery) return;
 
-      const matchCount = countMatches(base);
+      const matchCount = Number.isFinite(Number(matchCountOverride))
+        ? Number(matchCountOverride)
+        : countMatches(base);
       if (matchCount <= 0) return;
 
       const labelNorm = normalizeText(base.label);
@@ -1812,6 +2025,19 @@ export default function ListingsClient({
 
       candidates.push({ ...base, matchCount, searchText, score });
     };
+
+    smartQueryProfiles.forEach((profile) => {
+      push(
+        {
+          key: `smart:${normalizeText(profile.label)}`,
+          type: "smart_query",
+          label: profile.label,
+          value: profile.label,
+        },
+        profile.searchText,
+        profile.matchCount
+      );
+    });
 
     TRANSACTION_SUGGESTIONS.forEach((transaction) => {
       const label = dealTypeLabelMap.get(transaction.dealType) ?? transaction.dealType;
@@ -1827,16 +2053,20 @@ export default function ListingsClient({
       );
     });
 
-    CATEGORY_SUGGESTIONS.forEach((category) => {
+    categoryOptions.forEach((categoryLabel) => {
+      const matchedSeed = CATEGORY_SUGGESTIONS.find(
+        (entry) => normalizeText(entry.label) === normalizeText(categoryLabel)
+      );
+      const terms = matchedSeed?.terms ?? [categoryLabel];
       push(
         {
-          key: `category:${normalizeText(category.label)}`,
+          key: `category:${normalizeText(categoryLabel)}`,
           type: "category",
-          label: category.label,
-          value: category.label,
-          category: category.label,
+          label: categoryLabel,
+          value: categoryLabel,
+          category: categoryLabel,
         },
-        `${category.label} ${category.terms.join(" ")}`
+        `${categoryLabel} ${terms.join(" ")}`
       );
     });
 
@@ -1885,7 +2115,7 @@ export default function ListingsClient({
       );
     });
 
-    ROOMS_OPTIONS.filter(Boolean).forEach((room) => {
+    roomOptionsForSuggestions.forEach((room) => {
       push(
         {
           key: `room:${room}`,
@@ -1898,25 +2128,13 @@ export default function ListingsClient({
       );
     });
 
-    AMENITY_OPTIONS.forEach((amenity) => {
-      push(
-        {
-          key: `amenity:${amenity.key}`,
-          type: "amenity",
-          label: amenity.label,
-          value: amenity.label,
-          amenity: amenity.key,
-        },
-        `${amenity.label} ${amenity.key.replaceAll("_", " ")}`
-      );
-    });
-
     const typePriority: Record<SearchSuggestionType, number> = {
-      transaction: 0,
-      category: 1,
-      room: 2,
+      smart_query: 0,
+      transaction: 1,
+      category: 2,
       commune: 3,
       district: 4,
+      room: 5,
       amenity: 5,
     };
     candidates.sort(
@@ -1946,8 +2164,8 @@ export default function ListingsClient({
       }
     });
 
-    return Array.from(deduped.values()).slice(0, 8);
-  }, [filters.q, districtCommuneHints, dealTypeLabelMap, communeOptions, items, communeMatchers]);
+    return Array.from(deduped.values()).slice(0, 12);
+  }, [filters.q, filters.category, districtCommuneHints, dealTypeLabelMap, communeOptions, items, communeMatchers]);
 
   const applySearchSuggestion = (suggestion: SearchSuggestion) => {
     bumpSearchMetric("suggestionClicks", 1);
@@ -1960,12 +2178,6 @@ export default function ListingsClient({
       },
     });
     setFilters((f) => {
-      const nextAmenities = suggestion.amenity
-        ? new Set([...f.amenities, suggestion.amenity])
-        : f.amenities;
-      const nextExcludedAmenities = new Set(f.excludedAmenities);
-      if (suggestion.amenity) nextExcludedAmenities.delete(suggestion.amenity);
-
       return {
         ...f,
         q: suggestion.value,
@@ -1985,8 +2197,6 @@ export default function ListingsClient({
             : f.district,
         rooms: suggestion.type === "room" ? suggestion.room ?? f.rooms : f.rooms,
         category: suggestion.type === "category" ? suggestion.category ?? f.category : f.category,
-        amenities: nextAmenities,
-        excludedAmenities: nextExcludedAmenities,
       };
     });
 
@@ -2050,12 +2260,12 @@ export default function ListingsClient({
       </div>
       {(
         [
+          "smart_query",
           "transaction",
           "category",
-          "room",
           "commune",
           "district",
-          "amenity",
+          "room",
         ] as SearchSuggestionType[]
       ).map((type) => {
         const groupItems = searchSuggestions
@@ -2227,11 +2437,9 @@ export default function ListingsClient({
       });
     }
 
-    const roomsMatch = q.match(/\b(t[1-6]\+?|f[1-6]\+?|studio)\b/);
-    if (roomsMatch) {
-      const token = roomsMatch[1].toLowerCase();
-      const normalized = token === "studio" ? "Studio" : token.toUpperCase();
-      setFilters((f) => ({ ...f, rooms: normalized }));
+    const roomInfo = parseRoomQueryToken(q);
+    if (roomInfo) {
+      setFilters((f) => ({ ...f, rooms: roomInfo.raw }));
     }
 
     const maxMatch = q.match(/\b(max|<=)\s*([\d.,\s]+m|\d[\d\s.,]*)\b/);
@@ -2460,6 +2668,29 @@ export default function ListingsClient({
     return chips;
   }, [filters, dealTypeLabelMap, setFilters, t]);
 
+  const backgroundRecommendationBoostByRef = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!currentUserId || backgroundRecommendations.length === 0) return map;
+
+    const maxScore = Math.max(
+      1,
+      ...backgroundRecommendations.map((entry) =>
+        Number.isFinite(entry.score) ? Math.max(0, entry.score) : 0
+      )
+    );
+    const total = Math.max(1, backgroundRecommendations.length);
+
+    backgroundRecommendations.forEach((entry, index) => {
+      const refKey = normalizeRef(entry.ref);
+      if (!refKey) return;
+      const normalizedScore = Math.max(0, entry.score) / maxScore;
+      const rankBoost = Math.max(0, 1 - index / total);
+      map.set(refKey, normalizedScore * 30 + rankBoost * 12);
+    });
+
+    return map;
+  }, [backgroundRecommendations, currentUserId]);
+
   const filteredLists = useMemo(() => {
     const qTokens = tokenizeSearchQuery(filters.q);
     const semanticTokens = expandSemanticTokens(qTokens);
@@ -2562,7 +2793,7 @@ export default function ListingsClient({
       const byCommune = filters.commune ? normalizeText(parsed.commune) === communeNorm : true;
       const byDistrict = filters.district ? normalizeText(parsed.district) === districtNorm : true;
 
-      const byRooms = filters.rooms ? hay.includes(normalizeText(filters.rooms)) : true;
+      const byRooms = filters.rooms ? roomMatchesProperty(p, filters.rooms, hay) : true;
 
       const pPrice = parseMoneyToNumber(p.price);
       const byPriceMin = priceMin != null && pPrice != null ? pPrice >= priceMin : true;
@@ -2601,6 +2832,8 @@ export default function ListingsClient({
       const favoriteCount = searchBehavior.favorites[refKey] ?? 0;
       const contactCount = searchBehavior.contacts[refKey] ?? 0;
       const engagementScore = viewCount * 0.7 + favoriteCount * 1.9 + contactCount * 3.1;
+      const backgroundBoostRaw = backgroundRecommendationBoostByRef.get(refKey) ?? 0;
+      const backgroundBoost = qTokens.length === 0 ? backgroundBoostRaw : backgroundBoostRaw * 0.42;
       const freshnessScore = (() => {
         const createdTs = p.createdAt ? new Date(p.createdAt).getTime() : NaN;
         if (!Number.isFinite(createdTs)) return 0;
@@ -2616,7 +2849,10 @@ export default function ListingsClient({
             semanticApiScore * 44;
       const structuredScore =
         (byDeal ? 5 : 0) + (byCategory ? 4 : 0) + (byCommune ? 3 : 0) + (byDistrict ? 2 : 0) + (byRooms ? 2 : 0);
-      relevanceScoreByRef.set(refKey, textualScore + structuredScore + freshnessScore + photoScore + engagementScore);
+      relevanceScoreByRef.set(
+        refKey,
+        textualScore + structuredScore + freshnessScore + photoScore + engagementScore + backgroundBoost
+      );
 
       return (
         byDeal &&
@@ -2666,7 +2902,17 @@ export default function ListingsClient({
     const withoutAmenities = sortList(items.filter((p) => matchesBaseFilters(p, false)));
 
     return { withAmenities, withoutAmenities, relevanceScoreByRef };
-  }, [items, filters, filterNowTs, communeMatchers, districtCommuneHints, dealTypeLabelMap, searchBehavior, semanticRefScores]);
+  }, [
+    items,
+    filters,
+    filterNowTs,
+    communeMatchers,
+    districtCommuneHints,
+    dealTypeLabelMap,
+    searchBehavior,
+    semanticRefScores,
+    backgroundRecommendationBoostByRef,
+  ]);
 
   const computed = filteredLists.withAmenities;
   const contextResults = filteredLists.withoutAmenities;
@@ -2748,110 +2994,6 @@ export default function ListingsClient({
     () => compareRefs.map((ref) => items.find((item) => item.ref === ref)).filter(Boolean) as PropertyItem[],
     [compareRefs, items]
   );
-
-  const fallbackRecommendations = useMemo<Recommendation[]>(() => {
-    const source = contextResults.length > 0 ? contextResults : items;
-    if (source.length === 0) return [];
-
-    const byRef = new Map(source.map((item) => [normalizeRef(item.ref), item]));
-    const categoryWeights = new Map<string, number>();
-    const communeWeights = new Map<string, number>();
-    const amenityWeights = new Map<AmenityKey, number>();
-    const preferredPrices: number[] = [];
-
-    const addWeightedItem = (refKey: string, weight: number) => {
-      const item = byRef.get(refKey) ?? items.find((row) => normalizeRef(row.ref) === refKey);
-      if (!item || weight <= 0) return;
-      const categoryNorm = normalizeText(item.category ?? inferListingCategories(item)[0] ?? "");
-      if (categoryNorm) categoryWeights.set(categoryNorm, (categoryWeights.get(categoryNorm) ?? 0) + weight);
-
-      const parsed = smartParseLocation(item.location, communeMatchers);
-      const communeNormValue = normalizeText(parsed.commune);
-      if (communeNormValue) communeWeights.set(communeNormValue, (communeWeights.get(communeNormValue) ?? 0) + weight);
-
-      (item.amenities ?? []).forEach((amenity) => {
-        amenityWeights.set(amenity, (amenityWeights.get(amenity) ?? 0) + weight);
-      });
-
-      const price = parseMoneyToNumber(item.price);
-      if (price != null) preferredPrices.push(price);
-    };
-
-    Object.entries(searchBehavior.views).forEach(([refKey, count]) => addWeightedItem(refKey, count * 0.7));
-    Object.entries(searchBehavior.favorites).forEach(([refKey, count]) => addWeightedItem(refKey, count * 2.1));
-    Object.entries(searchBehavior.contacts).forEach(([refKey, count]) => addWeightedItem(refKey, count * 3.4));
-
-    const medianPreferredPrice = (() => {
-      if (preferredPrices.length === 0) return null;
-      const sorted = [...preferredPrices].sort((a, b) => a - b);
-      return sorted[Math.floor(sorted.length / 2)] ?? null;
-    })();
-
-    return source
-      .map((property) => {
-        const refKey = normalizeRef(property.ref);
-        const baseRelevance = filteredLists.relevanceScoreByRef.get(refKey) ?? 0;
-        const parsed = smartParseLocation(property.location, communeMatchers);
-        const propertyCategoryNorm = normalizeText(
-          property.category ?? inferListingCategories(property)[0] ?? ""
-        );
-        const propertyCommuneNorm = normalizeText(parsed.commune);
-        const categoryScore = categoryWeights.get(propertyCategoryNorm) ?? 0;
-        const communeScore = communeWeights.get(propertyCommuneNorm) ?? 0;
-        const amenityScore = (property.amenities ?? []).reduce(
-          (sum, amenity) => sum + (amenityWeights.get(amenity) ?? 0),
-          0
-        );
-        const priceScore = (() => {
-          if (medianPreferredPrice == null) return 0;
-          const price = parseMoneyToNumber(property.price);
-          if (price == null || medianPreferredPrice <= 0) return 0;
-          const gapRatio = Math.abs(price - medianPreferredPrice) / medianPreferredPrice;
-          return Math.max(0, 8 - gapRatio * 10);
-        })();
-        const freshnessScore = (() => {
-          const createdTs = property.createdAt ? new Date(property.createdAt).getTime() : NaN;
-          if (!Number.isFinite(createdTs)) return 0;
-          const ageDays = Math.max(0, (filterNowTs - createdTs) / (24 * 60 * 60 * 1000));
-          return Math.max(0, 5 - ageDays * 0.12);
-        })();
-        const exploredPenalty = (searchBehavior.views[refKey] ?? 0) * 0.9;
-
-        const score =
-          baseRelevance * 0.35 +
-          categoryScore * 1.8 +
-          communeScore * 1.5 +
-          amenityScore * 1.2 +
-          priceScore +
-          freshnessScore -
-          exploredPenalty;
-
-        let reason = lang === "ar" ? "اقتراح متوازن حسب بحثك" : "Suggestion equilibree selon votre recherche";
-        if (communeScore >= categoryScore && communeScore >= amenityScore && parsed.commune) {
-          reason = lang === "ar" ? `نفس البلدية: ${parsed.commune}` : `Même commune: ${parsed.commune}`;
-        } else if (categoryScore >= amenityScore && property.category) {
-          reason = lang === "ar" ? `نفس الفئة: ${property.category}` : `Même catégorie: ${property.category}`;
-        } else if (amenityScore > 0 && Array.isArray(property.amenities) && property.amenities.length > 0) {
-          const topAmenity = property.amenities
-            .slice()
-            .sort((a, b) => (amenityWeights.get(b) ?? 0) - (amenityWeights.get(a) ?? 0))[0];
-          reason =
-            lang === "ar"
-              ? `تجهيز مشابه: ${amenityLabel(topAmenity)}`
-              : `Equipement proche: ${amenityLabel(topAmenity)}`;
-        }
-
-        return { property, reason, score };
-      })
-      .filter((entry) => entry.score > 0.5)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 4);
-  }, [contextResults, items, searchBehavior, filteredLists.relevanceScoreByRef, communeMatchers, filterNowTs, lang]);
-
-  const recommendations = useMemo<Recommendation[]>(() => {
-    if (backgroundRecommendations.length > 0) return backgroundRecommendations.slice(0, 4);
-    return fallbackRecommendations;
-  }, [backgroundRecommendations, fallbackRecommendations]);
 
   const zeroResultRecoveryActions = useMemo<RecoveryAction[]>(() => {
     const actions: RecoveryAction[] = [];
@@ -3199,6 +3341,14 @@ export default function ListingsClient({
   }, [searchBehavior, searchStatsReady]);
 
   useEffect(() => {
+    if (!SEMANTIC_SEARCH_ENABLED) {
+      setSemanticRefScores({});
+      setSemanticPending(false);
+      setSemanticEnabled(false);
+      setSemanticReason("paused");
+      return;
+    }
+
     const qNorm = normalizeText(filters.q);
     if (qNorm.length < 3) {
       setSemanticRefScores({});
@@ -3261,12 +3411,10 @@ export default function ListingsClient({
   useEffect(() => {
     if (!currentUserId) {
       setBackgroundRecommendations([]);
-      setBackgroundRecommendationSource("none");
       return;
     }
 
     const controller = new AbortController();
-    const itemByRef = new Map(items.map((item) => [normalizeRef(item.ref), item] as const));
 
     const load = async () => {
       try {
@@ -3283,27 +3431,27 @@ export default function ListingsClient({
         const resolved = (payload.recommendations ?? [])
           .map((row) => {
             const ref = normalizeRef(typeof row?.ref === "string" ? row.ref : "");
-            const property = ref ? itemByRef.get(ref) : undefined;
-            if (!property) return null;
+            if (!ref) return null;
             return {
-              property,
+              ref,
+              rank: Number.isFinite(Number(row?.rank)) ? Number(row?.rank) : 0,
               reason:
                 typeof row?.reason === "string" && row.reason.trim()
                   ? row.reason
-                  : lang === "ar"
-                  ? "اقتراح شخصي"
                   : "Suggestion personnalisee",
               score: typeof row?.score === "number" ? row.score : 0,
-            } as Recommendation;
+            } as BackgroundRecommendation;
           })
-          .filter((entry): entry is Recommendation => Boolean(entry));
+          .filter((entry): entry is BackgroundRecommendation => Boolean(entry))
+          .sort((a, b) => {
+            if (a.rank > 0 && b.rank > 0 && a.rank !== b.rank) return a.rank - b.rank;
+            return b.score - a.score;
+          });
 
         setBackgroundRecommendations(resolved);
-        setBackgroundRecommendationSource(String(payload.source ?? "background"));
       } catch {
         if (controller.signal.aborted) return;
         setBackgroundRecommendations([]);
-        setBackgroundRecommendationSource("error");
       }
     };
 
@@ -3312,7 +3460,7 @@ export default function ListingsClient({
     return () => {
       controller.abort();
     };
-  }, [currentUserId, items, lang]);
+  }, [currentUserId]);
 
   const resetAll = () => {
     setFilters((f) => ({
@@ -3745,6 +3893,23 @@ export default function ListingsClient({
                   className="w-full bg-transparent outline-none"
                   aria-autocomplete="list"
                 />
+                {filters.q.trim() ? (
+                  <button
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      setFilters((f) => ({ ...f, q: "" }));
+                      setSearchOpen(false);
+                      setSearchActiveIndex(-1);
+                      searchInputRef.current?.focus();
+                    }}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-black/10 bg-white/85 text-black/55 transition hover:bg-neutral-100 hover:text-black"
+                    aria-label={lang === "ar" ? "مسح البحث" : "Effacer la recherche"}
+                    title={lang === "ar" ? "مسح البحث" : "Effacer la recherche"}
+                  >
+                    <X size={14} />
+                  </button>
+                ) : null}
                 <span className="hidden rounded-md border border-black/10 bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-black/45 md:inline-flex">
                   /
                 </span>
@@ -3785,7 +3950,7 @@ export default function ListingsClient({
                 ))}
               </div>
             ) : null}
-            {filters.q.trim() ? (
+            {filters.q.trim() && SEMANTIC_SEARCH_ENABLED ? (
               <div className="flex items-center gap-2 text-[10px] text-white/85">
                 <span className="rounded-full border border-white/25 bg-white/12 px-2 py-0.5 font-semibold uppercase tracking-[0.11em]">
                   {lang === "ar" ? "الذكاء الدلالي" : "Semantic AI"}
@@ -4525,51 +4690,6 @@ export default function ListingsClient({
               </div>
             </div>
           </motion.div>
-
-          {recommendations.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, ease: "easeOut", delay: 0.03 }}
-              className="rounded-2xl border border-black/10 bg-white/75 p-3.5 backdrop-blur"
-            >
-              <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]">
-                <Sparkles size={14} className="text-[rgb(var(--gold))]" />
-                <span>{lang === "ar" ? "مقترح لك" : "Suggested For You"}</span>
-                {backgroundRecommendations.length > 0 && backgroundRecommendationSource === "background" && (
-                  <span className="rounded-full border border-black/10 bg-white px-2 py-0.5 text-[10px] font-semibold normal-case text-black/55">
-                    {lang === "ar" ? "خلفية ذكية" : "Background AI"}
-                  </span>
-                )}
-              </div>
-              <div className="grid gap-2 md:grid-cols-2">
-                {recommendations.map((entry) => (
-                  <a
-                    key={`reco-${entry.property.ref}`}
-                    href={`/biens/${entry.property.ref}`}
-                    onClick={() => {
-                      handleOpenProperty(entry.property);
-                      postBehaviorEvent("search_click", {
-                        propertyRef: entry.property.ref,
-                        payload: {
-                          source:
-                            backgroundRecommendations.length > 0 &&
-                            backgroundRecommendationSource === "background"
-                              ? "background_recommendation"
-                              : "local_recommendation",
-                        },
-                      });
-                    }}
-                    className="rounded-xl border border-black/10 bg-white px-3 py-2 transition hover:bg-neutral-100"
-                  >
-                    <div className="text-sm font-semibold text-[rgb(var(--navy))]">{entry.property.title}</div>
-                    <div className="text-xs text-black/55">{entry.property.location}</div>
-                    <div className="mt-1 text-[11px] text-black/45">{entry.reason}</div>
-                  </a>
-                ))}
-              </div>
-            </motion.div>
-          )}
 
           {activeChips.length > 0 && (
             <motion.div
