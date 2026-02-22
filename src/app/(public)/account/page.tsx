@@ -1,19 +1,27 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import AccountClient from "./AccountClient";
 
 export default async function AccountPage() {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/auth/login");
 
-  if (!user) redirect("/login");
+  const safeMetadata = JSON.parse(JSON.stringify(user.user_metadata ?? {})) as Record<string, unknown>;
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-12">
-      <h1 className="text-2xl font-semibold">Mon compte</h1>
-      <p className="mt-2 text-black/60">
-        Connecté en tant que {user.email}
-      </p>
-    </div>
+    <AccountClient
+      user={{
+        id: user.id,
+        email: user.email ?? null,
+        phone: user.phone ?? null,
+        createdAt: user.created_at ?? null,
+        lastSignInAt: user.last_sign_in_at ?? null,
+        metadata: safeMetadata,
+      }}
+    />
   );
 }

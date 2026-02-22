@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   MapPin,
@@ -22,6 +22,7 @@ import {
   BadgeCheck,
   Banknote,
   ReceiptText,
+  Heart,
 } from "lucide-react";
 import PropertyImageSlider from "@/components/PropertyImageSlider";
 import { formatPaymentLabel, normalizeFold } from "@/lib/payment-fallback";
@@ -93,6 +94,80 @@ type Props = {
     imageUrl: string | null;
   }>;
 };
+
+type FavoriteStorageItem = {
+  ref: string;
+  title: string | null;
+  location: string | null;
+  price: string | null;
+  coverImage: string | null;
+};
+
+const FAVORITES_STORAGE_KEYS = [
+  "rostomyia_favorites",
+  "rostomyia_favorite_properties",
+  "rostomyia_favorite_refs",
+] as const;
+const DEFAULT_FAVORITES_STORAGE_KEY = String(FAVORITES_STORAGE_KEYS[0]);
+
+function stableCoverImageUrl(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const raw = value.trim();
+  const marker = "/storage/v1/render/image/public/property-images/";
+  if (!raw.includes(marker)) return raw;
+  const withoutQuery = raw.split("?")[0];
+  return withoutQuery.replace(marker, "/storage/v1/object/public/property-images/");
+}
+
+function readFavoriteRows(value: string | null): FavoriteStorageItem[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+
+    const rows: FavoriteStorageItem[] = [];
+    parsed.forEach((entry) => {
+      if (typeof entry === "string" && entry.trim()) {
+        rows.push({ ref: entry.trim(), title: null, location: null, price: null, coverImage: null });
+        return;
+      }
+      if (!entry || typeof entry !== "object") return;
+      const row = entry as Record<string, unknown>;
+      const refCandidate =
+        typeof row.ref === "string" && row.ref.trim()
+          ? row.ref.trim()
+          : typeof row.id === "string" && row.id.trim()
+            ? row.id.trim()
+            : "";
+      if (!refCandidate) return;
+      rows.push({
+        ref: refCandidate,
+        title: typeof row.title === "string" ? row.title.trim() : null,
+        location: typeof row.location === "string" ? row.location.trim() : null,
+        price: typeof row.price === "string" ? row.price.trim() : null,
+        coverImage: stableCoverImageUrl(
+          typeof row.coverImage === "string" && row.coverImage.trim()
+            ? row.coverImage
+            : typeof row.image === "string" && row.image.trim()
+              ? row.image
+              : typeof row.imageUrl === "string" && row.imageUrl.trim()
+                ? row.imageUrl
+                : null
+        ),
+      });
+    });
+
+    const seen = new Set<string>();
+    return rows.filter((item) => {
+      const key = normalizeFold(item.ref);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  } catch {
+    return [];
+  }
+}
 
 export default function PropertyDetailClient({
   dir,
@@ -324,6 +399,63 @@ export default function PropertyDetailClient({
   const mapFallback = dir === "rtl" ? "الموقع غير محدد حالياً." : "Emplacement non precise pour le moment.";
   const [expandedSections, setExpandedSections] = useState<Record<number, boolean>>({});
   const [showContactMenu, setShowContactMenu] = useState(false);
+  const [favoritesStorageKey, setFavoritesStorageKey] = useState<string>(DEFAULT_FAVORITES_STORAGE_KEY);
+  const [isFavorite, setIsFavorite] = useState(false);
+
+  useEffect(() => {
+    let selectedKey = DEFAULT_FAVORITES_STORAGE_KEY;
+    let selectedRows: FavoriteStorageItem[] = [];
+
+    for (const key of FAVORITES_STORAGE_KEYS) {
+      const rows = readFavoriteRows(localStorage.getItem(key));
+      if (rows.length > 0) {
+        selectedKey = key;
+        selectedRows = rows;
+        break;
+      }
+    }
+    if (selectedRows.length === 0) {
+      selectedRows = readFavoriteRows(localStorage.getItem(selectedKey));
+    }
+
+    const refKey = normalizeFold(property.ref);
+    setFavoritesStorageKey(selectedKey);
+    setIsFavorite(selectedRows.some((row) => normalizeFold(row.ref) === refKey));
+  }, [property.ref]);
+
+  const favoriteLabel = isArabic
+    ? isFavorite
+      ? "إزالة من المفضلة"
+      : "إضافة للمفضلة"
+    : isFavorite
+      ? "Retirer des favoris"
+      : "Ajouter aux favoris";
+
+  function toggleFavorite() {
+    const current = readFavoriteRows(localStorage.getItem(favoritesStorageKey));
+    const refKey = normalizeFold(property.ref);
+    const exists = current.some((row) => normalizeFold(row.ref) === refKey);
+
+    const next = exists
+      ? current.filter((row) => normalizeFold(row.ref) !== refKey)
+      : [
+          {
+            ref: property.ref,
+            title: property.title || null,
+            location: property.location || null,
+            price: property.price || null,
+            coverImage: stableCoverImageUrl(
+              Array.isArray(images)
+                ? images.find((img) => typeof img === "string" && img.trim().length > 0) ?? null
+                : null
+            ),
+          },
+          ...current.filter((row) => normalizeFold(row.ref) !== refKey),
+        ];
+
+    localStorage.setItem(favoritesStorageKey, JSON.stringify(next));
+    setIsFavorite(!exists);
+  }
 
   function isFeatureSectionTitle(input?: string) {
     const t = normalizeText(input);
@@ -396,7 +528,7 @@ export default function PropertyDetailClient({
   return (
     <main
       dir={dir}
-      className="relative mx-auto max-w-6xl overflow-x-hidden px-4 py-10"
+      className="relative mx-auto max-w-6xl overflow-x-hidden px-4 py-10 pb-28 md:pb-10"
     >
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute -left-24 -top-20 h-72 w-72 rounded-full bg-[rgb(var(--gold))]/18 blur-3xl" />
@@ -419,6 +551,7 @@ export default function PropertyDetailClient({
               sizes="(max-width: 768px) 100vw, 70vw"
               priority
               showThumbs
+              enableZoom={false}
             />
           </motion.div>
 
@@ -448,7 +581,23 @@ export default function PropertyDetailClient({
 
             <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
               <p className="text-2xl font-bold text-[rgb(var(--navy))]">{sidebarDetails.priceLabel}</p>
-              <div className="h-1 w-44 rounded-full bg-gradient-to-r from-[rgb(var(--gold))]/25 via-[rgb(var(--gold))]/70 to-[rgb(var(--gold))]/25 opacity-70" />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={toggleFavorite}
+                  className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
+                    isFavorite
+                      ? "border-rose-300 bg-rose-50 text-rose-700"
+                      : "border-black/10 bg-white text-[rgb(var(--navy))] hover:bg-black/5"
+                  }`}
+                  aria-label={favoriteLabel}
+                  title={favoriteLabel}
+                >
+                  <Heart size={14} className={isFavorite ? "fill-current" : ""} />
+                  {isArabic ? "مفضلة" : "Favori"}
+                </button>
+                <div className="h-1 w-44 rounded-full bg-gradient-to-r from-[rgb(var(--gold))]/25 via-[rgb(var(--gold))]/70 to-[rgb(var(--gold))]/25 opacity-70" />
+              </div>
             </div>
           </motion.div>
 
@@ -601,45 +750,6 @@ export default function PropertyDetailClient({
               </div>
             </div>
 
-            <div className="relative mt-4 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setShowContactMenu((v) => !v)}
-                className="inline-flex items-center justify-center gap-1 rounded-xl bg-[rgb(var(--navy))] px-2 py-2 text-xs font-semibold text-white"
-              >
-                <Phone size={14} />
-                {t.call}
-                <ChevronDown size={12} className={`transition ${showContactMenu ? "rotate-180" : ""}`} />
-              </button>
-              <Link
-                href={`/visite?ref=${encodeURIComponent(property.ref)}`}
-                className="inline-flex items-center justify-center gap-1 rounded-xl border border-black/10 bg-white px-2 py-2 text-xs font-semibold text-[rgb(var(--navy))]"
-              >
-                <CalendarDays size={14} />
-                {t.book}
-              </Link>
-
-              {showContactMenu && (
-                <div className="absolute top-full left-0 right-0 z-20 mt-2 rounded-xl border border-black/10 bg-white p-2 shadow-lg">
-                  <a
-                    href={`tel:${phone}`}
-                    className="inline-flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[rgb(var(--navy))] hover:bg-black/5"
-                  >
-                    <Phone size={15} />
-                    {phone}
-                  </a>
-                  <a
-                    href={waLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-1 inline-flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[rgb(var(--navy))] hover:bg-black/5"
-                  >
-                    <MessageCircle size={15} />
-                    WhatsApp
-                  </a>
-                </div>
-              )}
-            </div>
           </section>
 
           <motion.section
@@ -813,10 +923,82 @@ export default function PropertyDetailClient({
                 24h
               </span>
             </Link>
+            <button
+              type="button"
+              onClick={toggleFavorite}
+              className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold ring-1 transition ${
+                isFavorite
+                  ? "bg-rose-50 text-rose-700 ring-rose-200"
+                  : "bg-white text-[rgb(var(--navy))] ring-black/10 hover:bg-black/5"
+              }`}
+              aria-label={favoriteLabel}
+              title={favoriteLabel}
+            >
+              <Heart size={15} className={isFavorite ? "fill-current" : ""} />
+              {isArabic ? "مفضلة" : "Favori"}
+            </button>
           </div>
 
           <div className="mt-4 h-1 w-full rounded-full bg-gradient-to-r from-[rgb(var(--gold))]/30 via-[rgb(var(--gold))]/70 to-[rgb(var(--gold))]/30 opacity-70" />
         </motion.aside>
+      </div>
+
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-black/10 bg-white/95 px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 backdrop-blur md:hidden">
+        <div className="mx-auto max-w-6xl">
+          <div className="relative grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => setShowContactMenu((v) => !v)}
+              className="inline-flex h-11 items-center justify-center gap-1 rounded-xl bg-[rgb(var(--navy))] px-2 text-xs font-semibold text-white"
+            >
+              <Phone size={14} />
+              {t.call}
+              <ChevronDown size={12} className={`transition ${showContactMenu ? "rotate-180" : ""}`} />
+            </button>
+            <Link
+              href={`/visite?ref=${encodeURIComponent(property.ref)}`}
+              className="inline-flex h-11 items-center justify-center gap-1 rounded-xl border border-black/10 bg-white px-2 text-xs font-semibold text-[rgb(var(--navy))]"
+            >
+              <CalendarDays size={14} />
+              {t.book}
+            </Link>
+            <button
+              type="button"
+              onClick={toggleFavorite}
+              className={`inline-flex h-11 items-center justify-center gap-1 rounded-xl border px-2 text-xs font-semibold ${
+                isFavorite
+                  ? "border-rose-300 bg-rose-50 text-rose-700"
+                  : "border-black/10 bg-white text-[rgb(var(--navy))]"
+              }`}
+              aria-label={favoriteLabel}
+              title={favoriteLabel}
+            >
+              <Heart size={14} className={isFavorite ? "fill-current" : ""} />
+              {isArabic ? "مفضلة" : "Favori"}
+            </button>
+
+            {showContactMenu && (
+              <div className="absolute bottom-full left-0 right-0 z-30 mb-2 rounded-xl border border-black/10 bg-white p-2 shadow-lg">
+                <a
+                  href={`tel:${phone}`}
+                  className="inline-flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[rgb(var(--navy))] hover:bg-black/5"
+                >
+                  <Phone size={15} />
+                  {phone}
+                </a>
+                <a
+                  href={waLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1 inline-flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[rgb(var(--navy))] hover:bg-black/5"
+                >
+                  <MessageCircle size={15} />
+                  WhatsApp
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </main>
   );

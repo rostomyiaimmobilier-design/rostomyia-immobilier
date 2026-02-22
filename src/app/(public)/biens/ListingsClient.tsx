@@ -5,7 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import {
+  ArrowUpDown,
   BadgeCheck,
+  BookmarkPlus,
   Brain,
   ChevronRight,
   Building2,
@@ -27,6 +29,13 @@ import { useLang } from "@/components/LanguageProvider";
 import { ORAN_COMMUNES } from "@/lib/oran-locations";
 import { formatPaymentLabel } from "@/lib/payment-fallback";
 import AppDropdown from "@/components/ui/app-dropdown";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const AMENITY_OPTIONS = [
   { key: "residence_fermee", label: "Residence fermee" },
@@ -487,6 +496,20 @@ type AiPresetStats = {
 const AI_STATS_STORAGE_KEY = "rostomyia_ai_preset_stats_v1";
 const AI_CUSTOM_STORAGE_KEY = "rostomyia_ai_custom_presets_v1";
 const AI_MAX_CUSTOM_PRESETS = 12;
+const FAVORITES_STORAGE_KEYS = [
+  "rostomyia_favorites",
+  "rostomyia_favorite_properties",
+  "rostomyia_favorite_refs",
+] as const;
+const DEFAULT_FAVORITES_STORAGE_KEY = String(FAVORITES_STORAGE_KEYS[0]);
+
+type FavoriteStorageItem = {
+  ref: string;
+  title: string | null;
+  location: string | null;
+  price: string | null;
+  coverImage: string | null;
+};
 
 function amenityLabel(key: AmenityKey): string {
   return AMENITY_OPTIONS.find((x) => x.key === key)?.label ?? key.replaceAll("_", " ");
@@ -524,6 +547,67 @@ function safeJsonParse<T>(value: string | null, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+function stableCoverImageUrl(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const raw = value.trim();
+  const marker = "/storage/v1/render/image/public/property-images/";
+  if (!raw.includes(marker)) return raw;
+  const withoutQuery = raw.split("?")[0];
+  return withoutQuery.replace(marker, "/storage/v1/object/public/property-images/");
+}
+
+function normalizeFavoriteRows(source: unknown[]): FavoriteStorageItem[] {
+  const rows: FavoriteStorageItem[] = [];
+
+  source.forEach((entry) => {
+    if (typeof entry === "string" && entry.trim()) {
+      rows.push({
+        ref: entry.trim(),
+        title: null,
+        location: null,
+        price: null,
+        coverImage: null,
+      });
+      return;
+    }
+
+    if (!entry || typeof entry !== "object") return;
+    const row = entry as Record<string, unknown>;
+    const refCandidate =
+      typeof row.ref === "string" && row.ref.trim()
+        ? row.ref.trim()
+        : typeof row.id === "string" && row.id.trim()
+          ? row.id.trim()
+          : "";
+    if (!refCandidate) return;
+
+    rows.push({
+      ref: refCandidate,
+      title: typeof row.title === "string" ? row.title.trim() : null,
+      location: typeof row.location === "string" ? row.location.trim() : null,
+      price: typeof row.price === "string" ? row.price.trim() : null,
+      coverImage:
+        stableCoverImageUrl(
+          typeof row.coverImage === "string" && row.coverImage.trim()
+            ? row.coverImage
+            : typeof row.image === "string" && row.image.trim()
+              ? row.image
+              : typeof row.imageUrl === "string" && row.imageUrl.trim()
+                ? row.imageUrl
+                : null
+        ),
+    });
+  });
+
+  const seen = new Set<string>();
+  return rows.filter((item) => {
+    const key = normalizeText(item.ref);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function cn(...classes: Array<string | false | null | undefined>) {
@@ -997,6 +1081,17 @@ export default function ListingsClient({
     [t]
   );
 
+  const sortOptions = useMemo<Array<{ value: SortMode; label: string }>>(
+    () => [
+      { value: "relevance", label: t.sortRelevance },
+      { value: "newest", label: t.sortNewest },
+      { value: "price_asc", label: t.sortPriceAsc },
+      { value: "price_desc", label: t.sortPriceDesc },
+      { value: "area_desc", label: t.sortAreaDesc },
+    ],
+    [t]
+  );
+
   const dealTypeLabelMap = useMemo(
     () => new Map<DealType, string>(dealTypeOptions.map((option) => [option.value, option.label])),
     [dealTypeOptions]
@@ -1036,6 +1131,8 @@ export default function ListingsClient({
   const [compareRefs, setCompareRefs] = useState<string[]>([]);
   const [compareOpen, setCompareOpen] = useState(false);
   const [quickContactRef, setQuickContactRef] = useState<string | null>(null);
+  const [favoriteRefs, setFavoriteRefs] = useState<Set<string>>(new Set());
+  const [favoritesStorageKey, setFavoritesStorageKey] = useState<string>(DEFAULT_FAVORITES_STORAGE_KEY);
   const [aiPresetStats, setAiPresetStats] = useState<Record<string, AiPresetStats>>({});
   const [customAiPresets, setCustomAiPresets] = useState<AiPreset[]>([]);
   const [customAiPresetName, setCustomAiPresetName] = useState("");
@@ -1049,6 +1146,10 @@ export default function ListingsClient({
     top: number;
     width: number;
   } | null>(null);
+  const activeSortLabel = useMemo(
+    () => sortOptions.find((option) => option.value === filters.sort)?.label ?? t.sortRelevance,
+    [filters.sort, sortOptions, t.sortRelevance]
+  );
   const overlayFadeTransition = { duration: 0.16, ease: [0.22, 1, 0.36, 1] as const };
   const modalPopTransition = { type: "spring" as const, stiffness: 340, damping: 30, mass: 0.84 };
   const sheetPopTransition = { type: "spring" as const, stiffness: 320, damping: 28, mass: 0.9 };
@@ -1174,6 +1275,23 @@ export default function ListingsClient({
       sort: "relevance",
     }));
   }, [searchParams, communeMatchers]);
+
+  useEffect(() => {
+    let selectedKey = DEFAULT_FAVORITES_STORAGE_KEY;
+    let selectedRows: FavoriteStorageItem[] = [];
+
+    for (const key of FAVORITES_STORAGE_KEYS) {
+      const rows = normalizeFavoriteRows(safeJsonParse<unknown[]>(localStorage.getItem(key), []));
+      if (rows.length > 0) {
+        selectedKey = key;
+        selectedRows = rows;
+        break;
+      }
+    }
+
+    setFavoritesStorageKey(selectedKey);
+    setFavoriteRefs(new Set(selectedRows.map((row) => normalizeText(row.ref))));
+  }, []);
 
   const priceSlider = useMemo(() => {
     let min = Number.POSITIVE_INFINITY;
@@ -2061,6 +2179,34 @@ export default function ListingsClient({
     });
   };
 
+  const toggleFavorite = (property: PropertyItem) => {
+    const storageRows = normalizeFavoriteRows(
+      safeJsonParse<unknown[]>(localStorage.getItem(favoritesStorageKey), [])
+    );
+    const targetRef = normalizeText(property.ref);
+    const exists = storageRows.some((row) => normalizeText(row.ref) === targetRef);
+
+    const nextRows = exists
+      ? storageRows.filter((row) => normalizeText(row.ref) !== targetRef)
+      : [
+          {
+            ref: property.ref,
+            title: property.title || null,
+            location: property.location || null,
+            price: property.price || null,
+            coverImage: stableCoverImageUrl(
+              Array.isArray(property.images)
+                ? property.images.find((img) => typeof img === "string" && img.trim().length > 0) ?? null
+                : null
+            ),
+          },
+          ...storageRows.filter((row) => normalizeText(row.ref) !== targetRef),
+        ];
+
+    localStorage.setItem(favoritesStorageKey, JSON.stringify(nextRows));
+    setFavoriteRefs(new Set(nextRows.map((row) => normalizeText(row.ref))));
+  };
+
   const hasCompareBar = compareRefs.length > 0;
   const hasOverlayOpen = saveModalOpen || compareOpen || Boolean(quickContactProperty);
 
@@ -2617,25 +2763,46 @@ export default function ListingsClient({
               <button
                 type="button"
                 onClick={() => setSaveModalOpen(true)}
-                className="rounded-2xl border border-black/10 bg-white/80 px-3 py-2 text-sm font-medium text-[rgb(var(--navy))] shadow-sm backdrop-blur hover:bg-white"
+                aria-label={t.saveSearch}
+                title={t.saveSearch}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/10 bg-white/80 text-[rgb(var(--navy))] shadow-sm backdrop-blur hover:bg-white"
               >
-                {t.saveSearch}
+                <BookmarkPlus size={16} />
+                <span className="sr-only">{t.saveSearch}</span>
               </button>
 
-              <AppDropdown
-                value={filters.sort}
-                onValueChange={(value) =>
-                  setFilters((f) => ({ ...f, sort: value as SortMode }))
-                }
-                triggerClassName="h-10 rounded-2xl border-black/10 bg-white/80"
-                options={[
-                  { value: "relevance", label: `${t.sort}: ${t.sortRelevance}` },
-                  { value: "newest", label: `${t.sort}: ${t.sortNewest}` },
-                  { value: "price_asc", label: `${t.sort}: ${t.sortPriceAsc}` },
-                  { value: "price_desc", label: `${t.sort}: ${t.sortPriceDesc}` },
-                  { value: "area_desc", label: `${t.sort}: ${t.sortAreaDesc}` },
-                ]}
-              />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`${t.sort}: ${activeSortLabel}`}
+                    title={`${t.sort}: ${activeSortLabel}`}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/10 bg-white/80 text-[rgb(var(--navy))] shadow-sm backdrop-blur hover:bg-white"
+                  >
+                    <ArrowUpDown size={16} />
+                    <span className="sr-only">{`${t.sort}: ${activeSortLabel}`}</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="w-52 rounded-xl border border-black/10 bg-white/95 p-1 shadow-[0_16px_30px_-14px_rgba(15,23,42,0.45)] backdrop-blur"
+                >
+                  <DropdownMenuRadioGroup
+                    value={filters.sort}
+                    onValueChange={(value) => setFilters((f) => ({ ...f, sort: value as SortMode }))}
+                  >
+                    {sortOptions.map((option) => (
+                      <DropdownMenuRadioItem
+                        key={option.value}
+                        value={option.value}
+                        className="rounded-lg px-3 py-2 text-sm text-[rgb(var(--navy))] focus:bg-[rgb(var(--navy))]/7"
+                      >
+                        {option.label}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               <div className="hidden items-center gap-2 rounded-2xl border border-black/10 bg-white/70 p-1 shadow-sm backdrop-blur md:flex">
                 <button
@@ -3354,7 +3521,9 @@ export default function ListingsClient({
                 key={property.id}
                 property={property}
                 isCompared={compareRefs.includes(property.ref)}
+                isFavorite={favoriteRefs.has(normalizeText(property.ref))}
                 onToggleCompare={toggleCompare}
+                onToggleFavorite={toggleFavorite}
                 onQuickContact={(selected) => {
                   setQuickContactRef(selected.ref);
                   updateAiStats(activeAiPresetKeys, "contacts");

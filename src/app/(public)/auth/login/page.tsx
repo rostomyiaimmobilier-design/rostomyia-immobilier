@@ -9,6 +9,14 @@ import { toUiErrorMessage } from "@/lib/ui-errors";
 
 type Step = "phone" | "otp";
 
+function getGoogleOAuthRedirectTo() {
+  const siteUrlFromEnv = String(process.env.NEXT_PUBLIC_SITE_URL ?? "").trim();
+  const browserOrigin = typeof window !== "undefined" ? window.location.origin : "";
+  const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(browserOrigin);
+  const base = isLocalhost ? browserOrigin : siteUrlFromEnv || browserOrigin;
+  return `${base.replace(/\/+$/, "")}/auth/callback`;
+}
+
 export default function LoginPage() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
@@ -28,11 +36,19 @@ export default function LoginPage() {
     setLoading(true);
     setErrorMsg(null);
     setMsg(null);
+    const redirectTo = getGoogleOAuthRedirectTo();
+
+    console.info("[auth] Google OAuth request", {
+      origin: window.location.origin,
+      redirectTo,
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? null,
+      siteUrlEnv: process.env.NEXT_PUBLIC_SITE_URL ?? null,
+    });
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo,
       },
     });
 
@@ -314,3 +330,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

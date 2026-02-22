@@ -4,13 +4,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { Building2, MapPin } from "lucide-react";
-import { createPortal } from "react-dom";
 import AppDropdown from "@/components/ui/app-dropdown";
 import { DEFAULT_ORAN_QUARTIERS, ORAN_COMMUNES } from "@/lib/oran-locations";
-
-const WHATSAPP = "https://wa.me/213556195427";
 
 const copy = {
   fr: {
@@ -18,18 +15,16 @@ const copy = {
     h1: "L’immobilier d’exception à Oran.",
     p: "Sélection soignée, visites rapides, accompagnement clair jusqu’à la signature.",
     primary: "Voir les biens",
-    secondary: "WhatsApp",
+    secondary: "Espace agence",
     tertiary: "Déposer un bien",
-    waMsg: "Bonjour Rostomyia, je souhaite publier un bien ou réserver une visite.",
   },
   ar: {
     badge: "ÙˆÙ‡Ø±Ø§Ù† â€¢ Ø¹Ù‚Ø§Ø±Ø§Øª Ù…Ù…ÙŠØ²Ø©",
     h1: "Ø¹Ù‚Ø§Ø±Ø§Øª Ø§Ø³ØªØ«Ù†Ø§Ø¦ÙŠØ© ÙÙŠ ÙˆÙ‡Ø±Ø§Ù†.",
     p: "Ø§Ø®ØªÙŠØ§Ø±Ø§Øª Ù…Ø¯Ø±ÙˆØ³Ø©ØŒ Ø²ÙŠØ§Ø±Ø§Øª Ø³Ø±ÙŠØ¹Ø©ØŒ ÙˆÙ…Ø±Ø§ÙÙ‚Ø© ÙˆØ§Ø¶Ø­Ø© Ø­ØªÙ‰ Ø§Ù„ØªÙˆÙ‚ÙŠØ¹.",
     primary: "Ø¹Ø±Ø¶ Ø§Ù„Ø¹Ù‚Ø§Ø±Ø§Øª",
-    secondary: "ÙˆØ§ØªØ³Ø§Ø¨",
+    secondary: "Espace agence",
     tertiary: "Ø§Ø¹Ø±Ø¶ Ø¹Ù‚Ø§Ø±Ùƒ",
-    waMsg: "Ø§Ù„Ø³Ù„Ø§Ù… Ø¹Ù„ÙŠÙƒÙ… RostomyiaØŒ Ø£Ø±ÙŠØ¯ Ù†Ø´Ø± Ø¹Ù‚Ø§Ø± Ø£Ùˆ Ø­Ø¬Ø² Ø²ÙŠØ§Ø±Ø©.",
   },
 } as const;
 
@@ -45,15 +40,7 @@ type QuickDealType =
   | "par_nuit"
   | "court_sejour";
 
-type QuickSuggestion = {
-  key: string;
-  value: string;
-  type: "quartier" | "apartment_type";
-};
-
 type QuickInference = {
-  district?: string;
-  rooms?: string;
   category?: string;
   dealType?: QuickDealType;
   commune?: string;
@@ -77,41 +64,17 @@ function normalizeText(value: string) {
     .toLowerCase();
 }
 
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function stripKnownQuickValues(
-  rawQuery: string,
-  quartier?: string | null,
-  apartmentType?: string | null
-) {
-  let remainder = rawQuery || "";
-  if (quartier) {
-    remainder = remainder.replace(new RegExp(escapeRegExp(quartier), "ig"), " ");
-  }
-  if (apartmentType) {
-    remainder = remainder.replace(new RegExp(escapeRegExp(apartmentType), "ig"), " ");
-  }
-  return remainder.replace(/\s+/g, " ").trim();
-}
-
 function inferQuickFiltersFromQuery(
   rawQuery: string,
   options: {
-    quartiers: readonly string[];
     communes: readonly string[];
   }
 ): QuickInference {
   const queryNorm = normalizeText(rawQuery);
   if (!queryNorm) return {};
 
-  const districtsByLength = [...options.quartiers].sort((a, b) => b.length - a.length);
-  const apartmentTypesByLength = [...APARTMENT_TYPES].sort((a, b) => b.length - a.length);
   const communesByLength = [...options.communes].sort((a, b) => b.length - a.length);
 
-  const district = districtsByLength.find((item) => queryNorm.includes(normalizeText(item)));
-  const rooms = apartmentTypesByLength.find((item) => queryNorm.includes(normalizeText(item)));
   const commune = communesByLength.find((item) => queryNorm.includes(normalizeText(item)));
 
   let dealType: QuickDealType | undefined;
@@ -146,7 +109,7 @@ function inferQuickFiltersFromQuery(
   }
 
   let category: string | undefined;
-  if (rooms || /\b(appartement|apartment|studio|f[2-6]|t[1-6])\b/.test(queryNorm)) {
+  if (/\b(appartement|apartment|studio|f[2-6]|t[1-6])\b/.test(queryNorm)) {
     category = "appartement";
   } else if (/\b(villa)\b/.test(queryNorm)) {
     category = "villa";
@@ -159,8 +122,6 @@ function inferQuickFiltersFromQuery(
   }
 
   return {
-    district,
-    rooms,
     category,
     dealType,
     commune,
@@ -170,7 +131,6 @@ function inferQuickFiltersFromQuery(
 export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHeroProps) {
   const router = useRouter();
   const t = copy[lang];
-  const waLink = `${WHATSAPP}?text=${encodeURIComponent(t.waMsg)}`;
   const communeSource = communes.length > 0 ? communes : [...ORAN_COMMUNES];
   const communeMap = new Map<string, string>();
   communeSource.forEach((commune) => {
@@ -191,20 +151,16 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
     dealType: QuickDealType;
     category: string;
     commune: string;
+    district: string;
+    rooms: string;
   }>({
     q: "",
     dealType: "douze_mois",
     category: "appartement",
     commune: initialCommune,
+    district: "",
+    rooms: "",
   });
-  const [quickSearchOpen, setQuickSearchOpen] = useState(false);
-  const [quickSearchActiveIndex, setQuickSearchActiveIndex] = useState(-1);
-  const [quickSearchPanelRect, setQuickSearchPanelRect] = useState<{
-    left: number;
-    top: number;
-    width: number;
-  } | null>(null);
-  const quickSearchInputRef = useRef<HTMLInputElement | null>(null);
   const communeOptions = useMemo(() => {
     const byNorm = new Map<string, string>();
     const source = communes.length > 0 ? communes : [...ORAN_COMMUNES];
@@ -280,113 +236,53 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
     { value: "bureau", label: lang === "ar" ? "Office" : "Bureau" },
   ];
 
-  const selectedQuartier = useMemo(() => {
-    const normalizedInput = normalizeText(quick.q);
-    return allQuartierOptions.find((item) => normalizedInput.includes(normalizeText(item)));
-  }, [quick.q, allQuartierOptions]);
+  const districtOptions = useMemo(
+    () => [
+      {
+        value: "",
+        label: (
+          <span className="inline-flex items-center gap-2">
+            <MapPin size={14} className="text-[rgb(var(--navy))]/70" />
+            {lang === "ar" ? "All districts" : "Tous quartiers"}
+          </span>
+        ),
+      },
+      ...communeFilteredQuartiers.map((quartier) => ({
+        value: quartier,
+        label: (
+          <span className="inline-flex items-center gap-2">
+            <MapPin size={14} className="text-[rgb(var(--navy))]/70" />
+            {quartier}
+          </span>
+        ),
+      })),
+    ],
+    [communeFilteredQuartiers, lang]
+  );
 
-  const selectedApartmentType = useMemo(() => {
-    const normalizedInput = normalizeText(quick.q);
-    return APARTMENT_TYPES.find((item) => normalizedInput.includes(normalizeText(item)));
-  }, [quick.q]);
-
-  const quickSuggestions = useMemo<QuickSuggestion[]>(() => {
-    const remainder = stripKnownQuickValues(quick.q, selectedQuartier, selectedApartmentType);
-    const term = normalizeText(remainder);
-
-    const quartierSource = communeFilteredQuartiers.filter((item) => item !== selectedQuartier);
-    const apartmentTypeSource = APARTMENT_TYPES.filter((item) => item !== selectedApartmentType);
-
-    const quartierMatches = quartierSource
-      .filter((item) => !term || normalizeText(item).includes(term))
-      .map((item) => ({
-        key: `q-${normalizeText(item).replace(/\s+/g, "-")}`,
-        value: item,
-        type: "quartier" as const,
-      }));
-
-    const apartmentTypeMatches = apartmentTypeSource
-      .filter((item) => !term || normalizeText(item).includes(term))
-      .map((item) => ({
-        key: `t-${normalizeText(item)}`,
-        value: item,
-        type: "apartment_type" as const,
-      }));
-
-    if (!term) {
-      if (selectedQuartier && !selectedApartmentType) return apartmentTypeMatches.slice(0, 8);
-      if (!selectedQuartier && selectedApartmentType) return quartierMatches.slice(0, 8);
-      if (selectedQuartier && selectedApartmentType) return [...quartierMatches, ...apartmentTypeMatches].slice(0, 8);
-      return [...quartierMatches.slice(0, 5), ...apartmentTypeMatches.slice(0, 5)].slice(0, 8);
-    }
-
-    return [...quartierMatches, ...apartmentTypeMatches].slice(0, 8);
-  }, [quick.q, selectedApartmentType, selectedQuartier, communeFilteredQuartiers]);
-
-  function composeQuickQuery(
-    rawQuery: string,
-    next: { quartier?: string | null; apartmentType?: string | null }
-  ) {
-    const normalizedInput = normalizeText(rawQuery);
-    const currentQuartier = allQuartierOptions.find((item) =>
-      normalizedInput.includes(normalizeText(item))
-    );
-    const currentApartmentType = APARTMENT_TYPES.find((item) =>
-      normalizedInput.includes(normalizeText(item))
-    );
-    const selectedQuartier = next.quartier ?? currentQuartier ?? "";
-    const selectedApartmentType = next.apartmentType ?? currentApartmentType ?? "";
-    const remainder = stripKnownQuickValues(rawQuery, currentQuartier, currentApartmentType);
-    return [selectedQuartier, selectedApartmentType, remainder].filter(Boolean).join(" ").trim();
-  }
-
-  function applyQuickSuggestion(suggestion: QuickSuggestion) {
-    setQuick((s) => ({
-      ...s,
-      category: suggestion.type === "apartment_type" ? "appartement" : s.category,
-      q:
-        suggestion.type === "quartier"
-          ? composeQuickQuery(s.q, { quartier: suggestion.value })
-          : composeQuickQuery(s.q, { apartmentType: suggestion.value }),
-    }));
-    setQuickSearchOpen(true);
-    setQuickSearchActiveIndex(-1);
-    quickSearchInputRef.current?.focus();
-  }
-
-  function onQuickSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (!quickSuggestions.length) return;
-
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setQuickSearchOpen(true);
-      setQuickSearchActiveIndex((prev) =>
-        prev < quickSuggestions.length - 1 ? prev + 1 : 0
-      );
-      return;
-    }
-
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setQuickSearchOpen(true);
-      setQuickSearchActiveIndex((prev) =>
-        prev > 0 ? prev - 1 : quickSuggestions.length - 1
-      );
-      return;
-    }
-
-    if (event.key === "Enter" && quickSearchOpen && quickSearchActiveIndex >= 0) {
-      event.preventDefault();
-      const suggestion = quickSuggestions[quickSearchActiveIndex];
-      if (suggestion) applyQuickSuggestion(suggestion);
-      return;
-    }
-
-    if (event.key === "Escape") {
-      setQuickSearchOpen(false);
-      setQuickSearchActiveIndex(-1);
-    }
-  }
+  const roomOptions = useMemo(
+    () => [
+      {
+        value: "",
+        label: (
+          <span className="inline-flex items-center gap-2">
+            <Building2 size={14} className="text-amber-700/80" />
+            {lang === "ar" ? "All apartment types" : "Tous types d'appartements"}
+          </span>
+        ),
+      },
+      ...APARTMENT_TYPES.map((roomType) => ({
+        value: roomType,
+        label: (
+          <span className="inline-flex items-center gap-2">
+            <Building2 size={14} className="text-amber-700/80" />
+            {roomType}
+          </span>
+        ),
+      })),
+    ],
+    [lang]
+  );
 
   function onQuickSearchSubmit(e: FormEvent) {
     e.preventDefault();
@@ -395,19 +291,9 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
     const query = quick.q.trim();
     if (query) params.set("q", query);
 
-    const inferred = inferQuickFiltersFromQuery(query, {
-      quartiers: allQuartierOptions,
-      communes: communeOptions,
-    });
-    const normalizedQuery = normalizeText(query);
-    const matchedQuartier = query
-      ? allQuartierOptions.find((item) => normalizedQuery.includes(normalizeText(item)))
-      : undefined;
-    const matchedApartmentType = query
-      ? APARTMENT_TYPES.find((item) => normalizedQuery.includes(normalizeText(item)))
-      : undefined;
-    const district = inferred.district ?? matchedQuartier;
-    const rooms = inferred.rooms ?? matchedApartmentType;
+    const inferred = inferQuickFiltersFromQuery(query, { communes: communeOptions });
+    const district = quick.district;
+    const rooms = quick.rooms;
     const category = inferred.category ?? quick.category;
     const dealType = inferred.dealType ?? quick.dealType;
     const commune = inferred.commune ?? quick.commune;
@@ -422,30 +308,6 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
     const href = params.toString() ? `/biens?${params.toString()}` : "/biens";
     router.push(href);
   }
-
-  useEffect(() => {
-    if (!quickSearchOpen) return;
-
-    const updatePanelRect = () => {
-      const input = quickSearchInputRef.current;
-      if (!input) return;
-      const rect = input.getBoundingClientRect();
-      setQuickSearchPanelRect({
-        left: rect.left,
-        top: rect.bottom + 8,
-        width: rect.width,
-      });
-    };
-
-    updatePanelRect();
-    window.addEventListener("resize", updatePanelRect);
-    window.addEventListener("scroll", updatePanelRect, true);
-
-    return () => {
-      window.removeEventListener("resize", updatePanelRect);
-      window.removeEventListener("scroll", updatePanelRect, true);
-    };
-  }, [quickSearchOpen, quick.q, quickSuggestions.length]);
 
   return (
     <section className="relative z-20 overflow-x-hidden overflow-y-visible">
@@ -517,14 +379,12 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
                 {t.primary}
               </Link>
 
-              <a
-                href={waLink}
-                target="_blank"
-                rel="noreferrer"
+              <Link
+                href="/agency"
                 className="inline-flex items-center justify-center rounded-2xl bg-white/80 px-5 py-3 text-sm font-medium text-[rgb(var(--navy))] backdrop-blur transition hover:bg-white"
               >
                 {t.secondary}
-              </a>
+              </Link>
 
               <Link
                 href="/deposer"
@@ -570,7 +430,13 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
                 <div className="relative md:col-span-4">
                   <AppDropdown
                     value={quick.commune}
-                    onValueChange={(value) => setQuick((s) => ({ ...s, commune: value }))}
+                    onValueChange={(value) =>
+                      setQuick((s) => ({
+                        ...s,
+                        commune: value,
+                        district: "",
+                      }))
+                    }
                     options={[
                       { value: "", label: lang === "ar" ? "All communes" : "Toutes communes" },
                       ...communeOptions.map((commune) => ({ value: commune, label: commune })),
@@ -578,146 +444,35 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
                   />
                 </div>
 
+                <div className="relative md:col-span-6">
+                  <AppDropdown
+                    value={quick.district}
+                    onValueChange={(value) => setQuick((s) => ({ ...s, district: value }))}
+                    options={districtOptions}
+                  />
+                </div>
+
+                <div className="relative md:col-span-6">
+                  <AppDropdown
+                    value={quick.rooms}
+                    onValueChange={(value) =>
+                      setQuick((s) => ({
+                        ...s,
+                        rooms: value,
+                        category: value ? "appartement" : s.category,
+                      }))
+                    }
+                    options={roomOptions}
+                  />
+                </div>
+
                 <div className="relative md:col-span-12">
                   <input
-                    ref={quickSearchInputRef}
                     value={quick.q}
-                    onChange={(e) => {
-                      setQuick((s) => ({ ...s, q: e.target.value }));
-                      setQuickSearchOpen(true);
-                      setQuickSearchActiveIndex(-1);
-                    }}
-                    onFocus={() => {
-                      if (quickSuggestions.length) setQuickSearchOpen(true);
-                    }}
-                    onBlur={() => {
-                      window.setTimeout(() => {
-                        setQuickSearchOpen(false);
-                        setQuickSearchActiveIndex(-1);
-                      }, 120);
-                    }}
-                    onKeyDown={onQuickSearchKeyDown}
-                    placeholder={lang === "ar" ? "Search area, type, keyword..." : "Quartier, type, mot-cle..."}
+                    onChange={(e) => setQuick((s) => ({ ...s, q: e.target.value }))}
+                    placeholder={lang === "ar" ? "Keyword..." : "Mot-cle..."}
                     className="h-11 w-full rounded-xl border border-black/10 bg-white/90 px-3 text-sm text-[rgb(var(--navy))] outline-none transition focus:border-[rgb(var(--navy))]/35"
-                    aria-autocomplete="list"
                   />
-
-                  {typeof document !== "undefined" &&
-                  quickSearchOpen &&
-                  quickSuggestions.length > 0 &&
-                  quickSearchPanelRect
-                    ? createPortal(
-                    <div
-                      className="fixed z-[130] overflow-hidden rounded-2xl border border-black/10 bg-white/95 shadow-[0_18px_40px_-16px_rgba(2,6,23,0.35)] backdrop-blur"
-                      style={{
-                        left: quickSearchPanelRect.left,
-                        top: quickSearchPanelRect.top,
-                        width: quickSearchPanelRect.width,
-                        maxHeight: "min(60vh, 430px)",
-                        overflowY: "auto",
-                      }}
-                      role="listbox"
-                    >
-                      <div className="border-b border-black/10 bg-gradient-to-r from-[rgb(var(--navy))]/8 via-white/90 to-[rgb(var(--gold))]/15 px-4 py-2.5">
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.13em] text-[rgb(var(--navy))]/70">
-                          {lang === "ar" ? "Suggestions intelligentes" : "Suggestions intelligentes"}
-                        </div>
-                        <div className="mt-1 flex flex-wrap gap-1.5">
-                          {selectedQuartier ? (
-                            <span className="inline-flex items-center rounded-full border border-[rgb(var(--navy))]/20 bg-[rgb(var(--navy))]/10 px-2 py-0.5 text-[10px] font-semibold text-[rgb(var(--navy))]">
-                              {lang === "ar" ? "District" : "Quartier"}: {selectedQuartier}
-                            </span>
-                          ) : null}
-                          {selectedApartmentType ? (
-                            <span className="inline-flex items-center rounded-full border border-amber-300/60 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                              {lang === "ar" ? "Apartment type" : "Type appartement"}: {selectedApartmentType}
-                            </span>
-                          ) : null}
-                          {!selectedQuartier && !selectedApartmentType ? (
-                            <span className="text-[11px] text-black/55">
-                              {lang === "ar"
-                                ? "Choisissez quartier + type appartement"
-                                : "Choisissez quartier + type appartement"}
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      {quickSuggestions.map((suggestion, index) => {
-                        const active = index === quickSearchActiveIndex;
-                        const prevType = index > 0 ? quickSuggestions[index - 1]?.type : null;
-                        const showGroupLabel = index === 0 || prevType !== suggestion.type;
-                        const isQuartier = suggestion.type === "quartier";
-                        return (
-                          <div key={suggestion.key}>
-                            {showGroupLabel ? (
-                              <div className="px-4 pt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-black/45">
-                                {isQuartier
-                                  ? lang === "ar"
-                                    ? "District"
-                                    : "Quartier"
-                                  : lang === "ar"
-                                  ? "Apartment type"
-                                  : "Type appartement"}
-                              </div>
-                            ) : null}
-
-                            <button
-                              type="button"
-                              onMouseDown={(event) => {
-                                event.preventDefault();
-                                applyQuickSuggestion(suggestion);
-                              }}
-                              className={`flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left ${
-                                active ? "bg-[rgb(var(--navy))]/8" : "hover:bg-black/5"
-                              }`}
-                            >
-                              <div className="flex min-w-0 items-center gap-2.5">
-                                <span
-                                  className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border ${
-                                    isQuartier
-                                      ? "border-[rgb(var(--navy))]/20 bg-[rgb(var(--navy))]/8 text-[rgb(var(--navy))]"
-                                      : "border-amber-300/60 bg-amber-50 text-amber-700"
-                                  }`}
-                                >
-                                  {isQuartier ? <MapPin size={14} /> : <Building2 size={14} />}
-                                </span>
-                                <div className="min-w-0">
-                                  <div
-                                    className={`truncate text-sm font-semibold ${
-                                      active ? "text-[rgb(var(--navy))]" : "text-black/85"
-                                    }`}
-                                  >
-                                    {suggestion.value}
-                                  </div>
-                                  <div className="text-[11px] text-black/50">
-                                    {lang === "ar" ? "Cliquez pour ajouter" : "Cliquez pour ajouter"}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <span
-                                className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
-                                  isQuartier
-                                    ? "border-[rgb(var(--navy))]/20 bg-[rgb(var(--navy))]/8 text-[rgb(var(--navy))]"
-                                    : "border-amber-300/60 bg-amber-50 text-amber-700"
-                                }`}
-                              >
-                                {isQuartier
-                                  ? lang === "ar"
-                                    ? "District"
-                                    : "Quartier"
-                                  : lang === "ar"
-                                  ? "Apartment type"
-                                  : "Type appartement"}
-                              </span>
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>,
-                    document.body
-                  ) : null}
                 </div>
 
                 <button

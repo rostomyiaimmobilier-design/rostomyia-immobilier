@@ -65,7 +65,9 @@ function formatPublishedAgo(createdAt: string | undefined, nowTs: number): strin
 export default function PropertyCard({
   property,
   isCompared = false,
+  isFavorite = false,
   onToggleCompare,
+  onToggleFavorite,
   onQuickContact,
   // optional props for marketplace behaviors:
   // view = "grid",
@@ -75,7 +77,9 @@ export default function PropertyCard({
 }: {
   property: PropertyItem;
   isCompared?: boolean;
+  isFavorite?: boolean;
   onToggleCompare?: (property: PropertyItem) => void;
+  onToggleFavorite?: (property: PropertyItem) => void;
   onQuickContact?: (property: PropertyItem) => void;
   // view?: "grid" | "list";
   // aiScore?: number; // 0..100
@@ -211,15 +215,15 @@ export default function PropertyCard({
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                // onToggleSave?.(property.id);
+                onToggleFavorite?.(property);
               }}
-              className="hidden items-center justify-center rounded-full
-                         bg-white/85 p-2 shadow-sm backdrop-blur transition
-                         hover:bg-white md:inline-flex"
-              aria-label="Save"
-              title="Sauvegarder"
+              className={`inline-flex items-center justify-center rounded-full p-2 shadow-sm backdrop-blur transition ${
+                isFavorite ? "bg-rose-500 text-white hover:bg-rose-600" : "bg-white/85 text-[rgb(var(--navy))] hover:bg-white"
+              }`}
+              aria-label={isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
+              title={isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
             >
-              <Heart size={16} className="text-[rgb(var(--navy))]" />
+              <Heart size={16} className={isFavorite ? "fill-current" : ""} />
             </button>
           </div>
 

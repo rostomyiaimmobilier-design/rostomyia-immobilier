@@ -4,7 +4,15 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CircleUserRound } from "lucide-react";
 import { useLang } from "@/components/LanguageProvider";
+import { createClient } from "@/lib/supabase/client";
+
+type AuthUserState = {
+  email: string | null;
+  accountType: string | null;
+  displayName: string | null;
+};
 
 export default function Navbar() {
   const { lang, setLang, dir } = useLang();
@@ -12,6 +20,7 @@ export default function Navbar() {
 
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [authUser, setAuthUser] = useState<AuthUserState | null>(null);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -22,13 +31,61 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  useEffect(() => {
+    const supabase = createClient();
+    let isMounted = true;
+
+    const applyUser = (
+      user: {
+        email?: string | null;
+        user_metadata?: Record<string, unknown> | null;
+      } | null
+    ) => {
+      if (!isMounted) return;
+      if (!user) {
+        setAuthUser(null);
+        return;
+      }
+      const meta = user.user_metadata ?? {};
+      const accountType = typeof meta.account_type === "string" ? meta.account_type : null;
+      const candidates = [
+        meta.full_name,
+        meta.username,
+        meta.name,
+        meta.agency_name,
+        user.email,
+      ];
+      const displayName =
+        candidates
+          .map((value) => (typeof value === "string" ? value.trim() : ""))
+          .find((value) => value.length > 0) ?? null;
+
+      setAuthUser({
+        email: user.email ?? null,
+        accountType,
+        displayName,
+      });
+    };
+
+    supabase.auth.getUser().then(({ data }) => applyUser(data.user));
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      applyUser(session?.user ?? null);
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
   const t = {
     fr: {
       home: "Accueil",
       listings: "Biens",
       submit: "Proposer un bien",
       contact: "Contact",
-      about: "À propos",
       login: "Connexion",
       signup: "Inscription",
       account: "Mon compte",
@@ -40,7 +97,6 @@ export default function Navbar() {
       listings: "العقارات",
       submit: "اعرض عقارك",
       contact: "اتصل بنا",
-      about: "من نحن",
       login: "دخول",
       signup: "إنشاء حساب",
       account: "حسابي",
@@ -55,6 +111,14 @@ export default function Navbar() {
     setLang(newLang);
     router.refresh();
   };
+
+  const isAgencyUser = authUser?.accountType === "agency";
+  const isAdminUser = authUser?.accountType === "admin" || authUser?.accountType === "super_admin";
+  const accountHref = isAgencyUser ? "/agency/dashboard" : "/account";
+  const displayIdentity =
+    authUser?.displayName ||
+    authUser?.email?.split("@")[0] ||
+    (lang === "ar" ? "حساب" : "Compte");
 
   return (
     <div dir={dir}>
@@ -88,25 +152,48 @@ export default function Navbar() {
               <Link className="nav-link" href="/proposer">{t.submit}</Link>
               <Link className="nav-link" href="/agency">{agencyLabel}</Link>
               <Link className="nav-link" href="/contact">{t.contact}</Link>
-              <Link className="nav-link" href="/a-propos">{t.about}</Link>
             </div>
 
             {/* Right Side */}
             <div className="flex items-center gap-3">
               <div className="hidden items-center gap-3 md:flex">
-                <Link
-                  href="/auth/login"
-                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm transition hover:bg-slate-50"
-                >
-                  {t.login}
-                </Link>
+                {authUser ? (
+                  <>
+                    {isAdminUser ? (
+                      <Link
+                        href="/admin"
+                        className="rounded-xl border border-slate-200 px-4 py-2 text-sm transition hover:bg-slate-50"
+                      >
+                        {t.admin}
+                      </Link>
+                    ) : null}
+                    <Link
+                      href={accountHref}
+                      aria-label={t.account}
+                      title={`${t.account} - ${displayIdentity}`}
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
+                    >
+                      <CircleUserRound size={18} />
+                      <span className="sr-only">{t.account}</span>
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      href="/auth/login"
+                      className="rounded-xl border border-slate-200 px-4 py-2 text-sm transition hover:bg-slate-50"
+                    >
+                      {t.login}
+                    </Link>
 
-                <Link
-                  href="/auth/signup"
-                  className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white transition hover:opacity-90"
-                >
-                  {t.signup}
-                </Link>
+                    <Link
+                      href="/auth/signup"
+                      className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white transition hover:opacity-90"
+                    >
+                      {t.signup}
+                    </Link>
+                  </>
+                )}
               </div>
 
               {/* Language Switch */}
@@ -225,29 +312,48 @@ export default function Navbar() {
               >
                 {t.contact}
               </Link>
-              <Link
-                href="/a-propos"
-                onClick={() => setMobileOpen(false)}
-                className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-              >
-                {t.about}
-              </Link>
 
               <div className="mt-2 space-y-2 border-t border-slate-200 pt-3">
-                <Link
-                  href="/auth/login"
-                  onClick={() => setMobileOpen(false)}
-                  className="block rounded-lg border border-slate-200 px-3 py-2 text-center text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                >
-                  {t.login}
-                </Link>
-                <Link
-                  href="/auth/signup"
-                  onClick={() => setMobileOpen(false)}
-                  className="block rounded-lg bg-slate-900 px-3 py-2 text-center text-sm font-medium text-white transition hover:opacity-90"
-                >
-                  {t.signup}
-                </Link>
+                {authUser ? (
+                  <>
+                    {isAdminUser ? (
+                      <Link
+                        href="/admin"
+                        onClick={() => setMobileOpen(false)}
+                        className="block rounded-lg border border-slate-200 px-3 py-2 text-center text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                      >
+                        {t.admin}
+                      </Link>
+                    ) : null}
+                    <Link
+                      href={accountHref}
+                      onClick={() => setMobileOpen(false)}
+                      aria-label={t.account}
+                      title={`${t.account} - ${displayIdentity}`}
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
+                    >
+                      <CircleUserRound size={18} />
+                      <span className="sr-only">{t.account}</span>
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      href="/auth/login"
+                      onClick={() => setMobileOpen(false)}
+                      className="block rounded-lg border border-slate-200 px-3 py-2 text-center text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                    >
+                      {t.login}
+                    </Link>
+                    <Link
+                      href="/auth/signup"
+                      onClick={() => setMobileOpen(false)}
+                      className="block rounded-lg bg-slate-900 px-3 py-2 text-center text-sm font-medium text-white transition hover:opacity-90"
+                    >
+                      {t.signup}
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -282,3 +388,4 @@ export default function Navbar() {
     </div>
   );
 }
+
