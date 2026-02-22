@@ -11,8 +11,15 @@ export function propertyImageUrl(path: string, options?: PropertyImageUrlOptions
   if (!base || !path) return "";
 
   const cleanPath = String(path).replace(/^\/+/, "");
-
+  // Always prefer the stable public object URL. Some Supabase deployments
+  // return intermittent 403/400 on the transform endpoint.
+  // Next.js `next/image` still performs optimization on this origin URL.
   if (!options || Object.values(options).every((v) => v == null)) {
+    return `${base}/storage/v1/object/public/property-images/${cleanPath}`;
+  }
+
+  const useSupabaseRenderEndpoint = process.env.NEXT_PUBLIC_SUPABASE_USE_RENDER_ENDPOINT === "1";
+  if (!useSupabaseRenderEndpoint) {
     return `${base}/storage/v1/object/public/property-images/${cleanPath}`;
   }
 
@@ -21,11 +28,8 @@ export function propertyImageUrl(path: string, options?: PropertyImageUrlOptions
   if (options.height) params.set("height", String(options.height));
   if (options.quality) params.set("quality", String(options.quality));
   if (options.resize) params.set("resize", options.resize);
-  // Some Supabase projects reject `format=webp` with HTTP 400.
-  // Keep transform active but skip webp unless explicitly allowed.
-  const allowWebp = process.env.NEXT_PUBLIC_SUPABASE_ALLOW_WEBP_RENDER === "1";
   if (options.format === "origin") params.set("format", "origin");
-  if (options.format === "webp" && allowWebp) params.set("format", "webp");
+  if (options.format === "webp") params.set("format", "webp");
 
   const query = params.toString();
   const suffix = query ? `?${query}` : "";
