@@ -1,11 +1,19 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getPublicSupabaseEnv } from "@/lib/supabase/env";
 
 export async function POST() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  const email = process.env.SUPERADMIN_EMAIL!;
-  const password = process.env.SUPERADMIN_PASSWORD!;
+  const { url, configured } = getPublicSupabaseEnv();
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const email = process.env.SUPERADMIN_EMAIL;
+  const password = process.env.SUPERADMIN_PASSWORD;
+
+  if (!configured || !serviceKey || !email || !password) {
+    return NextResponse.json(
+      { ok: false, error: "Configuration Supabase/SUPERADMIN manquante." },
+      { status: 503 }
+    );
+  }
 
   const supabaseAdmin = createClient(url, serviceKey, {
     auth: { persistSession: false },

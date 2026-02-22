@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { hasAdminAccess } from "@/lib/admin-auth";
+import { getPublicSupabaseEnv } from "@/lib/supabase/env";
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -17,10 +18,25 @@ export async function middleware(req: NextRequest) {
   }
 
   const res = NextResponse.next({ request: { headers: req.headers } });
+  const { url, anonKey, configured } = getPublicSupabaseEnv();
+
+  if (!configured) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { error: "Server misconfigured: Supabase public env missing." },
+        { status: 503 }
+      );
+    }
+
+    const loginUrl = req.nextUrl.clone();
+    loginUrl.pathname = "/admin/login";
+    loginUrl.searchParams.set("error", "server_config");
+    return NextResponse.redirect(loginUrl);
+  }
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    url,
+    anonKey,
     {
       cookies: {
         getAll: () => req.cookies.getAll(),

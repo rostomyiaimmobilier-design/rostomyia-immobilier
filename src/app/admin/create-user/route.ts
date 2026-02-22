@@ -1,12 +1,22 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getPublicSupabaseEnv } from "@/lib/supabase/env";
 
 export async function POST(req: Request) {
   const { email, password } = await req.json();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const { url, configured } = getPublicSupabaseEnv();
+
+  if (!configured || !serviceRoleKey) {
+    return NextResponse.json(
+      { ok: false, message: "Configuration Supabase manquante." },
+      { status: 503 }
+    );
+  }
 
   const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!, // server-only
+    url,
+    serviceRoleKey, // server-only
     { auth: { persistSession: false } }
   );
 

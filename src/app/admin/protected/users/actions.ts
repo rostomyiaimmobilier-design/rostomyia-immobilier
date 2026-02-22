@@ -6,6 +6,7 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { hasAdminAccess } from "@/lib/admin-auth";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { getPublicSupabaseEnv } from "@/lib/supabase/env";
 
 const USERS_PATH = "/admin/protected/users";
 const AGENCIES_PATH = "/admin/protected/agencies";
@@ -21,13 +22,12 @@ type AuthUserLike = {
 };
 
 function publicSupabaseAuthClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anon) {
+  const { url, anonKey, configured } = getPublicSupabaseEnv();
+  if (!configured) {
     throw new Error("Configuration Supabase publique manquante.");
   }
 
-  return createSupabaseClient(url, anon, {
+  return createSupabaseClient(url, anonKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
