@@ -174,6 +174,59 @@ type DisplayMode = "cards" | "map";
 type AlertChannel = "email" | "whatsapp";
 type PublishedWithin = "all" | "7" | "30" | "90";
 
+const SEARCH_NEGATION_PREFIXES = ["sans", "without", "no", "pas de", "بدون", "بلا"] as const;
+
+const SEARCH_ALIAS_MAP: Record<string, string[]> = {
+  oran: ["wahran", "وهران"],
+  wahran: ["oran", "وهران"],
+  "وهران": ["oran", "wahran"],
+  "bir el djir": ["bir eldjir", "بير الجير", "bir djir"],
+  "bir eldjir": ["bir el djir", "بير الجير"],
+  "بير الجير": ["bir el djir", "bir eldjir"],
+  canastel: ["canastl", "kanastel", "كاناستيل"],
+  canastl: ["canastel", "kanastel"],
+  "es senia": ["essenia", "السنية", "el senia"],
+  essenia: ["es senia", "السنية"],
+  "sidi chahmi": ["sidi chehmi", "سيدي الشحمي"],
+  appartement: ["appartement", "appart", "apartment", "شقة"],
+  villa: ["villa", "maison", "house", "فيلا"],
+  terrain: ["terrain", "lot", "parcelle", "land", "ارض"],
+  vente: ["vente", "sale", "buy", "achat", "بيع"],
+  location: ["location", "rent", "rental", "lease", "كراء", "ايجار"],
+};
+
+const AMENITY_NEGATION_TERMS: Record<AmenityKey, string[]> = {
+  residence_fermee: ["residence fermee", "residence", "résidence", "اقامة مغلقة"],
+  parking_sous_sol: ["parking", "sous sol", "parking sous sol"],
+  garage: ["garage"],
+  box: ["box"],
+  luxe: ["luxe"],
+  haut_standing: ["haut standing", "standing"],
+  domotique: ["domotique", "smart home"],
+  double_ascenseur: ["ascenseur", "double ascenseur", "elevator"],
+  concierge: ["concierge", "gardien"],
+  camera_surveillance: ["camera", "surveillance"],
+  groupe_electrogene: ["groupe electrogene", "generateur"],
+  chauffage_central: ["chauffage", "chauffage central"],
+  climatisation: ["clim", "climatisation", "ac"],
+  cheminee: ["cheminee", "cheminee"],
+  dressing: ["dressing"],
+  porte_blindee: ["porte blindee"],
+  cuisine_equipee: ["cuisine equipee", "cuisine"],
+  sdb_italienne: ["italienne", "salle de bain italienne"],
+  deux_balcons: ["balcon", "deux balcons"],
+  terrasse: ["terrasse"],
+  jardin: ["jardin"],
+  piscine: ["piscine", "pool"],
+  salle_sport: ["salle de sport", "gym"],
+  interphone: ["interphone"],
+  fibre: ["fibre", "wifi", "internet"],
+  lumineux: ["lumineux", "lumineuse"],
+  securite_h24: ["securite", "h24", "security"],
+  vue_ville: ["vue ville", "city view"],
+  vue_mer: ["vue mer", "sea view", "mer"],
+};
+
 export type PropertyItem = {
   id: string;
   ref: string;
@@ -298,7 +351,7 @@ const dict: Record<
   fr: {
     title: "Nos biens à Oran",
     sub: "Découvrez les meilleures offres de Rostomyia Immobilier.",
-    searchPh: "Recherche: T3, Canastel, Villa… (essayez: “F4 vue mer max 2.5M fibre”)",
+    searchPh: "Recherche intelligente: transaction, categorie, pieces, commune, quartier…",
     results: "résultat(s)",
     filters: "Filtres",
     reset: "Réinitialiser",
@@ -387,7 +440,7 @@ const dict: Record<
   ar: {
     title: "عقاراتنا في وهران",
     sub: "تصفح أفضل عروض روستوميا للعقار.",
-    searchPh: "بحث: T3، كاناستيل، فيلا… (جرّب: “F4 vue mer 2.5M fibre”)",
+    searchPh: "بحث ذكي: نوع المعاملة، الفئة، الغرف، البلدية، الحي…",
     results: "نتيجة",
     filters: "الفلاتر",
     reset: "إعادة ضبط",
@@ -496,12 +549,44 @@ type AiPresetStats = {
 const AI_STATS_STORAGE_KEY = "rostomyia_ai_preset_stats_v1";
 const AI_CUSTOM_STORAGE_KEY = "rostomyia_ai_custom_presets_v1";
 const AI_MAX_CUSTOM_PRESETS = 12;
+const SEARCH_METRICS_STORAGE_KEY = "rostomyia_search_metrics_v1";
+const SEARCH_BEHAVIOR_STORAGE_KEY = "rostomyia_search_behavior_v1";
 const FAVORITES_STORAGE_KEYS = [
   "rostomyia_favorites",
   "rostomyia_favorite_properties",
   "rostomyia_favorite_refs",
 ] as const;
 const DEFAULT_FAVORITES_STORAGE_KEY = String(FAVORITES_STORAGE_KEYS[0]);
+
+type SearchMetricsState = {
+  queries: number;
+  zeroResults: number;
+  suggestionClicks: number;
+  contactsFromSearch: number;
+  lastUpdatedAt?: string;
+};
+
+type SearchBehaviorState = {
+  views: Record<string, number>;
+  favorites: Record<string, number>;
+  contacts: Record<string, number>;
+  recentQueries: string[];
+  updatedAt?: string;
+};
+
+const DEFAULT_SEARCH_METRICS: SearchMetricsState = {
+  queries: 0,
+  zeroResults: 0,
+  suggestionClicks: 0,
+  contactsFromSearch: 0,
+};
+
+const DEFAULT_SEARCH_BEHAVIOR: SearchBehaviorState = {
+  views: {},
+  favorites: {},
+  contacts: {},
+  recentQueries: [],
+};
 
 type FavoriteStorageItem = {
   ref: string;
@@ -812,6 +897,95 @@ function tokenizeSearchQuery(query: string): string[] {
     .filter(Boolean);
 }
 
+function getTokenVariants(token: string): string[] {
+  const norm = normalizeText(token);
+  if (!norm) return [];
+
+  const compact = norm.replace(/[\s-]+/g, "");
+  const aliases = SEARCH_ALIAS_MAP[norm] ?? [];
+  const aliasCompacts = aliases.map((value) => normalizeText(value).replace(/[\s-]+/g, ""));
+  return Array.from(new Set([norm, compact, ...aliases.map(normalizeText), ...aliasCompacts]));
+}
+
+function levenshteinDistanceWithin(a: string, b: string, maxDistance: number): number {
+  if (a === b) return 0;
+  const lenA = a.length;
+  const lenB = b.length;
+  if (Math.abs(lenA - lenB) > maxDistance) return maxDistance + 1;
+  if (!lenA || !lenB) return Math.max(lenA, lenB);
+
+  let previous = Array.from({ length: lenB + 1 }, (_, i) => i);
+  for (let i = 1; i <= lenA; i += 1) {
+    const current = [i];
+    let rowMin = current[0];
+    for (let j = 1; j <= lenB; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      const value = Math.min(
+        previous[j] + 1,
+        current[j - 1] + 1,
+        previous[j - 1] + cost
+      );
+      current[j] = value;
+      if (value < rowMin) rowMin = value;
+    }
+    if (rowMin > maxDistance) return maxDistance + 1;
+    previous = current;
+  }
+  return previous[lenB];
+}
+
+function tokenMatchesListingText(hay: string, token: string): boolean {
+  if (!token) return false;
+  const variants = getTokenVariants(token);
+  if (variants.some((variant) => hay.includes(variant))) return true;
+
+  const compactHay = hay.replace(/[\s-]+/g, "");
+  if (variants.some((variant) => compactHay.includes(variant.replace(/[\s-]+/g, "")))) return true;
+
+  const plain = normalizeText(token);
+  if (plain.length < 4) return false;
+
+  const words = hay.split(" ").filter(Boolean);
+  const maxDistance = plain.length >= 8 ? 2 : 1;
+  for (const word of words) {
+    if (Math.abs(word.length - plain.length) > maxDistance) continue;
+    if (levenshteinDistanceWithin(word, plain, maxDistance) <= maxDistance) return true;
+  }
+  return false;
+}
+
+function findNegatedAmenities(query: string): Set<AmenityKey> {
+  const qNorm = normalizeText(query);
+  if (!qNorm) return new Set<AmenityKey>();
+
+  const found = new Set<AmenityKey>();
+  (Object.entries(AMENITY_NEGATION_TERMS) as Array<[AmenityKey, string[]]>).forEach(
+    ([amenityKey, terms]) => {
+      const hasNegation = terms.some((term) =>
+        SEARCH_NEGATION_PREFIXES.some((prefix) =>
+          qNorm.includes(`${normalizeText(prefix)} ${normalizeText(term)}`)
+        )
+      );
+      if (hasNegation) found.add(amenityKey);
+    }
+  );
+  return found;
+}
+
+function expandSemanticTokens(tokens: string[]): string[] {
+  const expanded = new Set<string>();
+  tokens.forEach((token) => {
+    getTokenVariants(token).forEach((variant) => {
+      if (variant) expanded.add(variant);
+    });
+  });
+  return Array.from(expanded);
+}
+
+function normalizeRef(ref: string): string {
+  return normalizeText(ref || "");
+}
+
 function inferListingCategories(item: Pick<PropertyItem, "title" | "category">): string[] {
   const text = normalizeText(`${item.title} ${item.category ?? ""}`);
   if (!text) return [];
@@ -933,6 +1107,7 @@ type Filters = {
   bathsMin: string;
 
   amenities: Set<AmenityKey>;
+  excludedAmenities: Set<AmenityKey>;
 
   view: ViewMode;
   sort: SortMode;
@@ -951,12 +1126,26 @@ type SearchSuggestion = {
   type: SearchSuggestionType;
   label: string;
   value: string;
+  matchCount: number;
   dealType?: Filters["dealType"];
   category?: string;
   commune?: string;
   district?: string;
   room?: string;
   amenity?: AmenityKey;
+};
+
+type Recommendation = {
+  property: PropertyItem;
+  reason: string;
+  score: number;
+};
+
+type RecoveryAction = {
+  key: string;
+  label: string;
+  hint: string;
+  apply: (current: Filters) => Filters;
 };
 
 const SEARCH_SUGGESTION_LABELS: Record<
@@ -1018,6 +1207,23 @@ export default function ListingsClient({
   const searchParams = useSearchParams();
   const { lang, dir } = useLang();
   const t = dict[lang];
+  const smartSearchExamples = useMemo(
+    () =>
+      lang === "ar"
+        ? [
+            "بيع شقة F4 بير الجير كاناستيل",
+            "كراء فيلا T5 وهران حاسي بن عقبة",
+            "كراء / بالشهر شقة T3 السانية",
+            "بيع أرض وهران",
+          ]
+        : [
+            "Vente Appartement F4 Bir El Djir Canastel",
+            "Location Villa T5 Oran Hassi Ben Okba",
+            "Location / par mois Appartement T3 Es Senia",
+            "Vente Terrain Oran",
+          ],
+    [lang]
+  );
   const communeOptions = useMemo(() => {
     const byNorm = new Map<string, string>();
     const source = communes.length > 0 ? communes : [...ORAN_COMMUNES];
@@ -1113,6 +1319,7 @@ export default function ListingsClient({
     bedsMin: "",
     bathsMin: "",
     amenities: new Set<AmenityKey>(),
+    excludedAmenities: new Set<AmenityKey>(),
     view: "grid",
     sort: "relevance",
   });
@@ -1139,8 +1346,13 @@ export default function ListingsClient({
   const [aiTrendNow, setAiTrendNow] = useState(0);
   const [filterNowTs] = useState(() => Date.now());
   const [aiStorageReady, setAiStorageReady] = useState(false);
+  const [searchMetrics, setSearchMetrics] = useState<SearchMetricsState>(DEFAULT_SEARCH_METRICS);
+  const [searchBehavior, setSearchBehavior] = useState<SearchBehaviorState>(DEFAULT_SEARCH_BEHAVIOR);
+  const [searchStatsReady, setSearchStatsReady] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const searchContainerRef = useRef<HTMLDivElement | null>(null);
+  const lastTrackedQueryRef = useRef("");
+  const zeroResultQueryRef = useRef("");
   const [searchPanelRect, setSearchPanelRect] = useState<{
     left: number;
     top: number;
@@ -1153,6 +1365,49 @@ export default function ListingsClient({
   const overlayFadeTransition = { duration: 0.16, ease: [0.22, 1, 0.36, 1] as const };
   const modalPopTransition = { type: "spring" as const, stiffness: 340, damping: 30, mass: 0.84 };
   const sheetPopTransition = { type: "spring" as const, stiffness: 320, damping: 28, mass: 0.9 };
+
+  const bumpSearchMetric = (
+    key: keyof Omit<SearchMetricsState, "lastUpdatedAt">,
+    delta = 1
+  ) => {
+    setSearchMetrics((prev) => ({
+      ...prev,
+      [key]: Math.max(0, (prev[key] ?? 0) + delta),
+      lastUpdatedAt: new Date().toISOString(),
+    }));
+  };
+
+  const recordBehaviorRef = (
+    bucket: "views" | "favorites" | "contacts",
+    propertyRef: string,
+    delta = 1
+  ) => {
+    const normRef = normalizeRef(propertyRef);
+    if (!normRef) return;
+    setSearchBehavior((prev) => {
+      const nextBucket = { ...(prev[bucket] ?? {}) };
+      nextBucket[normRef] = Math.max(0, (nextBucket[normRef] ?? 0) + delta);
+      if (nextBucket[normRef] === 0) delete nextBucket[normRef];
+      return {
+        ...prev,
+        [bucket]: nextBucket,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+  };
+
+  const recordRecentQuery = (query: string) => {
+    const qNorm = normalizeText(query);
+    if (!qNorm) return;
+    setSearchBehavior((prev) => {
+      const nextQueries = [qNorm, ...prev.recentQueries.filter((entry) => entry !== qNorm)].slice(0, 18);
+      return {
+        ...prev,
+        recentQueries: nextQueries,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+  };
 
   useEffect(() => {
     if (!mobileFiltersOpen) return;
@@ -1293,6 +1548,33 @@ export default function ListingsClient({
     setFavoriteRefs(new Set(selectedRows.map((row) => normalizeText(row.ref))));
   }, []);
 
+  useEffect(() => {
+    const storedMetrics = safeJsonParse<SearchMetricsState>(
+      localStorage.getItem(SEARCH_METRICS_STORAGE_KEY),
+      DEFAULT_SEARCH_METRICS
+    );
+    const storedBehavior = safeJsonParse<SearchBehaviorState>(
+      localStorage.getItem(SEARCH_BEHAVIOR_STORAGE_KEY),
+      DEFAULT_SEARCH_BEHAVIOR
+    );
+
+    setSearchMetrics({
+      queries: Math.max(0, Number(storedMetrics.queries ?? 0)),
+      zeroResults: Math.max(0, Number(storedMetrics.zeroResults ?? 0)),
+      suggestionClicks: Math.max(0, Number(storedMetrics.suggestionClicks ?? 0)),
+      contactsFromSearch: Math.max(0, Number(storedMetrics.contactsFromSearch ?? 0)),
+      lastUpdatedAt: storedMetrics.lastUpdatedAt,
+    });
+    setSearchBehavior({
+      views: storedBehavior.views ?? {},
+      favorites: storedBehavior.favorites ?? {},
+      contacts: storedBehavior.contacts ?? {},
+      recentQueries: Array.isArray(storedBehavior.recentQueries) ? storedBehavior.recentQueries.slice(0, 18) : [],
+      updatedAt: storedBehavior.updatedAt,
+    });
+    setSearchStatsReady(true);
+  }, []);
+
   const priceSlider = useMemo(() => {
     let min = Number.POSITIVE_INFINITY;
     let maxRaw = Number.NEGATIVE_INFINITY;
@@ -1392,17 +1674,73 @@ export default function ListingsClient({
   const searchSuggestions = useMemo(() => {
     const qNorm = normalizeText(filters.q);
     if (!qNorm) return [] as SearchSuggestion[];
+    const qTokens = tokenizeSearchQuery(filters.q);
+
+    const countMatches = (suggestion: Omit<SearchSuggestion, "matchCount">) => {
+      if (suggestion.type === "transaction" && suggestion.dealType) {
+        return items.reduce((count, item) => {
+          const effectiveDealType = normalizeStoredLocationType(item.locationType) ?? item.type;
+          if (suggestion.dealType === "Vente") return effectiveDealType === "Vente" ? count + 1 : count;
+          if (suggestion.dealType === "Location") return effectiveDealType !== "Vente" ? count + 1 : count;
+          return effectiveDealType === suggestion.dealType ? count + 1 : count;
+        }, 0);
+      }
+      if (suggestion.type === "category" && suggestion.category) {
+        const categoryNorm = normalizeText(suggestion.category);
+        return items.reduce((count, item) => {
+          const hay = buildSearchableListingText(item, communeMatchers);
+          return hay.includes(categoryNorm) ? count + 1 : count;
+        }, 0);
+      }
+      if (suggestion.type === "commune" && suggestion.commune) {
+        const communeNormValue = normalizeText(suggestion.commune);
+        return items.reduce((count, item) => {
+          const parsed = smartParseLocation(item.location, communeMatchers);
+          return normalizeText(parsed.commune) === communeNormValue ? count + 1 : count;
+        }, 0);
+      }
+      if (suggestion.type === "district" && suggestion.district) {
+        const districtNormValue = normalizeText(suggestion.district);
+        const communeNormValue = normalizeText(suggestion.commune ?? "");
+        return items.reduce((count, item) => {
+          const parsed = smartParseLocation(item.location, communeMatchers);
+          const districtMatch = normalizeText(parsed.district) === districtNormValue;
+          const communeMatch = !communeNormValue || normalizeText(parsed.commune) === communeNormValue;
+          return districtMatch && communeMatch ? count + 1 : count;
+        }, 0);
+      }
+      if (suggestion.type === "room" && suggestion.room) {
+        const roomNorm = normalizeText(suggestion.room);
+        return items.reduce((count, item) => {
+          const hay = buildSearchableListingText(item, communeMatchers);
+          return hay.includes(roomNorm) ? count + 1 : count;
+        }, 0);
+      }
+      if (suggestion.type === "amenity" && suggestion.amenity) {
+        const amenityKey = suggestion.amenity;
+        return items.reduce((count, item) => {
+          return Array.isArray(item.amenities) && item.amenities.includes(amenityKey) ? count + 1 : count;
+        }, 0);
+      }
+      return 0;
+    };
 
     const candidates: Array<
       SearchSuggestion & { searchText: string; score: number }
     > = [];
 
     const push = (
-      base: SearchSuggestion,
+      base: Omit<SearchSuggestion, "matchCount">,
       searchText: string
     ) => {
       const textNorm = normalizeText(searchText);
-      if (!textNorm.includes(qNorm)) return;
+      const matchesQuery =
+        textNorm.includes(qNorm) ||
+        (qTokens.length > 0 && qTokens.every((token) => tokenMatchesListingText(textNorm, token)));
+      if (!matchesQuery) return;
+
+      const matchCount = countMatches(base);
+      if (matchCount <= 0) return;
 
       const labelNorm = normalizeText(base.label);
       let score = 3;
@@ -1410,7 +1748,7 @@ export default function ListingsClient({
       else if (labelNorm.startsWith(qNorm) || textNorm.startsWith(qNorm)) score = 1;
       else if (labelNorm.includes(qNorm)) score = 2;
 
-      candidates.push({ ...base, searchText, score });
+      candidates.push({ ...base, matchCount, searchText, score });
     };
 
     TRANSACTION_SUGGESTIONS.forEach((transaction) => {
@@ -1511,8 +1849,20 @@ export default function ListingsClient({
       );
     });
 
+    const typePriority: Record<SearchSuggestionType, number> = {
+      transaction: 0,
+      category: 1,
+      room: 2,
+      commune: 3,
+      district: 4,
+      amenity: 5,
+    };
     candidates.sort(
-      (a, b) => a.score - b.score || a.label.localeCompare(b.label)
+      (a, b) =>
+        typePriority[a.type] - typePriority[b.type] ||
+        a.score - b.score ||
+        b.matchCount - a.matchCount ||
+        a.label.localeCompare(b.label)
     );
 
     const deduped = new Map<string, SearchSuggestion>();
@@ -1529,18 +1879,22 @@ export default function ListingsClient({
           district: candidate.district,
           room: candidate.room,
           amenity: candidate.amenity,
+          matchCount: candidate.matchCount,
         });
       }
     });
 
     return Array.from(deduped.values()).slice(0, 8);
-  }, [filters.q, districtCommuneHints, dealTypeLabelMap, communeOptions]);
+  }, [filters.q, districtCommuneHints, dealTypeLabelMap, communeOptions, items, communeMatchers]);
 
   const applySearchSuggestion = (suggestion: SearchSuggestion) => {
+    bumpSearchMetric("suggestionClicks", 1);
     setFilters((f) => {
       const nextAmenities = suggestion.amenity
         ? new Set([...f.amenities, suggestion.amenity])
         : f.amenities;
+      const nextExcludedAmenities = new Set(f.excludedAmenities);
+      if (suggestion.amenity) nextExcludedAmenities.delete(suggestion.amenity);
 
       return {
         ...f,
@@ -1562,6 +1916,7 @@ export default function ListingsClient({
         rooms: suggestion.type === "room" ? suggestion.room ?? f.rooms : f.rooms,
         category: suggestion.type === "category" ? suggestion.category ?? f.category : f.category,
         amenities: nextAmenities,
+        excludedAmenities: nextExcludedAmenities,
       };
     });
 
@@ -1604,51 +1959,82 @@ export default function ListingsClient({
     }
   };
 
+  const applySmartExampleQuery = (query: string) => {
+    setFilters((f) => ({ ...f, q: query }));
+    bumpSearchMetric("suggestionClicks", 1);
+    setSearchOpen(false);
+    setSearchActiveIndex(-1);
+    searchInputRef.current?.focus();
+  };
+
   const searchSuggestionsContent = (
     <>
       <div className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-black/45">
         {lang === "ar" ? "اقتراحات البحث" : "Suggestions"}
       </div>
-      {searchSuggestions.map((suggestion, index) => {
-        const active = index === searchActiveIndex;
-        const hint = suggestionHint(suggestion, lang);
-        return (
-          <button
-            key={suggestion.key}
-            type="button"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              applySearchSuggestion(suggestion);
-            }}
-            className={cn(
-              "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-start text-sm transition",
-              active ? "bg-[rgb(var(--navy))]/9 text-[rgb(var(--navy))]" : "hover:bg-black/5"
-            )}
-          >
-            <div className="min-w-0 flex items-center gap-2.5">
-              <span
-                className={cn(
-                  "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border",
-                  active
-                    ? "border-[rgb(var(--navy))]/25 bg-[rgb(var(--navy))]/10 text-[rgb(var(--navy))]"
-                    : "border-black/10 bg-white text-black/55"
-                )}
-              >
-                {suggestionIcon(suggestion)}
-              </span>
-              <div className="min-w-0">
-                <div className="truncate text-sm font-semibold">{suggestion.label}</div>
-                {hint ? <div className="truncate text-[11px] text-black/50">{hint}</div> : null}
-              </div>
-            </div>
+      {(
+        [
+          "transaction",
+          "category",
+          "room",
+          "commune",
+          "district",
+          "amenity",
+        ] as SearchSuggestionType[]
+      ).map((type) => {
+        const groupItems = searchSuggestions
+          .map((suggestion, index) => ({ suggestion, index }))
+          .filter((row) => row.suggestion.type === type);
+        if (groupItems.length === 0) return null;
 
-            <div className="shrink-0 flex items-center gap-2">
-              <span className="rounded-full border border-black/10 bg-white px-2 py-0.5 text-[10px] text-black/55">
-                {SEARCH_SUGGESTION_LABELS[lang][suggestion.type]}
-              </span>
-              <ChevronRight size={14} className="text-black/35" />
+        return (
+          <div key={`suggestion-group-${type}`} className="mb-1">
+            <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-black/40">
+              {SEARCH_SUGGESTION_LABELS[lang][type]}
             </div>
-          </button>
+            {groupItems.map(({ suggestion, index }) => {
+              const active = index === searchActiveIndex;
+              const hint = suggestionHint(suggestion, lang);
+              return (
+                <button
+                  key={suggestion.key}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    applySearchSuggestion(suggestion);
+                  }}
+                  className={cn(
+                    "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-start text-sm transition",
+                    active ? "bg-[rgb(var(--navy))]/9 text-[rgb(var(--navy))]" : "hover:bg-black/5"
+                  )}
+                >
+                  <div className="min-w-0 flex items-center gap-2.5">
+                    <span
+                      className={cn(
+                        "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border",
+                        active
+                          ? "border-[rgb(var(--navy))]/25 bg-[rgb(var(--navy))]/10 text-[rgb(var(--navy))]"
+                          : "border-black/10 bg-white text-black/55"
+                      )}
+                    >
+                      {suggestionIcon(suggestion)}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold">{suggestion.label}</div>
+                      {hint ? <div className="truncate text-[11px] text-black/50">{hint}</div> : null}
+                    </div>
+                  </div>
+
+                  <div className="shrink-0 flex items-center gap-2">
+                    <span className="rounded-full border border-black/10 bg-white px-2 py-0.5 text-[10px] font-semibold text-black/55">
+                      {suggestion.matchCount}
+                    </span>
+                    <ChevronRight size={14} className="text-black/35" />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         );
       })}
     </>
@@ -1709,6 +2095,7 @@ export default function ListingsClient({
   // AI parsing for query
   useEffect(() => {
     const q = filters.q.toLowerCase();
+    const qNorm = normalizeText(filters.q);
 
     const kw: Array<[RegExp, AmenityKey]> = [
       [/vue\s*mer|mer\b/, "vue_mer"],
@@ -1742,18 +2129,29 @@ export default function ListingsClient({
       [/italienne|douche/, "sdb_italienne"],
     ];
 
-    if (kw.some(([re]) => re.test(q))) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+    const negatedAmenities = findNegatedAmenities(qNorm);
+    setFilters((f) => {
+      const currentNegated = Array.from(f.excludedAmenities);
+      const nextNegated = Array.from(negatedAmenities);
+      const sameNegated =
+        currentNegated.length === nextNegated.length &&
+        currentNegated.every((value) => negatedAmenities.has(value));
+      if (sameNegated) return f;
+      return { ...f, excludedAmenities: new Set(negatedAmenities) };
+    });
+
+    if (kw.some(([re]) => re.test(qNorm))) {
       setFilters((f) => {
         const next = new Set(f.amenities);
-        kw.forEach(([re, k]) => {
-          if (re.test(q)) next.add(k);
+        kw.forEach(([re, key]) => {
+          if (re.test(qNorm) && !negatedAmenities.has(key)) next.add(key);
         });
+        negatedAmenities.forEach((key) => next.delete(key));
         return { ...f, amenities: next };
       });
     }
 
-    const roomsMatch = q.match(/\b(t[1-6]\+?|f[2-6]\+?|studio)\b/);
+    const roomsMatch = q.match(/\b(t[1-6]\+?|f[1-6]\+?|studio)\b/);
     if (roomsMatch) {
       const token = roomsMatch[1].toLowerCase();
       const normalized = token === "studio" ? "Studio" : token.toUpperCase();
@@ -1785,26 +2183,54 @@ export default function ListingsClient({
       setFilters((f) => ({ ...f, areaMin: m2Min[2] }));
     }
 
-    const qNorm = normalizeText(q);
     if (!qNorm) return;
+
+    const transactionMention = TRANSACTION_SUGGESTIONS.find((entry) => {
+      const label = dealTypeLabelMap.get(entry.dealType) ?? entry.dealType;
+      return (
+        qNorm.includes(normalizeText(label)) ||
+        entry.terms.some((term) => qNorm.includes(normalizeText(term)))
+      );
+    });
+    if (transactionMention) {
+      setFilters((f) =>
+        f.dealType === transactionMention.dealType ? f : { ...f, dealType: transactionMention.dealType }
+      );
+    }
+
+    const categoryMention =
+      CATEGORY_SUGGESTIONS.find((entry) => {
+        return (
+          qNorm.includes(normalizeText(entry.label)) ||
+          entry.terms.some((term) => qNorm.includes(normalizeText(term)))
+        );
+      })?.label ??
+      categoryOptions.find((category) => qNorm.includes(normalizeText(category)));
+    if (categoryMention) {
+      setFilters((f) =>
+        normalizeText(f.category) === normalizeText(categoryMention) ? f : { ...f, category: categoryMention }
+      );
+    }
 
     const communeMention = communeMatchers.find((c) => qNorm.includes(c.norm));
     if (communeMention) {
       setFilters((f) =>
-        normalizeText(f.commune) === communeMention.norm ? f : { ...f, commune: communeMention.raw }
+        normalizeText(f.commune) === communeMention.norm
+          ? f
+          : { ...f, commune: communeMention.raw, district: "" }
       );
-      return;
     }
 
     const districtMention = districtCommuneHints.find((h) => qNorm.includes(h.alias));
     if (districtMention) {
       setFilters((f) =>
-        normalizeText(f.commune) === normalizeText(districtMention.commune)
+        normalizeText(f.commune) === normalizeText(districtMention.commune) &&
+        normalizeText(f.district) === normalizeText(districtMention.district)
           ? f
-          : { ...f, commune: districtMention.commune }
+          : { ...f, commune: districtMention.commune, district: districtMention.district }
       );
     }
-  }, [filters.q, districtCommuneHints, communeMatchers]);
+  }, [filters.q, districtCommuneHints, communeMatchers, categoryOptions, dealTypeLabelMap]);
 
   const handleMinPriceSlider = (value: number) => {
     const nextMin = Math.min(value, priceSlider.maxValue);
@@ -1911,6 +2337,20 @@ export default function ListingsClient({
           }),
       });
     });
+    filters.excludedAmenities.forEach((key) => {
+      const opt = AMENITY_OPTIONS.find((a) => a.key === key);
+      if (!opt) return;
+      chips.push({
+        key: `excludedAmenity:${key}`,
+        label: `🚫 ${opt.label}`,
+        remove: () =>
+          setFilters((f) => {
+            const next = new Set(f.excludedAmenities);
+            next.delete(key);
+            return { ...f, excludedAmenities: next };
+          }),
+      });
+    });
 
     if (filters.priceMin || filters.priceMax) {
       chips.push({
@@ -1946,6 +2386,11 @@ export default function ListingsClient({
 
   const filteredLists = useMemo(() => {
     const qTokens = tokenizeSearchQuery(filters.q);
+    const semanticTokens = expandSemanticTokens(qTokens);
+    const structuredQueryTokens = new Set<string>();
+    const addStructuredTokens = (value: string) => {
+      tokenizeSearchQuery(value).forEach((token) => structuredQueryTokens.add(token));
+    };
 
     const priceMin = parseMoneyToNumber(filters.priceMin);
     const priceMax = parseMoneyToNumber(filters.priceMax);
@@ -1961,6 +2406,46 @@ export default function ListingsClient({
 
     const communeNorm = normalizeText(filters.commune);
     const districtNorm = normalizeText(filters.district);
+
+    if (filters.dealType !== "Tous") {
+      const selectedDealLabel = dealTypeLabelMap.get(filters.dealType) ?? filters.dealType;
+      addStructuredTokens(selectedDealLabel);
+      const transactionTerms =
+        TRANSACTION_SUGGESTIONS.find((entry) => entry.dealType === filters.dealType)?.terms ?? [];
+      transactionTerms.forEach((term) => addStructuredTokens(term));
+    }
+
+    if (filters.category) {
+      addStructuredTokens(filters.category);
+      const matchingCategory = CATEGORY_SUGGESTIONS.find(
+        (entry) =>
+          normalizeText(entry.label) === categoryNorm ||
+          entry.terms.some((term) => normalizeText(term) === categoryNorm)
+      );
+      matchingCategory?.terms.forEach((term) => addStructuredTokens(term));
+    }
+
+    if (filters.rooms) {
+      addStructuredTokens(filters.rooms);
+      const roomNorm = normalizeText(filters.rooms);
+      if (roomNorm.startsWith("t")) addStructuredTokens(roomNorm.replace(/^t/, "f"));
+      if (roomNorm.startsWith("f")) addStructuredTokens(roomNorm.replace(/^f/, "t"));
+    }
+
+    if (filters.commune) {
+      getLocationAliases(filters.commune).forEach((alias) => addStructuredTokens(alias));
+    }
+
+    if (filters.district) {
+      getLocationAliases(filters.district).forEach((alias) => addStructuredTokens(alias));
+      districtCommuneHints.forEach((hint) => {
+        const sameDistrict = normalizeText(hint.district) === districtNorm;
+        const sameCommune = !communeNorm || normalizeText(hint.commune) === communeNorm;
+        if (sameDistrict && sameCommune) addStructuredTokens(hint.alias);
+      });
+    }
+
+    const relevanceScoreByRef = new Map<string, number>();
 
     const matchesBaseFilters = (p: PropertyItem, includeAmenityFilters: boolean) => {
       const hay = buildSearchableListingText(p, communeMatchers);
@@ -1978,14 +2463,28 @@ export default function ListingsClient({
               (TRANSACTION_SUGGESTIONS.find((entry) => entry.dealType === filters.dealType)?.terms ?? []).some(
                 (term) => hay.includes(normalizeText(term))
               ));
-      const byQ = qTokens.length > 0 ? qTokens.every((token) => hay.includes(token)) : true;
+      const tokenMatches = qTokens.reduce((count, token) => {
+        if (structuredQueryTokens.has(token)) return count + 1;
+        return tokenMatchesListingText(hay, token) ? count + 1 : count;
+      }, 0);
+      const semanticHits = semanticTokens.reduce((count, token) => {
+        return tokenMatchesListingText(hay, token) ? count + 1 : count;
+      }, 0);
+      const requiredMatches =
+        qTokens.length <= 2 ? qTokens.length : Math.max(1, Math.ceil(qTokens.length * 0.6));
+      const semanticThreshold =
+        semanticTokens.length === 0 ? 0 : Math.max(1, Math.ceil(semanticTokens.length * 0.45));
+      const byQ =
+        qTokens.length === 0
+          ? true
+          : tokenMatches >= requiredMatches || semanticHits >= semanticThreshold;
       const byCategory = categoryNorm ? hay.includes(categoryNorm) : true;
 
       const parsed = smartParseLocation(p.location, communeMatchers);
       const byCommune = filters.commune ? normalizeText(parsed.commune) === communeNorm : true;
       const byDistrict = filters.district ? normalizeText(parsed.district) === districtNorm : true;
 
-      const byRooms = filters.rooms ? `${p.title} ${p.location}`.toLowerCase().includes(filters.rooms.toLowerCase()) : true;
+      const byRooms = filters.rooms ? hay.includes(normalizeText(filters.rooms)) : true;
 
       const pPrice = parseMoneyToNumber(p.price);
       const byPriceMin = priceMin != null && pPrice != null ? pPrice >= priceMin : true;
@@ -2013,6 +2512,30 @@ export default function ListingsClient({
           : Array.isArray(p.amenities)
           ? Array.from(filters.amenities).every((k) => p.amenities!.includes(k))
           : true;
+      const byExcludedAmenities =
+        filters.excludedAmenities.size === 0
+          ? true
+          : Array.isArray(p.amenities)
+          ? !Array.from(filters.excludedAmenities).some((key) => p.amenities!.includes(key))
+          : true;
+
+      const refKey = normalizeRef(p.ref);
+      const viewCount = searchBehavior.views[refKey] ?? 0;
+      const favoriteCount = searchBehavior.favorites[refKey] ?? 0;
+      const contactCount = searchBehavior.contacts[refKey] ?? 0;
+      const engagementScore = viewCount * 0.7 + favoriteCount * 1.9 + contactCount * 3.1;
+      const freshnessScore = (() => {
+        const createdTs = p.createdAt ? new Date(p.createdAt).getTime() : NaN;
+        if (!Number.isFinite(createdTs)) return 0;
+        const ageDays = Math.max(0, (filterNowTs - createdTs) / (24 * 60 * 60 * 1000));
+        return Math.max(0, 12 - ageDays * 0.16);
+      })();
+      const photoScore = Math.min(Array.isArray(p.images) ? p.images.length : 0, 6) * 1.05;
+      const textualScore =
+        qTokens.length === 0 ? 0 : (tokenMatches / qTokens.length) * 42 + (semanticHits / Math.max(1, semanticTokens.length)) * 18;
+      const structuredScore =
+        (byDeal ? 5 : 0) + (byCategory ? 4 : 0) + (byCommune ? 3 : 0) + (byDistrict ? 2 : 0) + (byRooms ? 2 : 0);
+      relevanceScoreByRef.set(refKey, textualScore + structuredScore + freshnessScore + photoScore + engagementScore);
 
       return (
         byDeal &&
@@ -2029,13 +2552,20 @@ export default function ListingsClient({
         byBaths &&
         byPhotos &&
         byPublishedWithin &&
-        byAmenities
+        byAmenities &&
+        byExcludedAmenities
       );
     };
 
     const sortList = (list: PropertyItem[]) => {
       const sort = filters.sort;
-      if (sort === "relevance") return list;
+      if (sort === "relevance") {
+        return [...list].sort((a, b) => {
+          const aScore = relevanceScoreByRef.get(normalizeRef(a.ref)) ?? 0;
+          const bScore = relevanceScoreByRef.get(normalizeRef(b.ref)) ?? 0;
+          return bScore - aScore;
+        });
+      }
       return [...list].sort((a, b) => {
         const ap = parseMoneyToNumber(a.price) ?? 0;
         const bp = parseMoneyToNumber(b.price) ?? 0;
@@ -2054,8 +2584,8 @@ export default function ListingsClient({
     const withAmenities = sortList(items.filter((p) => matchesBaseFilters(p, true)));
     const withoutAmenities = sortList(items.filter((p) => matchesBaseFilters(p, false)));
 
-    return { withAmenities, withoutAmenities };
-  }, [items, filters, filterNowTs, communeMatchers]);
+    return { withAmenities, withoutAmenities, relevanceScoreByRef };
+  }, [items, filters, filterNowTs, communeMatchers, districtCommuneHints, dealTypeLabelMap, searchBehavior]);
 
   const computed = filteredLists.withAmenities;
   const contextResults = filteredLists.withoutAmenities;
@@ -2083,6 +2613,45 @@ export default function ListingsClient({
     });
   }, [computed, displayMode, mapBoundsOnly, effectiveMapCommuneBounds, communeMatchers]);
 
+  useEffect(() => {
+    if (!searchStatsReady) return;
+    const qNorm = normalizeText(filters.q);
+    if (!qNorm) {
+      lastTrackedQueryRef.current = "";
+      zeroResultQueryRef.current = "";
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      if (lastTrackedQueryRef.current === qNorm) return;
+      lastTrackedQueryRef.current = qNorm;
+      zeroResultQueryRef.current = "";
+      bumpSearchMetric("queries", 1);
+      recordRecentQuery(qNorm);
+    }, 380);
+    return () => window.clearTimeout(timeout);
+  }, [filters.q, searchStatsReady]);
+
+  useEffect(() => {
+    if (!searchStatsReady) return;
+    const qNorm = normalizeText(filters.q);
+    if (!qNorm || boundedResults.length > 0) return;
+    if (zeroResultQueryRef.current === qNorm) return;
+    zeroResultQueryRef.current = qNorm;
+    bumpSearchMetric("zeroResults", 1);
+  }, [boundedResults.length, filters.q, searchStatsReady]);
+
+  const searchQuality = useMemo(() => {
+    const queryCount = Math.max(1, searchMetrics.queries);
+    const zeroRate = (searchMetrics.zeroResults / queryCount) * 100;
+    const suggestionCtr = (searchMetrics.suggestionClicks / queryCount) * 100;
+    const contactConversion = (searchMetrics.contactsFromSearch / queryCount) * 100;
+    return {
+      zeroRate,
+      suggestionCtr,
+      contactConversion,
+    };
+  }, [searchMetrics]);
+
   const mapQuery = useMemo(() => {
     const chosen = effectiveMapCommuneBounds.length > 0 ? effectiveMapCommuneBounds : mapCommunes.slice(0, 4);
     if (chosen.length === 0) return "";
@@ -2099,7 +2668,226 @@ export default function ListingsClient({
     [compareRefs, items]
   );
 
+  const recommendations = useMemo<Recommendation[]>(() => {
+    const source = contextResults.length > 0 ? contextResults : items;
+    if (source.length === 0) return [];
+
+    const byRef = new Map(source.map((item) => [normalizeRef(item.ref), item]));
+    const categoryWeights = new Map<string, number>();
+    const communeWeights = new Map<string, number>();
+    const amenityWeights = new Map<AmenityKey, number>();
+    const preferredPrices: number[] = [];
+
+    const addWeightedItem = (refKey: string, weight: number) => {
+      const item = byRef.get(refKey) ?? items.find((row) => normalizeRef(row.ref) === refKey);
+      if (!item || weight <= 0) return;
+      const categoryNorm = normalizeText(item.category ?? inferListingCategories(item)[0] ?? "");
+      if (categoryNorm) categoryWeights.set(categoryNorm, (categoryWeights.get(categoryNorm) ?? 0) + weight);
+
+      const parsed = smartParseLocation(item.location, communeMatchers);
+      const communeNormValue = normalizeText(parsed.commune);
+      if (communeNormValue) communeWeights.set(communeNormValue, (communeWeights.get(communeNormValue) ?? 0) + weight);
+
+      (item.amenities ?? []).forEach((amenity) => {
+        amenityWeights.set(amenity, (amenityWeights.get(amenity) ?? 0) + weight);
+      });
+
+      const price = parseMoneyToNumber(item.price);
+      if (price != null) preferredPrices.push(price);
+    };
+
+    Object.entries(searchBehavior.views).forEach(([refKey, count]) => addWeightedItem(refKey, count * 0.7));
+    Object.entries(searchBehavior.favorites).forEach(([refKey, count]) => addWeightedItem(refKey, count * 2.1));
+    Object.entries(searchBehavior.contacts).forEach(([refKey, count]) => addWeightedItem(refKey, count * 3.4));
+
+    const medianPreferredPrice = (() => {
+      if (preferredPrices.length === 0) return null;
+      const sorted = [...preferredPrices].sort((a, b) => a - b);
+      return sorted[Math.floor(sorted.length / 2)] ?? null;
+    })();
+
+    return source
+      .map((property) => {
+        const refKey = normalizeRef(property.ref);
+        const baseRelevance = filteredLists.relevanceScoreByRef.get(refKey) ?? 0;
+        const parsed = smartParseLocation(property.location, communeMatchers);
+        const propertyCategoryNorm = normalizeText(
+          property.category ?? inferListingCategories(property)[0] ?? ""
+        );
+        const propertyCommuneNorm = normalizeText(parsed.commune);
+        const categoryScore = categoryWeights.get(propertyCategoryNorm) ?? 0;
+        const communeScore = communeWeights.get(propertyCommuneNorm) ?? 0;
+        const amenityScore = (property.amenities ?? []).reduce(
+          (sum, amenity) => sum + (amenityWeights.get(amenity) ?? 0),
+          0
+        );
+        const priceScore = (() => {
+          if (medianPreferredPrice == null) return 0;
+          const price = parseMoneyToNumber(property.price);
+          if (price == null || medianPreferredPrice <= 0) return 0;
+          const gapRatio = Math.abs(price - medianPreferredPrice) / medianPreferredPrice;
+          return Math.max(0, 8 - gapRatio * 10);
+        })();
+        const freshnessScore = (() => {
+          const createdTs = property.createdAt ? new Date(property.createdAt).getTime() : NaN;
+          if (!Number.isFinite(createdTs)) return 0;
+          const ageDays = Math.max(0, (filterNowTs - createdTs) / (24 * 60 * 60 * 1000));
+          return Math.max(0, 5 - ageDays * 0.12);
+        })();
+        const exploredPenalty = (searchBehavior.views[refKey] ?? 0) * 0.9;
+
+        const score =
+          baseRelevance * 0.35 +
+          categoryScore * 1.8 +
+          communeScore * 1.5 +
+          amenityScore * 1.2 +
+          priceScore +
+          freshnessScore -
+          exploredPenalty;
+
+        let reason = lang === "ar" ? "اقتراح متوازن حسب بحثك" : "Suggestion equilibree selon votre recherche";
+        if (communeScore >= categoryScore && communeScore >= amenityScore && parsed.commune) {
+          reason = lang === "ar" ? `نفس البلدية: ${parsed.commune}` : `Même commune: ${parsed.commune}`;
+        } else if (categoryScore >= amenityScore && property.category) {
+          reason = lang === "ar" ? `نفس الفئة: ${property.category}` : `Même catégorie: ${property.category}`;
+        } else if (amenityScore > 0 && Array.isArray(property.amenities) && property.amenities.length > 0) {
+          const topAmenity = property.amenities
+            .slice()
+            .sort((a, b) => (amenityWeights.get(b) ?? 0) - (amenityWeights.get(a) ?? 0))[0];
+          reason =
+            lang === "ar"
+              ? `تجهيز مشابه: ${amenityLabel(topAmenity)}`
+              : `Equipement proche: ${amenityLabel(topAmenity)}`;
+        }
+
+        return { property, reason, score };
+      })
+      .filter((entry) => entry.score > 0.5)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 4);
+  }, [contextResults, items, searchBehavior, filteredLists.relevanceScoreByRef, communeMatchers, filterNowTs, lang]);
+
+  const zeroResultRecoveryActions = useMemo<RecoveryAction[]>(() => {
+    const actions: RecoveryAction[] = [];
+
+    if (filters.district) {
+      actions.push({
+        key: "drop-district",
+        label: lang === "ar" ? "إزالة الحي" : "Retirer le quartier",
+        hint: lang === "ar" ? "توسيع إلى كامل البلدية" : "Elargir a toute la commune",
+        apply: (current) => ({ ...current, district: "" }),
+      });
+    }
+
+    if (filters.commune) {
+      actions.push({
+        key: "drop-commune",
+        label: lang === "ar" ? "إزالة البلدية" : "Retirer la commune",
+        hint: lang === "ar" ? "البحث على مستوى وهران" : "Rechercher sur tout Oran",
+        apply: (current) => ({ ...current, commune: "", district: "" }),
+      });
+    }
+
+    if (filters.rooms) {
+      const roomToken = normalizeText(filters.rooms);
+      const roomMatch = roomToken.match(/([tf])(\d+)/);
+      if (roomMatch) {
+        const roomType = roomMatch[1].toUpperCase();
+        const roomNum = Number(roomMatch[2]);
+        if (Number.isFinite(roomNum) && roomNum > 1) {
+          actions.push({
+            key: "room-minus",
+            label: lang === "ar" ? "غرفة أقل" : "Une piece de moins",
+            hint: `${roomType}${roomNum - 1}`,
+            apply: (current) => ({ ...current, rooms: `${roomType}${roomNum - 1}` }),
+          });
+        }
+        if (Number.isFinite(roomNum) && roomNum < 6) {
+          actions.push({
+            key: "room-plus",
+            label: lang === "ar" ? "غرفة إضافية" : "Une piece de plus",
+            hint: `${roomType}${roomNum + 1}`,
+            apply: (current) => ({ ...current, rooms: `${roomType}${roomNum + 1}` }),
+          });
+        }
+      }
+    }
+
+    const currentMax = parseMoneyToNumber(filters.priceMax);
+    if (currentMax && currentMax > 0) {
+      actions.push({
+        key: "raise-budget",
+        label: lang === "ar" ? "زيادة الميزانية 15%" : "Augmenter budget +15%",
+        hint: `${formatMoneyDzd(Math.round(currentMax * 1.15), lang)}`,
+        apply: (current) => ({ ...current, priceMax: String(Math.round(currentMax * 1.15)) }),
+      });
+    }
+
+    if (filters.amenities.size > 0) {
+      actions.push({
+        key: "drop-amenities",
+        label: lang === "ar" ? "إزالة التجهيزات" : "Retirer equipements",
+        hint: lang === "ar" ? "توسيع النتائج" : "Elargir les resultats",
+        apply: (current) => ({ ...current, amenities: new Set<AmenityKey>() }),
+      });
+    }
+
+    if (filters.excludedAmenities.size > 0) {
+      actions.push({
+        key: "drop-excluded-amenities",
+        label: lang === "ar" ? "إلغاء الاستبعاد" : "Retirer exclusions",
+        hint: lang === "ar" ? "إظهار كل التجهيزات" : "Afficher tous les equipements",
+        apply: (current) => ({ ...current, excludedAmenities: new Set<AmenityKey>() }),
+      });
+    }
+
+    if (actions.length === 0 && activeChips.length > 0) {
+      actions.push({
+        key: "reset-all",
+        label: lang === "ar" ? "إعادة ضبط الكل" : "Reinitialiser tout",
+        hint: lang === "ar" ? "البحث بدون قيود" : "Revenir a une recherche ouverte",
+        apply: (current) => ({
+          ...current,
+          q: "",
+          dealType: "Tous",
+          category: "",
+          publishedWithin: "all",
+          withPhotosOnly: false,
+          commune: "",
+          district: "",
+          rooms: "",
+          priceMin: "",
+          priceMax: "",
+          areaMin: "",
+          areaMax: "",
+          bedsMin: "",
+          bathsMin: "",
+          amenities: new Set<AmenityKey>(),
+          excludedAmenities: new Set<AmenityKey>(),
+          sort: "relevance",
+        }),
+      });
+    }
+
+    return actions.slice(0, 4);
+  }, [filters, lang, activeChips.length]);
+
   const filteredCount = activeChips.length;
+  const smartParsedSummary = useMemo(() => {
+    const rows: string[] = [];
+    if (filters.dealType !== "Tous") rows.push(dealTypeLabelMap.get(filters.dealType) ?? filters.dealType);
+    if (filters.category) rows.push(filters.category);
+    if (filters.rooms) rows.push(filters.rooms);
+    if (filters.commune) rows.push(filters.commune);
+    if (filters.district) rows.push(filters.district);
+    if (filters.excludedAmenities.size > 0) {
+      const labels = Array.from(filters.excludedAmenities)
+        .map((key) => AMENITY_OPTIONS.find((row) => row.key === key)?.label)
+        .filter(Boolean) as string[];
+      if (labels.length > 0) rows.push(`-${labels.slice(0, 2).join(", ")}`);
+    }
+    return rows;
+  }, [filters, dealTypeLabelMap]);
   const listingInsights = useMemo(() => {
     const visible = boundedResults.length > 0 ? boundedResults : computed;
     const communes = new Set<string>();
@@ -2146,6 +2934,7 @@ export default function ListingsClient({
         areaMin: filters.areaMin,
         areaMax: filters.areaMax,
         aiPresetKeys: activeAiPresetKeys,
+        excludedAmenities: Array.from(filters.excludedAmenities),
       },
     };
 
@@ -2179,6 +2968,10 @@ export default function ListingsClient({
     });
   };
 
+  const handleOpenProperty = (property: PropertyItem) => {
+    recordBehaviorRef("views", property.ref, 1);
+  };
+
   const toggleFavorite = (property: PropertyItem) => {
     const storageRows = normalizeFavoriteRows(
       safeJsonParse<unknown[]>(localStorage.getItem(favoritesStorageKey), [])
@@ -2205,6 +2998,7 @@ export default function ListingsClient({
 
     localStorage.setItem(favoritesStorageKey, JSON.stringify(nextRows));
     setFavoriteRefs(new Set(nextRows.map((row) => normalizeText(row.ref))));
+    recordBehaviorRef("favorites", property.ref, exists ? -1 : 1);
   };
 
   const hasCompareBar = compareRefs.length > 0;
@@ -2298,6 +3092,16 @@ export default function ListingsClient({
     localStorage.setItem(AI_CUSTOM_STORAGE_KEY, JSON.stringify(payload));
   }, [customAiPresets, aiStorageReady]);
 
+  useEffect(() => {
+    if (!searchStatsReady) return;
+    localStorage.setItem(SEARCH_METRICS_STORAGE_KEY, JSON.stringify(searchMetrics));
+  }, [searchMetrics, searchStatsReady]);
+
+  useEffect(() => {
+    if (!searchStatsReady) return;
+    localStorage.setItem(SEARCH_BEHAVIOR_STORAGE_KEY, JSON.stringify(searchBehavior));
+  }, [searchBehavior, searchStatsReady]);
+
   const resetAll = () => {
     setFilters((f) => ({
       ...f,
@@ -2316,6 +3120,7 @@ export default function ListingsClient({
       bedsMin: "",
       bathsMin: "",
       amenities: new Set<AmenityKey>(),
+      excludedAmenities: new Set<AmenityKey>(),
       sort: "relevance",
     }));
     setMapBoundsOnly(false);
@@ -2589,6 +3394,7 @@ export default function ListingsClient({
           bedsMin: "",
           bathsMin: "",
           amenities: next,
+          excludedAmenities: new Set<AmenityKey>(),
         };
       }
       return { ...f, amenities: next };
@@ -2698,57 +3504,76 @@ export default function ListingsClient({
             </div>
           </div>
 
-          <div className="flex w-full flex-col gap-2 md:w-[560px] md:flex-row">
-            <div
-              ref={searchContainerRef}
-              className="relative flex h-11 w-full items-center gap-2 rounded-xl border border-black/10 bg-white/80 px-3 text-sm shadow-sm backdrop-blur transition focus-within:border-[rgb(var(--gold))]/60 focus-within:shadow-[0_8px_24px_rgba(15,23,42,0.08)]"
-            >
-              <Search size={16} className="text-black/50" />
-              <input
-                ref={searchInputRef}
-                value={filters.q}
-                onChange={(e) => {
-                  setFilters((f) => ({ ...f, q: e.target.value }));
-                  setSearchOpen(true);
-                  setSearchActiveIndex(-1);
-                }}
-                onFocus={() => {
-                  if (searchSuggestions.length) setSearchOpen(true);
-                }}
-                onBlur={() => {
-                  window.setTimeout(() => {
-                    setSearchOpen(false);
+          <div className="flex w-full flex-col gap-2 md:w-[560px]">
+            <div className="flex w-full flex-col gap-2 md:flex-row">
+              <div
+                ref={searchContainerRef}
+                className="relative flex h-11 w-full items-center gap-2 rounded-xl border border-black/10 bg-white/80 px-3 text-sm shadow-sm backdrop-blur transition focus-within:border-[rgb(var(--gold))]/60 focus-within:shadow-[0_8px_24px_rgba(15,23,42,0.08)]"
+              >
+                <Search size={16} className="text-black/50" />
+                <input
+                  ref={searchInputRef}
+                  value={filters.q}
+                  onChange={(e) => {
+                    setFilters((f) => ({ ...f, q: e.target.value }));
+                    setSearchOpen(true);
                     setSearchActiveIndex(-1);
-                  }, 120);
-                }}
-                onKeyDown={handleSearchKeyDown}
-                placeholder={t.searchPh}
-                className="w-full bg-transparent outline-none"
-                aria-autocomplete="list"
-              />
-              <span className="hidden rounded-md border border-black/10 bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-black/45 md:inline-flex">
-                /
-              </span>
+                  }}
+                  onFocus={() => {
+                    if (searchSuggestions.length) setSearchOpen(true);
+                  }}
+                  onBlur={() => {
+                    window.setTimeout(() => {
+                      setSearchOpen(false);
+                      setSearchActiveIndex(-1);
+                    }, 120);
+                  }}
+                  onKeyDown={handleSearchKeyDown}
+                  placeholder={t.searchPh}
+                  className="w-full bg-transparent outline-none"
+                  aria-autocomplete="list"
+                />
+                <span className="hidden rounded-md border border-black/10 bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-black/45 md:inline-flex">
+                  /
+                </span>
 
-              {searchOpen && searchSuggestions.length > 0 && (
-                <div
-                  className="absolute left-0 right-0 top-[calc(100%+8px)] z-40 hidden max-h-[46vh] overflow-y-auto overflow-x-hidden rounded-2xl border border-black/10 bg-white/95 p-1.5 shadow-xl backdrop-blur md:block"
-                  role="listbox"
-                >
-                  {searchSuggestionsContent}
-                </div>
-              )}
+                {searchOpen && searchSuggestions.length > 0 && (
+                  <div
+                    className="absolute left-0 right-0 top-[calc(100%+8px)] z-40 hidden max-h-[46vh] overflow-y-auto overflow-x-hidden rounded-2xl border border-black/10 bg-white/95 p-1.5 shadow-xl backdrop-blur md:block"
+                    role="listbox"
+                  >
+                    {searchSuggestionsContent}
+                  </div>
+                )}
+              </div>
+
+              <AppDropdown
+                value={filters.dealType}
+                onValueChange={(value) =>
+                  setFilters((f) => ({ ...f, dealType: value as DealType }))
+                }
+                options={dealTypeOptions}
+                className="md:w-40"
+                triggerClassName="h-11 border-white/30 bg-white/75 backdrop-blur focus-visible:border-white/60"
+              />
             </div>
 
-            <AppDropdown
-              value={filters.dealType}
-              onValueChange={(value) =>
-                setFilters((f) => ({ ...f, dealType: value as DealType }))
-              }
-              options={dealTypeOptions}
-              className="md:w-40"
-              triggerClassName="h-11 border-white/30 bg-white/75 backdrop-blur focus-visible:border-white/60"
-            />
+            {filters.q.trim() && smartParsedSummary.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-white/85">
+                <span className="rounded-full border border-white/25 bg-white/12 px-2 py-0.5 font-semibold uppercase tracking-[0.11em]">
+                  {lang === "ar" ? "تحليل" : "Parsed"}
+                </span>
+                {smartParsedSummary.map((entry) => (
+                  <span
+                    key={`parsed-${entry}`}
+                    className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 font-medium"
+                  >
+                    {entry}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+
           </div>
         </div>
 
@@ -3132,9 +3957,11 @@ export default function ListingsClient({
                       onChange={(e) =>
                         setFilters((f) => {
                           const next = new Set(f.amenities);
+                          const nextExcluded = new Set(f.excludedAmenities);
                           if (e.target.checked) next.add(a.key);
                           else next.delete(a.key);
-                          return { ...f, amenities: next };
+                          if (e.target.checked) nextExcluded.delete(a.key);
+                          return { ...f, amenities: next, excludedAmenities: nextExcluded };
                         })
                       }
                     />
@@ -3424,6 +4251,65 @@ export default function ListingsClient({
             </div>
           </motion.div>
 
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: "easeOut", delay: 0.02 }}
+            className="rounded-2xl border border-black/10 bg-white/70 p-3.5 backdrop-blur"
+          >
+            <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]">
+              {lang === "ar" ? "مؤشرات البحث الذكي" : "Smart Search Metrics"}
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
+              <div className="rounded-xl border border-black/10 bg-white px-2.5 py-2">
+                <div className="text-black/45">{lang === "ar" ? "الاستعلامات" : "Queries"}</div>
+                <div className="font-semibold text-[rgb(var(--navy))]">{searchMetrics.queries}</div>
+              </div>
+              <div className="rounded-xl border border-black/10 bg-white px-2.5 py-2">
+                <div className="text-black/45">{lang === "ar" ? "بدون نتائج" : "Zero Result %"}</div>
+                <div className="font-semibold text-[rgb(var(--navy))]">{searchQuality.zeroRate.toFixed(1)}%</div>
+              </div>
+              <div className="rounded-xl border border-black/10 bg-white px-2.5 py-2">
+                <div className="text-black/45">{lang === "ar" ? "نقرات الاقتراح" : "Suggestion CTR"}</div>
+                <div className="font-semibold text-[rgb(var(--navy))]">{searchQuality.suggestionCtr.toFixed(1)}%</div>
+              </div>
+              <div className="rounded-xl border border-black/10 bg-white px-2.5 py-2">
+                <div className="text-black/45">{lang === "ar" ? "تحويل للتواصل" : "Search -> Contact"}</div>
+                <div className="font-semibold text-[rgb(var(--navy))]">
+                  {searchQuality.contactConversion.toFixed(1)}%
+                </div>
+              </div>
+            </div>
+          </motion.div>
+
+          {recommendations.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, ease: "easeOut", delay: 0.03 }}
+              className="rounded-2xl border border-black/10 bg-white/75 p-3.5 backdrop-blur"
+            >
+              <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]">
+                <Sparkles size={14} className="text-[rgb(var(--gold))]" />
+                <span>{lang === "ar" ? "مقترح لك" : "Suggested For You"}</span>
+              </div>
+              <div className="grid gap-2 md:grid-cols-2">
+                {recommendations.map((entry) => (
+                  <a
+                    key={`reco-${entry.property.ref}`}
+                    href={`/biens/${entry.property.ref}`}
+                    onClick={() => handleOpenProperty(entry.property)}
+                    className="rounded-xl border border-black/10 bg-white px-3 py-2 transition hover:bg-neutral-100"
+                  >
+                    <div className="text-sm font-semibold text-[rgb(var(--navy))]">{entry.property.title}</div>
+                    <div className="text-xs text-black/55">{entry.property.location}</div>
+                    <div className="mt-1 text-[11px] text-black/45">{entry.reason}</div>
+                  </a>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
           {activeChips.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -3450,6 +4336,29 @@ export default function ListingsClient({
               </div>
             </motion.div>
           )}
+
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: "easeOut", delay: 0.03 }}
+            className="rounded-2xl border border-black/10 bg-white/70 p-3.5 shadow-sm backdrop-blur"
+          >
+            <div className="mb-2 text-xs font-semibold uppercase tracking-[0.11em] text-[rgb(var(--navy))]">
+              {lang === "ar" ? "أمثلة بحث ذكي" : "Exemples Recherche Intelligente"}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {smartSearchExamples.map((example) => (
+                <button
+                  key={`results-example-${example}`}
+                  type="button"
+                  onClick={() => applySmartExampleQuery(example)}
+                  className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-[rgb(var(--navy))] hover:bg-neutral-100"
+                >
+                  {example}
+                </button>
+              ))}
+            </div>
+          </motion.div>
 
           {displayMode === "map" && (
             <div className="rounded-2xl border border-black/10 bg-white/75 p-4 shadow-sm backdrop-blur">
@@ -3522,10 +4431,13 @@ export default function ListingsClient({
                 property={property}
                 isCompared={compareRefs.includes(property.ref)}
                 isFavorite={favoriteRefs.has(normalizeText(property.ref))}
+                onOpen={handleOpenProperty}
                 onToggleCompare={toggleCompare}
                 onToggleFavorite={toggleFavorite}
                 onQuickContact={(selected) => {
                   setQuickContactRef(selected.ref);
+                  recordBehaviorRef("contacts", selected.ref, 1);
+                  bumpSearchMetric("contactsFromSearch", 1);
                   updateAiStats(activeAiPresetKeys, "contacts");
                 }}
               />
@@ -3539,7 +4451,13 @@ export default function ListingsClient({
               <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setFilters((f) => ({ ...f, amenities: new Set<AmenityKey>() }))}
+                  onClick={() =>
+                    setFilters((f) => ({
+                      ...f,
+                      amenities: new Set<AmenityKey>(),
+                      excludedAmenities: new Set<AmenityKey>(),
+                    }))
+                  }
                   className="rounded-full border border-black/10 bg-white px-3 py-1 text-sm hover:bg-neutral-100"
                 >
                   {t.clearAmenity}
@@ -3558,6 +4476,41 @@ export default function ListingsClient({
                 >
                   {t.clearLocation}
                 </button>
+              </div>
+              {zeroResultRecoveryActions.length > 0 && (
+                <div className="mt-4">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]">
+                    {lang === "ar" ? "اقتراحات ذكية" : "Smart Recovery"}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    {zeroResultRecoveryActions.map((action) => (
+                      <button
+                        key={action.key}
+                        type="button"
+                        onClick={() => {
+                          setFilters((current) => action.apply(current));
+                          bumpSearchMetric("suggestionClicks", 1);
+                        }}
+                        className="rounded-full border border-black/10 bg-white px-3 py-1 text-xs font-semibold text-[rgb(var(--navy))] hover:bg-neutral-100"
+                        title={action.hint}
+                      >
+                        {action.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
+                {smartSearchExamples.map((example) => (
+                  <button
+                    key={`empty-example-${example}`}
+                    type="button"
+                    onClick={() => applySmartExampleQuery(example)}
+                    className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-[rgb(var(--navy))] hover:bg-neutral-100"
+                  >
+                    {example}
+                  </button>
+                ))}
               </div>
             </div>
           )}

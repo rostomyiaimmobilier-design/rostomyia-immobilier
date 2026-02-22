@@ -13,7 +13,12 @@ function getGoogleOAuthRedirectTo() {
   const siteUrlFromEnv = String(process.env.NEXT_PUBLIC_SITE_URL ?? "").trim();
   const browserOrigin = typeof window !== "undefined" ? window.location.origin : "";
   const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(browserOrigin);
-  const base = isLocalhost ? browserOrigin : siteUrlFromEnv || browserOrigin;
+  const envIsLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(siteUrlFromEnv);
+  const base = isLocalhost
+    ? browserOrigin
+    : siteUrlFromEnv && !envIsLocalhost
+      ? siteUrlFromEnv
+      : browserOrigin;
   return `${base.replace(/\/+$/, "")}/auth/callback`;
 }
 

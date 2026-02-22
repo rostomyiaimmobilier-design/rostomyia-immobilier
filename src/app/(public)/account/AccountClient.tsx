@@ -96,6 +96,20 @@ function normalizePhone(value: string) {
   return `+${trimmed.replace(/\D/g, "")}`;
 }
 
+function formatPriceWithCurrency(value: string | null) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/(dzd|da|دج|dinars?)/i.test(trimmed)) return trimmed;
+
+  const digits = trimmed.replace(/[^\d]/g, "");
+  if (!digits) return `${trimmed} DZD`;
+
+  const n = Number(digits);
+  if (!Number.isFinite(n)) return `${trimmed} DZD`;
+  return `${n.toLocaleString("fr-FR")} DZD`;
+}
+
 function stableCoverImageUrl(value: unknown): string | null {
   if (!nonEmpty(value)) return null;
   const raw = String(value).trim();
@@ -681,17 +695,20 @@ export default function AccountClient({ user }: { user: AccountUser }) {
         )}
       </section>
 
-      <section className="mt-6 rounded-3xl border border-[rgb(var(--navy))]/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(248,250,253,0.9))] p-5 backdrop-blur">
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+      <section className="relative mt-6 overflow-hidden rounded-3xl border border-[rgb(var(--navy))]/14 bg-[linear-gradient(170deg,rgba(255,255,255,0.98),rgba(245,248,252,0.92))] p-5 backdrop-blur">
+        <div className="pointer-events-none absolute -right-24 top-[-110px] h-56 w-56 rounded-full bg-[rgb(var(--gold))]/12 blur-3xl" />
+        <div className="pointer-events-none absolute -left-20 bottom-[-120px] h-52 w-52 rounded-full bg-[rgb(var(--navy))]/8 blur-3xl" />
+
+        <div className="relative mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="inline-flex items-center gap-2 text-sm font-semibold text-[rgb(var(--navy))]">
               <Heart size={16} />
               Favoris
-              <span className="rounded-full border border-[rgb(var(--navy))]/15 bg-[rgb(var(--navy))]/5 px-2 py-0.5 text-xs font-semibold text-[rgb(var(--navy))]">
+              <span className="rounded-full border border-[rgb(var(--navy))]/20 bg-[rgb(var(--navy))]/7 px-2 py-0.5 text-xs font-semibold text-[rgb(var(--navy))]">
                 {favorites.length}
               </span>
             </div>
-            <p className="mt-1 text-xs text-black/60">Retrouvez vos biens enregistres avec leur photo de couverture.</p>
+            <p className="mt-1 text-xs text-black/60">Votre selection de biens avec apercu photo et acces rapide.</p>
           </div>
           {favorites.length > 0 ? (
             <button
@@ -705,67 +722,80 @@ export default function AccountClient({ user }: { user: AccountUser }) {
           ) : null}
         </div>
 
+        <div className="mb-4 h-px w-full bg-[linear-gradient(90deg,rgba(2,6,23,0.12),rgba(2,6,23,0.02))]" />
+
         {favorites.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-black/15 bg-white/95 px-4 py-5 text-sm text-black/55">
-            Aucun favori pour le moment.
-          </p>
+          <div className="rounded-2xl border border-dashed border-black/15 bg-white/95 px-4 py-6 text-center">
+            <div className="mx-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/10 bg-black/[0.03] text-black/55">
+              <Heart size={16} />
+            </div>
+            <p className="mt-2 text-sm text-black/60">Aucun favori pour le moment.</p>
+          </div>
         ) : (
-          <div className="space-y-3">
-            {favorites.map((item) => (
-              <article
-                key={item.ref}
-                className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-[rgb(var(--navy))]/12 bg-[linear-gradient(180deg,rgba(255,255,255,1),rgba(246,248,252,0.94))] p-3 sm:p-4"
-              >
-                <div className="flex min-w-0 flex-1 items-start gap-3">
-                  <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded-xl border border-black/10 bg-slate-100">
-                    {item.coverImage ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={item.coverImage}
-                        alt={item.title || item.ref}
-                        className="h-full w-full object-cover"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-200 via-slate-100 to-white text-[11px] font-semibold text-black/55">
+          <div className="grid gap-3 lg:grid-cols-2">
+            {favorites.map((item) => {
+              const priceLabel = formatPriceWithCurrency(item.price);
+              return (
+                <article
+                  key={item.ref}
+                  className="group rounded-2xl border border-[rgb(var(--navy))]/12 bg-[linear-gradient(180deg,rgba(255,255,255,1),rgba(246,248,252,0.94))] p-3 transition hover:border-[rgb(var(--navy))]/25"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="relative h-24 w-32 shrink-0 overflow-hidden rounded-xl border border-black/10 bg-slate-100">
+                      {item.coverImage ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={item.coverImage}
+                          alt={item.title || item.ref}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-200 via-slate-100 to-white text-[11px] font-semibold text-black/55">
+                          {item.ref}
+                        </div>
+                      )}
+                      <span className="absolute left-2 top-2 rounded-md bg-black/65 px-1.5 py-0.5 text-[10px] font-semibold text-white">
                         {item.ref}
-                      </div>
-                    )}
+                      </span>
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="line-clamp-1 text-sm font-semibold text-[rgb(var(--navy))]">{item.title || item.ref}</div>
+                      {item.location ? (
+                        <div className="mt-1 inline-flex items-center gap-1.5 text-xs text-black/60">
+                          <MapPin size={12} />
+                          <span className="line-clamp-1">{item.location}</span>
+                        </div>
+                      ) : null}
+                      {priceLabel ? (
+                        <div className="mt-1 block text-xs font-semibold text-[rgb(var(--navy))]">
+                          {priceLabel}
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
-                  <div className="min-w-0 text-sm text-black/70">
-                    <div className="line-clamp-1 font-semibold text-[rgb(var(--navy))]">{item.title || item.ref}</div>
-                    {item.location ? (
-                      <div className="mt-1 inline-flex items-center gap-1.5 text-xs text-black/60">
-                        <MapPin size={12} />
-                        <span className="line-clamp-1">{item.location}</span>
-                      </div>
-                    ) : null}
-                    {item.price ? (
-                      <div className="mt-2 inline-flex rounded-full bg-[rgb(var(--gold))]/15 px-2.5 py-1 text-xs font-semibold text-[rgb(var(--navy))]">
-                        {item.price}
-                      </div>
-                    ) : null}
+
+                  <div className="mt-3 flex items-center justify-end gap-2">
+                    <Link
+                      href={`/biens/${encodeURIComponent(item.ref)}`}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[rgb(var(--navy))]/20 bg-white px-3 py-1.5 text-xs font-semibold text-[rgb(var(--navy))] hover:bg-black/5"
+                    >
+                      Voir
+                      <ArrowUpRight size={12} />
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => removeFavorite(item.ref)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-black/70 hover:bg-black/5"
+                    >
+                      <Trash2 size={12} />
+                      Supprimer
+                    </button>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Link
-                    href={`/biens/${encodeURIComponent(item.ref)}`}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[rgb(var(--navy))]/20 bg-white px-3 py-1.5 text-xs font-semibold text-[rgb(var(--navy))] hover:bg-black/5"
-                  >
-                    Voir
-                    <ArrowUpRight size={12} />
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => removeFavorite(item.ref)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-black/70 hover:bg-black/5"
-                  >
-                    <Trash2 size={12} />
-                    Supprimer
-                  </button>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         )}
       </section>

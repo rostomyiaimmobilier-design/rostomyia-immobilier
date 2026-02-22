@@ -69,6 +69,7 @@ export default function PropertyCard({
   onToggleCompare,
   onToggleFavorite,
   onQuickContact,
+  onOpen,
   // optional props for marketplace behaviors:
   // view = "grid",
   // aiScore,
@@ -81,6 +82,7 @@ export default function PropertyCard({
   onToggleCompare?: (property: PropertyItem) => void;
   onToggleFavorite?: (property: PropertyItem) => void;
   onQuickContact?: (property: PropertyItem) => void;
+  onOpen?: (property: PropertyItem) => void;
   // view?: "grid" | "list";
   // aiScore?: number; // 0..100
   // isSaved?: boolean;
@@ -113,7 +115,13 @@ export default function PropertyCard({
   );
 
   return (
-    <Link href={`/biens/${property.ref}`} className="block">
+    <Link
+      href={`/biens/${property.ref}`}
+      className="block"
+      onClick={() => {
+        onOpen?.(property);
+      }}
+    >
       <motion.article
         whileHover={{ y: -6 }}
         transition={{ type: "spring", stiffness: 260, damping: 22 }}
