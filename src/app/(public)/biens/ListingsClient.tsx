@@ -254,6 +254,7 @@ type ListingsClientProps = {
   items: PropertyItem[];
   communes?: string[];
   quartiers?: DbQuartierItem[];
+  currentUserId?: string | null;
 };
 
 const dict: Record<
@@ -1135,6 +1136,26 @@ type SearchSuggestion = {
   amenity?: AmenityKey;
 };
 
+type SemanticApiPayload = {
+  enabled?: boolean;
+  reason?: string;
+  results?: Array<{ ref?: string; score?: number }>;
+};
+
+type BehaviorEventType = "view" | "favorite" | "contact" | "search_click";
+
+type BackgroundRecommendationApiPayload = {
+  ok?: boolean;
+  source?: string;
+  recommendations?: Array<{
+    ref?: string;
+    score?: number;
+    reason?: string;
+    rank?: number;
+    generatedAt?: string | null;
+  }>;
+};
+
 type Recommendation = {
   property: PropertyItem;
   reason: string;
@@ -1203,6 +1224,7 @@ export default function ListingsClient({
   items,
   communes = [],
   quartiers = [],
+  currentUserId = null,
 }: ListingsClientProps) {
   const searchParams = useSearchParams();
   const { lang, dir } = useLang();
@@ -1349,6 +1371,12 @@ export default function ListingsClient({
   const [searchMetrics, setSearchMetrics] = useState<SearchMetricsState>(DEFAULT_SEARCH_METRICS);
   const [searchBehavior, setSearchBehavior] = useState<SearchBehaviorState>(DEFAULT_SEARCH_BEHAVIOR);
   const [searchStatsReady, setSearchStatsReady] = useState(false);
+  const [semanticRefScores, setSemanticRefScores] = useState<Record<string, number>>({});
+  const [semanticPending, setSemanticPending] = useState(false);
+  const [semanticEnabled, setSemanticEnabled] = useState(false);
+  const [semanticReason, setSemanticReason] = useState<string>("");
+  const [backgroundRecommendations, setBackgroundRecommendations] = useState<Recommendation[]>([]);
+  const [backgroundRecommendationSource, setBackgroundRecommendationSource] = useState<string>("none");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const searchContainerRef = useRef<HTMLDivElement | null>(null);
   const lastTrackedQueryRef = useRef("");
@@ -1365,6 +1393,40 @@ export default function ListingsClient({
   const overlayFadeTransition = { duration: 0.16, ease: [0.22, 1, 0.36, 1] as const };
   const modalPopTransition = { type: "spring" as const, stiffness: 340, damping: 30, mass: 0.84 };
   const sheetPopTransition = { type: "spring" as const, stiffness: 320, damping: 28, mass: 0.9 };
+
+  const toBehaviorPayload = (property: PropertyItem) => {
+    const parsed = smartParseLocation(property.location, communeMatchers);
+    return {
+      title: property.title,
+      category: property.category ?? "",
+      commune: parsed.commune ?? "",
+      district: parsed.district ?? "",
+      dealType: normalizeStoredLocationType(property.locationType) ?? property.type,
+      amenities: property.amenities ?? [],
+      price: property.price,
+    };
+  };
+
+  const postBehaviorEvent = (
+    eventType: BehaviorEventType,
+    options?: {
+      propertyRef?: string;
+      payload?: Record<string, unknown>;
+    }
+  ) => {
+    if (!currentUserId) return;
+    void fetch("/api/behavior/events", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        eventType,
+        propertyRef: options?.propertyRef ?? "",
+        payload: options?.payload ?? {},
+      }),
+    }).catch(() => undefined);
+  };
 
   const bumpSearchMetric = (
     key: keyof Omit<SearchMetricsState, "lastUpdatedAt">,
@@ -1889,6 +1951,14 @@ export default function ListingsClient({
 
   const applySearchSuggestion = (suggestion: SearchSuggestion) => {
     bumpSearchMetric("suggestionClicks", 1);
+    postBehaviorEvent("search_click", {
+      payload: {
+        query: filters.q,
+        suggestionType: suggestion.type,
+        suggestionLabel: suggestion.label,
+        suggestionValue: suggestion.value,
+      },
+    });
     setFilters((f) => {
       const nextAmenities = suggestion.amenity
         ? new Set([...f.amenities, suggestion.amenity])
@@ -1962,6 +2032,12 @@ export default function ListingsClient({
   const applySmartExampleQuery = (query: string) => {
     setFilters((f) => ({ ...f, q: query }));
     bumpSearchMetric("suggestionClicks", 1);
+    postBehaviorEvent("search_click", {
+      payload: {
+        query,
+        source: "smart_example",
+      },
+    });
     setSearchOpen(false);
     setSearchActiveIndex(-1);
     searchInputRef.current?.focus();
@@ -2449,6 +2525,8 @@ export default function ListingsClient({
 
     const matchesBaseFilters = (p: PropertyItem, includeAmenityFilters: boolean) => {
       const hay = buildSearchableListingText(p, communeMatchers);
+      const refKey = normalizeRef(p.ref);
+      const semanticApiScore = semanticRefScores[refKey] ?? 0;
       const normalizedLocationType = normalizeStoredLocationType(p.locationType);
       const effectiveDealType = normalizedLocationType ?? p.type;
       const byDeal =
@@ -2477,7 +2555,7 @@ export default function ListingsClient({
       const byQ =
         qTokens.length === 0
           ? true
-          : tokenMatches >= requiredMatches || semanticHits >= semanticThreshold;
+          : tokenMatches >= requiredMatches || semanticHits >= semanticThreshold || semanticApiScore >= 0.61;
       const byCategory = categoryNorm ? hay.includes(categoryNorm) : true;
 
       const parsed = smartParseLocation(p.location, communeMatchers);
@@ -2519,7 +2597,6 @@ export default function ListingsClient({
           ? !Array.from(filters.excludedAmenities).some((key) => p.amenities!.includes(key))
           : true;
 
-      const refKey = normalizeRef(p.ref);
       const viewCount = searchBehavior.views[refKey] ?? 0;
       const favoriteCount = searchBehavior.favorites[refKey] ?? 0;
       const contactCount = searchBehavior.contacts[refKey] ?? 0;
@@ -2532,7 +2609,11 @@ export default function ListingsClient({
       })();
       const photoScore = Math.min(Array.isArray(p.images) ? p.images.length : 0, 6) * 1.05;
       const textualScore =
-        qTokens.length === 0 ? 0 : (tokenMatches / qTokens.length) * 42 + (semanticHits / Math.max(1, semanticTokens.length)) * 18;
+        qTokens.length === 0
+          ? semanticApiScore * 14
+          : (tokenMatches / qTokens.length) * 42 +
+            (semanticHits / Math.max(1, semanticTokens.length)) * 18 +
+            semanticApiScore * 44;
       const structuredScore =
         (byDeal ? 5 : 0) + (byCategory ? 4 : 0) + (byCommune ? 3 : 0) + (byDistrict ? 2 : 0) + (byRooms ? 2 : 0);
       relevanceScoreByRef.set(refKey, textualScore + structuredScore + freshnessScore + photoScore + engagementScore);
@@ -2585,7 +2666,7 @@ export default function ListingsClient({
     const withoutAmenities = sortList(items.filter((p) => matchesBaseFilters(p, false)));
 
     return { withAmenities, withoutAmenities, relevanceScoreByRef };
-  }, [items, filters, filterNowTs, communeMatchers, districtCommuneHints, dealTypeLabelMap, searchBehavior]);
+  }, [items, filters, filterNowTs, communeMatchers, districtCommuneHints, dealTypeLabelMap, searchBehavior, semanticRefScores]);
 
   const computed = filteredLists.withAmenities;
   const contextResults = filteredLists.withoutAmenities;
@@ -2668,7 +2749,7 @@ export default function ListingsClient({
     [compareRefs, items]
   );
 
-  const recommendations = useMemo<Recommendation[]>(() => {
+  const fallbackRecommendations = useMemo<Recommendation[]>(() => {
     const source = contextResults.length > 0 ? contextResults : items;
     if (source.length === 0) return [];
 
@@ -2766,6 +2847,11 @@ export default function ListingsClient({
       .sort((a, b) => b.score - a.score)
       .slice(0, 4);
   }, [contextResults, items, searchBehavior, filteredLists.relevanceScoreByRef, communeMatchers, filterNowTs, lang]);
+
+  const recommendations = useMemo<Recommendation[]>(() => {
+    if (backgroundRecommendations.length > 0) return backgroundRecommendations.slice(0, 4);
+    return fallbackRecommendations;
+  }, [backgroundRecommendations, fallbackRecommendations]);
 
   const zeroResultRecoveryActions = useMemo<RecoveryAction[]>(() => {
     const actions: RecoveryAction[] = [];
@@ -2970,6 +3056,10 @@ export default function ListingsClient({
 
   const handleOpenProperty = (property: PropertyItem) => {
     recordBehaviorRef("views", property.ref, 1);
+    postBehaviorEvent("view", {
+      propertyRef: property.ref,
+      payload: toBehaviorPayload(property),
+    });
   };
 
   const toggleFavorite = (property: PropertyItem) => {
@@ -2999,6 +3089,12 @@ export default function ListingsClient({
     localStorage.setItem(favoritesStorageKey, JSON.stringify(nextRows));
     setFavoriteRefs(new Set(nextRows.map((row) => normalizeText(row.ref))));
     recordBehaviorRef("favorites", property.ref, exists ? -1 : 1);
+    if (!exists) {
+      postBehaviorEvent("favorite", {
+        propertyRef: property.ref,
+        payload: toBehaviorPayload(property),
+      });
+    }
   };
 
   const hasCompareBar = compareRefs.length > 0;
@@ -3101,6 +3197,122 @@ export default function ListingsClient({
     if (!searchStatsReady) return;
     localStorage.setItem(SEARCH_BEHAVIOR_STORAGE_KEY, JSON.stringify(searchBehavior));
   }, [searchBehavior, searchStatsReady]);
+
+  useEffect(() => {
+    const qNorm = normalizeText(filters.q);
+    if (qNorm.length < 3) {
+      setSemanticRefScores({});
+      setSemanticPending(false);
+      setSemanticEnabled(false);
+      setSemanticReason("");
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      try {
+        setSemanticPending(true);
+        const response = await fetch("/api/search/semantic", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            query: filters.q,
+            limit: 80,
+            minSimilarity: 0.41,
+          }),
+          signal: controller.signal,
+          cache: "no-store",
+        });
+
+        const payload = (await response.json()) as SemanticApiPayload;
+        if (controller.signal.aborted) return;
+
+        const nextScores: Record<string, number> = {};
+        (payload.results ?? []).forEach((row) => {
+          const ref = normalizeRef(typeof row?.ref === "string" ? row.ref : "");
+          const score = typeof row?.score === "number" ? row.score : NaN;
+          if (!ref || !Number.isFinite(score)) return;
+          nextScores[ref] = Math.max(0, Math.min(1, score));
+        });
+
+        setSemanticRefScores(nextScores);
+        setSemanticEnabled(Boolean(payload.enabled));
+        setSemanticReason(String(payload.reason ?? ""));
+      } catch {
+        if (controller.signal.aborted) return;
+        setSemanticRefScores({});
+        setSemanticEnabled(false);
+        setSemanticReason("semantic_fetch_failed");
+      } finally {
+        if (!controller.signal.aborted) {
+          setSemanticPending(false);
+        }
+      }
+    }, 460);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeout);
+    };
+  }, [filters.q]);
+
+  useEffect(() => {
+    if (!currentUserId) {
+      setBackgroundRecommendations([]);
+      setBackgroundRecommendationSource("none");
+      return;
+    }
+
+    const controller = new AbortController();
+    const itemByRef = new Map(items.map((item) => [normalizeRef(item.ref), item] as const));
+
+    const load = async () => {
+      try {
+        const response = await fetch("/api/recommendations/me", {
+          method: "GET",
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error("background_recommendations_failed");
+
+        const payload = (await response.json()) as BackgroundRecommendationApiPayload;
+        if (controller.signal.aborted) return;
+
+        const resolved = (payload.recommendations ?? [])
+          .map((row) => {
+            const ref = normalizeRef(typeof row?.ref === "string" ? row.ref : "");
+            const property = ref ? itemByRef.get(ref) : undefined;
+            if (!property) return null;
+            return {
+              property,
+              reason:
+                typeof row?.reason === "string" && row.reason.trim()
+                  ? row.reason
+                  : lang === "ar"
+                  ? "اقتراح شخصي"
+                  : "Suggestion personnalisee",
+              score: typeof row?.score === "number" ? row.score : 0,
+            } as Recommendation;
+          })
+          .filter((entry): entry is Recommendation => Boolean(entry));
+
+        setBackgroundRecommendations(resolved);
+        setBackgroundRecommendationSource(String(payload.source ?? "background"));
+      } catch {
+        if (controller.signal.aborted) return;
+        setBackgroundRecommendations([]);
+        setBackgroundRecommendationSource("error");
+      }
+    };
+
+    void load();
+
+    return () => {
+      controller.abort();
+    };
+  }, [currentUserId, items, lang]);
 
   const resetAll = () => {
     setFilters((f) => ({
@@ -3571,6 +3783,38 @@ export default function ListingsClient({
                     {entry}
                   </span>
                 ))}
+              </div>
+            ) : null}
+            {filters.q.trim() ? (
+              <div className="flex items-center gap-2 text-[10px] text-white/85">
+                <span className="rounded-full border border-white/25 bg-white/12 px-2 py-0.5 font-semibold uppercase tracking-[0.11em]">
+                  {lang === "ar" ? "الذكاء الدلالي" : "Semantic AI"}
+                </span>
+                <span
+                  className={cn(
+                    "rounded-full border px-2 py-0.5 font-medium",
+                    semanticPending
+                      ? "border-white/35 bg-white/12"
+                      : semanticEnabled
+                      ? "border-emerald-300/45 bg-emerald-500/25"
+                      : "border-white/25 bg-white/10"
+                  )}
+                >
+                  {semanticPending
+                    ? lang === "ar"
+                      ? "جاري التحليل..."
+                      : "Analyzing..."
+                    : semanticEnabled
+                    ? lang === "ar"
+                      ? "مفعل"
+                      : "Enabled"
+                    : lang === "ar"
+                    ? "وضع احتياطي"
+                    : "Fallback"}
+                </span>
+                {!semanticPending && !semanticEnabled && semanticReason ? (
+                  <span className="text-white/65">{semanticReason}</span>
+                ) : null}
               </div>
             ) : null}
 
@@ -4292,13 +4536,30 @@ export default function ListingsClient({
               <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]">
                 <Sparkles size={14} className="text-[rgb(var(--gold))]" />
                 <span>{lang === "ar" ? "مقترح لك" : "Suggested For You"}</span>
+                {backgroundRecommendations.length > 0 && backgroundRecommendationSource === "background" && (
+                  <span className="rounded-full border border-black/10 bg-white px-2 py-0.5 text-[10px] font-semibold normal-case text-black/55">
+                    {lang === "ar" ? "خلفية ذكية" : "Background AI"}
+                  </span>
+                )}
               </div>
               <div className="grid gap-2 md:grid-cols-2">
                 {recommendations.map((entry) => (
                   <a
                     key={`reco-${entry.property.ref}`}
                     href={`/biens/${entry.property.ref}`}
-                    onClick={() => handleOpenProperty(entry.property)}
+                    onClick={() => {
+                      handleOpenProperty(entry.property);
+                      postBehaviorEvent("search_click", {
+                        propertyRef: entry.property.ref,
+                        payload: {
+                          source:
+                            backgroundRecommendations.length > 0 &&
+                            backgroundRecommendationSource === "background"
+                              ? "background_recommendation"
+                              : "local_recommendation",
+                        },
+                      });
+                    }}
                     className="rounded-xl border border-black/10 bg-white px-3 py-2 transition hover:bg-neutral-100"
                   >
                     <div className="text-sm font-semibold text-[rgb(var(--navy))]">{entry.property.title}</div>
@@ -4438,6 +4699,10 @@ export default function ListingsClient({
                   setQuickContactRef(selected.ref);
                   recordBehaviorRef("contacts", selected.ref, 1);
                   bumpSearchMetric("contactsFromSearch", 1);
+                  postBehaviorEvent("contact", {
+                    propertyRef: selected.ref,
+                    payload: toBehaviorPayload(selected),
+                  });
                   updateAiStats(activeAiPresetKeys, "contacts");
                 }}
               />

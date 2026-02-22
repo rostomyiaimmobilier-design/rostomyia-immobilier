@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { upsertPropertySemanticIndex } from "@/lib/semantic-search";
 
 function isMissingLocationTypeColumn(message: string | undefined) {
   const m = (message || "").toLowerCase();
@@ -88,6 +89,25 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
+
+  await Promise.race([
+    upsertPropertySemanticIndex({
+      id: data.id,
+      ref: data.ref,
+      title: payload.title ?? null,
+      type: payload.type ?? null,
+      locationType: payload.location_type ?? null,
+      category: payload.category ?? null,
+      location: payload.location ?? null,
+      description: payload.description ?? null,
+      price: payload.price ?? null,
+      beds: typeof payload.beds === "number" ? payload.beds : null,
+      baths: typeof payload.baths === "number" ? payload.baths : null,
+      area: typeof payload.area === "number" ? payload.area : null,
+      amenities: payload.amenities ?? null,
+    }).catch(() => false),
+    new Promise((resolve) => setTimeout(resolve, 2_500)),
+  ]);
 
   return NextResponse.json({ id: data.id, ref: data.ref });
 }

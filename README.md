@@ -34,3 +34,24 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Background Recommendations Cron
+
+This project includes a daily cron to rebuild personalized recommendations:
+
+- Route: `/api/cron/recommendations/rebuild`
+- Schedule: `30 3 * * *` (UTC), configured in `vercel.json`
+- Security: set `CRON_SECRET` in your deployment environment
+
+The cron route only executes when one of these headers matches `CRON_SECRET`:
+
+- `Authorization: Bearer <CRON_SECRET>`
+- `x-cron-secret: <CRON_SECRET>`
+- `x-recommendations-secret: <CRON_SECRET>`
+
+Manual test:
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" \
+  "https://<your-domain>/api/cron/recommendations/rebuild?limitUsers=200&topN=24&lookbackDays=120"
+```

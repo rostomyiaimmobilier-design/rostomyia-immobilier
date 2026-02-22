@@ -123,6 +123,9 @@ function resolveListingPriceDisplay(row: Pick<PropertyRow, "price" | "location_t
 
 export default async function BiensPage() {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const selectWithoutLocationType = `
       id,
@@ -346,7 +349,12 @@ export default async function BiensPage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListJsonLd) }}
       />
-      <ListingsClient items={items} communes={communes} quartiers={quartiers} />
+      <ListingsClient
+        items={items}
+        communes={communes}
+        quartiers={quartiers}
+        currentUserId={user?.id ?? null}
+      />
     </>
   );
 }
