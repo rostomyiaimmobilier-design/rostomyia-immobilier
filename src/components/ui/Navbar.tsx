@@ -48,6 +48,7 @@ export default function Navbar() {
       admin: "لوحة التحكم",
     },
   }[lang];
+  const agencyLabel = lang === "ar" ? "Agency" : "Espace agence";
 
   const changeLang = (newLang: "fr" | "ar") => {
     if (newLang === lang) return;
@@ -85,6 +86,7 @@ export default function Navbar() {
               <Link className="nav-link" href="/">{t.home}</Link>
               <Link className="nav-link" href="/biens">{t.listings}</Link>
               <Link className="nav-link" href="/proposer">{t.submit}</Link>
+              <Link className="nav-link" href="/agency">{agencyLabel}</Link>
               <Link className="nav-link" href="/contact">{t.contact}</Link>
               <Link className="nav-link" href="/a-propos">{t.about}</Link>
             </div>
@@ -208,6 +210,13 @@ export default function Navbar() {
                 className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
               >
                 {t.submit}
+              </Link>
+              <Link
+                href="/agency"
+                onClick={() => setMobileOpen(false)}
+                className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+              >
+                {agencyLabel}
               </Link>
               <Link
                 href="/contact"

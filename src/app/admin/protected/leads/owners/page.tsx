@@ -3,12 +3,20 @@ import {
   ArrowLeft,
   BadgeCheck,
   Building2,
+  Calendar,
   Clock3,
+  Eye,
   FileCheck2,
   Hourglass,
+  Mail,
+  MapPin,
+  MessageCircle,
+  Phone,
+  UserRound,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { updateOwnerLeadStatus } from "../actions";
+import AppDropdown from "@/components/ui/app-dropdown";
 
 const STATUS = [
   "new",
@@ -80,6 +88,8 @@ function statusBadgeClass(status: string | null) {
       return "border-blue-200 bg-blue-50 text-blue-700";
     case "in_review":
       return "border-amber-200 bg-amber-50 text-amber-700";
+    case "new":
+      return "border-[rgb(var(--navy))]/20 bg-[rgb(var(--navy))]/10 text-[rgb(var(--navy))]";
     default:
       return "border-slate-200 bg-slate-100 text-slate-700";
   }
@@ -193,11 +203,13 @@ export default async function OwnerLeadsPage() {
       .order("created_at", { ascending: false })
       .limit(200);
 
-  let { data, error } = await queryRich();
+  const richResult = await queryRich();
+  let data = (richResult.data as OwnerLeadRow[] | null) ?? null;
+  let error = richResult.error;
 
   if (error && isMissingColumnError(error.message)) {
     const fallback = await queryLegacy();
-    data = fallback.data;
+    data = (fallback.data as OwnerLeadRow[] | null) ?? null;
     error = fallback.error;
   }
 
@@ -224,9 +236,9 @@ export default async function OwnerLeadsPage() {
           <div>
             <div className="inline-flex items-center gap-2 rounded-full bg-[rgb(var(--gold))]/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]">
               <Building2 size={14} />
-              Owner Validation Desk
+              Validation proprietaires
             </div>
-            <h1 className="mt-3 text-3xl font-extrabold text-[rgb(var(--navy))]">Owner Leads</h1>
+            <h1 className="mt-3 text-3xl font-extrabold text-[rgb(var(--navy))]">Leads proprietaires</h1>
             <p className="mt-2 text-sm text-black/60">
               Validation des propositions de biens clients.
             </p>
@@ -237,14 +249,14 @@ export default async function OwnerLeadsPage() {
             className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-medium text-[rgb(var(--navy))] hover:bg-black/5"
           >
             <ArrowLeft size={15} />
-            Back
+            Retour
           </Link>
         </div>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
-          <StatCard label="Total leads" value={String(total)} icon={<Building2 size={15} />} />
+          <StatCard label="Total" value={String(total)} icon={<Building2 size={15} />} />
           <StatCard label="Nouveaux" value={String(fresh)} icon={<Clock3 size={15} />} />
-          <StatCard label="En review" value={String(reviewing)} icon={<Hourglass size={15} />} />
+          <StatCard label="En revision" value={String(reviewing)} icon={<Hourglass size={15} />} />
           <StatCard label="Valides" value={String(validated)} icon={<BadgeCheck size={15} />} />
         </div>
       </section>
@@ -257,14 +269,24 @@ export default async function OwnerLeadsPage() {
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-2.5 py-1 text-xs text-black/65">
-                  <Clock3 size={12} />
+                <div className="inline-flex items-center gap-2 rounded-xl bg-[rgb(var(--navy))]/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]">
+                  <Building2 size={13} />
+                  Lead proprietaire
+                </div>
+                <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-2.5 py-1 text-xs text-black/65">
+                  <Calendar size={12} />
                   {new Date(lead.created_at).toLocaleString("fr-FR")}
                   {lead.lang ? ` | ${lead.lang.toUpperCase()}` : ""}
                 </div>
-                <h2 className="mt-2 text-xl font-bold text-[rgb(var(--navy))]">
+                <h2 className="mt-2 text-xl font-extrabold tracking-tight text-[rgb(var(--navy))]">
                   {fmt(lead.title) !== "-" ? lead.title : fmt(lead.property_type)}
                 </h2>
+                {fmt(lead.email) !== "-" ? (
+                  <div className="mt-1 inline-flex items-center gap-1.5 text-sm text-black/65">
+                    <Mail size={14} className="text-[rgb(var(--navy))]/70" />
+                    {fmt(lead.email)}
+                  </div>
+                ) : null}
                 <div className="mt-1 text-sm text-black/65">
                   {[lead.address, lead.district, lead.commune, lead.city].filter(Boolean).join(" | ") || "-"}
                 </div>
@@ -290,124 +312,131 @@ export default async function OwnerLeadsPage() {
               </span>
             </div>
 
-            <div className="mt-5 grid gap-3 md:grid-cols-4">
-              <Metric label="Prix" value={formatPrice(lead.price)} />
-              <Metric label="Surface" value={lead.surface ? `${lead.surface} m2` : "-"} />
-              <Metric label="Pieces" value={fmt(lead.rooms)} />
-              <Metric label="SDB" value={fmt(lead.baths)} />
-            </div>
+            <details className="group mt-4 overflow-hidden rounded-2xl border border-black/10 bg-white/70 shadow-sm">
+              <summary className="cursor-pointer list-none px-4 py-3 md:px-5">
+                <span className="inline-flex h-10 items-center gap-2 rounded-xl border border-black/10 bg-white px-4 text-sm font-semibold text-[rgb(var(--navy))]">
+                  <Eye size={14} />
+                  Afficher les details
+                </span>
+              </summary>
 
-            <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-              <Info label="Client" value={fmt(lead.name)} />
-              <Info label="Telephone" value={fmt(lead.phone)} />
-              <Info label="WhatsApp" value={fmt(lead.whatsapp)} />
-              <Info label="Email" value={fmt(lead.email)} />
-              <Info label="Contact prefere" value={fmt(lead.preferred_contact_method)} />
-              <Info label="Objectif" value={fmt(lead.intent)} />
-              <Info label="Transaction" value={fmt(lead.transaction_type || lead.location_type)} />
-              <Info label="Type de bien" value={fmt(lead.property_type)} />
-              <Info label="Ameublement" value={fmt(lead.furnishing_type)} />
-              <Info label="Etat" value={fmt(lead.property_condition)} />
-              <Info label="Disponibilite" value={fmt(lead.availability)} />
-              <Info label="Etage" value={fmt(lead.floor)} />
-              <Info label="Annee construction" value={fmt(lead.year_built)} />
-              <Info label="Docs legaux" value={fmt(lead.legal_docs)} />
-              <Info label="Paiement" value={fmt(lead.payment_terms)} />
-              <Info label="Residence" value={fmt(lead.residence_name)} />
-              <Info label="Parking" value={yesNo(lead.has_parking)} />
-              <Info label="Ascenseur" value={yesNo(lead.has_elevator)} />
-              <Info label="Securite" value={yesNo(lead.has_security)} />
-              <Info label="Balcon" value={yesNo(lead.has_balcony)} />
-              <Info label="Chauffage central" value={yesNo(lead.has_central_heating)} />
-              <Info label="Climatisation" value={yesNo(lead.has_air_conditioning)} />
-              <Info label="Fibre" value={yesNo(lead.has_fiber)} />
-              <Info label="Equipements actifs" value={boolFeatures(lead)} />
-            </div>
+              <div className="space-y-4 border-t border-black/10 px-4 pb-4 pt-4 md:px-5 md:pb-5">
+                <div className="grid gap-3 md:grid-cols-4">
+                  <Metric label="Prix" value={formatPrice(lead.price)} />
+                  <Metric label="Surface" value={lead.surface ? `${lead.surface} m2` : "-"} />
+                  <Metric label="Pieces" value={fmt(lead.rooms)} />
+                  <Metric label="SDB" value={fmt(lead.baths)} />
+                </div>
 
-            {(lead.photo_links || lead.message) && (
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <div className="rounded-2xl border border-black/10 bg-white p-3 text-sm">
-                  <div className="inline-flex items-center gap-2 font-medium text-black/70">
-                    <FileCheck2 size={14} />
-                    Liens photos/videos
-                  </div>
-                  <div className="mt-1 whitespace-pre-wrap break-words text-black/70">
-                    {fmt(lead.photo_links)}
-                  </div>
+                <div className="grid gap-3 text-sm md:grid-cols-2">
+                  <Info label="Client" value={fmt(lead.name)} icon={<UserRound size={15} />} tone="blue" />
+                  <Info label="Telephone" value={fmt(lead.phone)} icon={<Phone size={15} />} tone="blue" />
+                  <Info label="WhatsApp" value={fmt(lead.whatsapp)} icon={<MessageCircle size={15} />} tone="green" />
+                  <Info label="Email" value={fmt(lead.email)} icon={<Mail size={15} />} tone="blue" />
+                  <Info label="Contact prefere" value={fmt(lead.preferred_contact_method)} icon={<MessageCircle size={15} />} tone="blue" />
+                  <Info label="Objectif" value={fmt(lead.intent)} icon={<Building2 size={15} />} tone="blue" />
+                  <Info label="Transaction" value={fmt(lead.transaction_type || lead.location_type)} icon={<Clock3 size={15} />} tone="blue" />
+                  <Info label="Type de bien" value={fmt(lead.property_type)} icon={<Building2 size={15} />} tone="blue" />
+                  <Info label="Ameublement" value={fmt(lead.furnishing_type)} icon={<FileCheck2 size={15} />} tone="blue" />
+                  <Info label="Etat" value={fmt(lead.property_condition)} icon={<FileCheck2 size={15} />} tone="blue" />
+                  <Info label="Disponibilite" value={fmt(lead.availability)} icon={<Clock3 size={15} />} tone="blue" />
+                  <Info label="Etage" value={fmt(lead.floor)} icon={<Building2 size={15} />} tone="blue" />
+                  <Info label="Annee construction" value={fmt(lead.year_built)} icon={<Calendar size={15} />} tone="blue" />
+                  <Info label="Docs legaux" value={fmt(lead.legal_docs)} icon={<FileCheck2 size={15} />} tone="blue" />
+                  <Info label="Paiement" value={fmt(lead.payment_terms)} icon={<FileCheck2 size={15} />} tone="blue" />
+                  <Info label="Residence" value={fmt(lead.residence_name)} icon={<MapPin size={15} />} tone="blue" />
+                  <Info label="Parking" value={yesNo(lead.has_parking)} icon={<Building2 size={15} />} tone="emerald" />
+                  <Info label="Ascenseur" value={yesNo(lead.has_elevator)} icon={<Building2 size={15} />} tone="emerald" />
+                  <Info label="Securite" value={yesNo(lead.has_security)} icon={<BadgeCheck size={15} />} tone="emerald" />
+                  <Info label="Balcon" value={yesNo(lead.has_balcony)} icon={<Building2 size={15} />} tone="emerald" />
+                  <Info label="Chauffage central" value={yesNo(lead.has_central_heating)} icon={<Building2 size={15} />} tone="emerald" />
+                  <Info label="Climatisation" value={yesNo(lead.has_air_conditioning)} icon={<Building2 size={15} />} tone="emerald" />
+                  <Info label="Fibre" value={yesNo(lead.has_fiber)} icon={<Building2 size={15} />} tone="emerald" />
+                  <Info label="Equipements actifs" value={boolFeatures(lead)} icon={<BadgeCheck size={15} />} tone="emerald" />
                 </div>
-                <div className="rounded-2xl border border-black/10 bg-white p-3 text-sm">
-                  <div className="inline-flex items-center gap-2 font-medium text-black/70">
-                    <FileCheck2 size={14} />
-                    Description client
+
+                {(lead.photo_links || lead.message) && (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-xl border border-black/10 bg-white p-3 text-sm">
+                      <div className="inline-flex items-center gap-2 font-medium text-black/70">
+                        <FileCheck2 size={14} />
+                        Liens photos/videos
+                      </div>
+                      <div className="mt-1 whitespace-pre-wrap break-words text-black/70">
+                        {fmt(lead.photo_links)}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-black/10 bg-white p-3 text-sm">
+                      <div className="inline-flex items-center gap-2 font-medium text-black/70">
+                        <FileCheck2 size={14} />
+                        Description client
+                      </div>
+                      <div className="mt-1 whitespace-pre-wrap break-words text-black/70">
+                        {fmt(lead.message)}
+                      </div>
+                    </div>
                   </div>
-                  <div className="mt-1 whitespace-pre-wrap break-words text-black/70">
-                    {fmt(lead.message)}
+                )}
+
+                <form
+                  className="rounded-xl border border-black/10 bg-white/80 p-3"
+                  action={async (formData) => {
+                    "use server";
+                    const status = String(formData.get("status") || "new");
+                    const note = String(formData.get("validation_note") || "");
+                    await updateOwnerLeadStatus(lead.id, status, note);
+                  }}
+                >
+                  <div className="grid gap-3 md:grid-cols-[220px_1fr]">
+                    <label className="text-sm">
+                      <div className="mb-1 font-medium text-black/70">Statut</div>
+                      <AppDropdown
+                        name="status"
+                        defaultValue={lead.status ?? "new"}
+                        triggerClassName="h-10"
+                        options={STATUS.map((status) => ({ value: status, label: status }))}
+                      />
+                    </label>
+
+                    <label className="text-sm">
+                      <div className="mb-1 font-medium text-black/70">Note de validation</div>
+                      <textarea
+                        name="validation_note"
+                        defaultValue={lead.validation_note ?? ""}
+                        placeholder="Remarques internes, corrections demandees, etat du dossier..."
+                        className="min-h-10 w-full rounded-xl border border-black/10 bg-white px-3 py-2 outline-none transition focus:border-[rgb(var(--navy))]/40"
+                      />
+                    </label>
                   </div>
-                </div>
+
+                  {lead.status !== "validated" ? (
+                    <div className="mt-3 flex justify-end">
+                      <button
+                        type="submit"
+                        className="h-10 rounded-xl bg-[rgb(var(--navy))] px-5 text-xs font-semibold tracking-wide text-white shadow-sm transition hover:opacity-95"
+                      >
+                        Enregistrer
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-xs text-[rgb(var(--navy))]">Lead valide, statut conserve.</p>
+                  )}
+
+                  {lead.validated_at && (
+                    <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">
+                      <BadgeCheck size={12} />
+                      Valide le {new Date(lead.validated_at).toLocaleString("fr-FR")}
+                    </div>
+                  )}
+                </form>
               </div>
-            )}
-
-            <form
-              className="mt-4 rounded-2xl border border-black/10 bg-white p-3 md:p-4"
-              action={async (formData) => {
-                "use server";
-                const status = String(formData.get("status") || "new");
-                const note = String(formData.get("validation_note") || "");
-                await updateOwnerLeadStatus(lead.id, status, note);
-              }}
-            >
-              <div className="grid gap-3 md:grid-cols-[220px_1fr]">
-                <label className="text-sm">
-                  <div className="mb-1 font-medium text-black/70">Statut</div>
-                  <select
-                    name="status"
-                    defaultValue={lead.status ?? "new"}
-                    className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none"
-                  >
-                    {STATUS.map((status) => (
-                      <option key={status} value={status}>
-                        {status}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="text-sm">
-                  <div className="mb-1 font-medium text-black/70">Note de validation</div>
-                  <textarea
-                    name="validation_note"
-                    defaultValue={lead.validation_note ?? ""}
-                    placeholder="Remarques internes, corrections demandees, etat du dossier..."
-                    className="min-h-10 w-full rounded-xl border border-black/10 bg-white px-3 py-2 outline-none"
-                  />
-                </label>
-
-              </div>
-
-              {lead.status !== "validated" && (
-                <div className="mt-3 flex justify-end">
-                  <button
-                    type="submit"
-                    className="h-10 rounded-xl bg-[rgb(var(--navy))] px-4 text-xs font-semibold text-white hover:opacity-95"
-                  >
-                    Save
-                  </button>
-                </div>
-              )}
-
-              {lead.validated_at && (
-                <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">
-                  <BadgeCheck size={12} />
-                  Valide le {new Date(lead.validated_at).toLocaleString("fr-FR")}
-                </div>
-              )}
-            </form>
+            </details>
           </article>
         ))}
 
         {leads.length === 0 && (
           <div className="rounded-2xl border border-black/10 bg-white/75 p-6 text-sm text-black/60">
-            No owner leads yet.
+            Aucun lead proprietaire pour le moment.
           </div>
         )}
       </div>
@@ -437,18 +466,55 @@ function StatCard({
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-black/10 bg-white px-3 py-2">
+    <div className="rounded-xl border border-black/10 bg-gradient-to-b from-white to-slate-50/60 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
       <div className="text-xs uppercase tracking-wide text-black/50">{label}</div>
-      <div className="mt-0.5 text-sm font-semibold text-slate-900">{value}</div>
+      <div className="mt-1 text-sm font-semibold text-[rgb(var(--navy))]">{value}</div>
     </div>
   );
 }
 
-function Info({ label, value }: { label: string; value: string }) {
+function Info({
+  label,
+  value,
+  icon,
+  tone = "blue",
+}: {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+  tone?: "blue" | "green" | "emerald";
+}) {
+  const tones: Record<"blue" | "green" | "emerald", { border: string; badge: string; title: string }> = {
+    blue: {
+      border: "border-[rgb(var(--navy))]/15",
+      badge: "bg-[rgb(var(--navy))]/10 text-[rgb(var(--navy))]",
+      title: "text-[rgb(var(--navy))]/70",
+    },
+    green: {
+      border: "border-green-200",
+      badge: "bg-green-100 text-green-700",
+      title: "text-green-700",
+    },
+    emerald: {
+      border: "border-emerald-200",
+      badge: "bg-emerald-100 text-emerald-700",
+      title: "text-emerald-700",
+    },
+  };
+
+  const t = tones[tone];
+
   return (
-    <div className="rounded-2xl border border-black/10 bg-white px-3 py-2">
-      <div className="text-xs uppercase tracking-wide text-black/50">{label}</div>
-      <div className="mt-0.5 text-sm text-slate-900">{value}</div>
+    <div className={`rounded-xl border bg-gradient-to-b from-white to-slate-50/60 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] ${t.border}`}>
+      <div className="flex items-start gap-2.5">
+        <span className={`mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${t.badge}`}>
+          {icon}
+        </span>
+        <div className="min-w-0">
+          <div className={`text-[11px] font-semibold uppercase tracking-wide ${t.title}`}>{label}</div>
+          <div className="mt-1 break-words text-sm font-medium text-black/80">{value}</div>
+        </div>
+      </div>
     </div>
   );
 }

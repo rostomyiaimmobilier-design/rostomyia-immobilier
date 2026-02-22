@@ -20,7 +20,7 @@ export default async function AdminNewPage({ searchParams }: AdminNewPageProps) 
   const initialRef = normalizeRefParam(params.ref);
 
   return (
-    <main className="mx-auto max-w-4xl p-8">
+    <main className="mx-auto w-full max-w-[1400px] px-4 py-8 sm:px-6 lg:px-8">
       <div className="space-y-1">
         <h1 className="text-2xl font-bold text-slate-900">Nouveau bien</h1>
         <p className="text-sm text-slate-600">

@@ -1,0 +1,198 @@
+﻿"use client";
+
+import Link from "next/link";
+import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowRight, Building2, ShieldCheck, Sparkles } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { useLang } from "@/components/LanguageProvider";
+import { toUiErrorMessage } from "@/lib/ui-errors";
+
+const copy = {
+  fr: {
+    badge: "Connexion agence",
+    title: "Accedez a votre dashboard partenaire",
+    desc: "Connectez-vous pour deposer vos biens, suivre les validations et piloter vos demandes.",
+    email: "Email",
+    password: "Mot de passe",
+    submit: "Se connecter",
+    loading: "Connexion...",
+    noAccount: "Pas encore de compte ?",
+    signup: "Inscription agence",
+    notAgencyError: "Ce compte n'est pas un compte agence.",
+    pendingError:
+      "Compte en attente d'activation. Confirmez votre email puis patientez pour validation admin.",
+    suspendedError: "Ce compte agence est suspendu. Contactez le support Rostomyia.",
+    sideBadge: "Espace securise",
+    sideTitle: "Un acces reserve aux agences partenaires",
+    sidePoints: [
+      "Depots centralises depuis un seul espace.",
+      "Validation backoffice avant publication.",
+      "Suivi de statut simple et transparent.",
+    ],
+  },
+  ar: {
+    badge: "Ø¯Ø®ÙˆÙ„ Ø§Ù„ÙˆÙƒØ§Ù„Ø©",
+    title: "Ø§Ø¯Ø®Ù„ Ø¥Ù„Ù‰ Ù„ÙˆØ­Ø© Ø§Ù„ÙˆÙƒØ§Ù„Ø©",
+    desc: "Ø³Ø¬Ù‘Ù„ Ø§Ù„Ø¯Ø®ÙˆÙ„ Ù„Ø¥ÙŠØ¯Ø§Ø¹ Ø§Ù„Ø¹Ù‚Ø§Ø±Ø§ØªØŒ Ù…ØªØ§Ø¨Ø¹Ø© Ø§Ù„ØªØ­Ù‚Ù‚ØŒ ÙˆØ¥Ø¯Ø§Ø±Ø© Ø·Ù„Ø¨Ø§ØªÙƒ Ø¨Ø³Ù‡ÙˆÙ„Ø©.",
+    email: "Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ",
+    password: "ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ±",
+    submit: "ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø¯Ø®ÙˆÙ„",
+    loading: "Ø¬Ø§Ø±Ù ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø¯Ø®ÙˆÙ„...",
+    noAccount: "Ù„ÙŠØ³ Ù„Ø¯ÙŠÙƒ Ø­Ø³Ø§Ø¨ Ø¨Ø¹Ø¯ØŸ",
+    signup: "ØªØ³Ø¬ÙŠÙ„ Ø§Ù„ÙˆÙƒØ§Ù„Ø©",
+    notAgencyError: "Ù‡Ø°Ø§ Ø§Ù„Ø­Ø³Ø§Ø¨ Ù„ÙŠØ³ Ø­Ø³Ø§Ø¨ ÙˆÙƒØ§Ù„Ø©.",
+    pendingError: "Account pending activation. Please confirm email and wait for admin approval.",
+    suspendedError: "Agency account is suspended. Please contact support.",
+    sideBadge: "ÙˆØµÙˆÙ„ Ø¢Ù…Ù†",
+    sideTitle: "Ø¯Ø®ÙˆÙ„ Ù…Ø®ØµØµ Ù„ÙˆÙƒØ§Ù„Ø§ØªÙ†Ø§ Ø§Ù„Ø´Ø±ÙŠÙƒØ©",
+    sidePoints: [
+      "Ø¥ÙŠØ¯Ø§Ø¹ Ø§Ù„Ø¹Ù‚Ø§Ø±Ø§Øª Ù…Ù† Ù…Ø³Ø§Ø­Ø© ÙˆØ§Ø­Ø¯Ø©.",
+      "ØªØ­Ù‚Ù‚ Ù…ÙƒØªØ¨ÙŠ Ù‚Ø¨Ù„ Ø§Ù„Ù†Ø´Ø±.",
+      "Ù…ØªØ§Ø¨Ø¹Ø© Ø­Ø§Ù„Ø© Ø§Ù„Ø·Ù„Ø¨Ø§Øª Ø¨ÙˆØ¶ÙˆØ­.",
+    ],
+  },
+} as const;
+
+export default function AgencyLoginPage() {
+  const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { lang, dir } = useLang();
+  const t = copy[lang];
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const initialStatus = searchParams.get("status");
+  const [errorMsg, setErrorMsg] = useState<string | null>(
+    initialStatus === "pending" ? t.pendingError : initialStatus === "suspended" ? t.suspendedError : null
+  );
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setErrorMsg(null);
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+    });
+
+    if (error) {
+      setLoading(false);
+      setErrorMsg(toUiErrorMessage(error.message, { lang, context: "auth" }));
+      return;
+    }
+
+    const meta = (data.user?.user_metadata as { account_type?: string; agency_status?: string } | undefined) ?? {};
+    const accountType = meta.account_type;
+    const status = (meta.agency_status ?? "pending").toLowerCase();
+    if (accountType !== "agency") {
+      await supabase.auth.signOut();
+      setLoading(false);
+      setErrorMsg(t.notAgencyError);
+      return;
+    }
+
+    if (status !== "active") {
+      await supabase.auth.signOut();
+      setLoading(false);
+      setErrorMsg(status === "suspended" ? t.suspendedError : t.pendingError);
+      return;
+    }
+
+    router.push("/agency/dashboard");
+    router.refresh();
+  }
+
+  return (
+    <main dir={dir} className="relative min-h-screen overflow-hidden bg-[rgb(var(--brand-bg))] px-4 py-12 md:py-16">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-28 -top-24 h-80 w-80 rounded-full bg-[rgb(var(--gold))]/20 blur-3xl" />
+        <div className="absolute right-0 top-20 h-80 w-80 rounded-full bg-[rgb(var(--navy))]/12 blur-3xl" />
+      </div>
+
+      <section className="relative mx-auto grid max-w-6xl gap-5 lg:grid-cols-[1.15fr_0.85fr]">
+        <article className="relative overflow-hidden rounded-3xl border border-black/10 bg-white/84 p-7 shadow-sm backdrop-blur md:p-8">
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute -left-10 -top-10 h-44 w-44 rounded-full bg-[rgb(var(--gold))]/15 blur-3xl" />
+            <div className="absolute right-0 top-8 h-40 w-40 rounded-full bg-[rgb(var(--navy))]/10 blur-3xl" />
+          </div>
+
+          <div className="relative">
+            <div className="inline-flex items-center gap-2 rounded-full bg-[rgb(var(--gold))]/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]">
+              <Building2 size={13} />
+              {t.badge}
+            </div>
+            <h1 className="mt-4 text-2xl font-bold text-[rgb(var(--navy))] md:text-3xl">{t.title}</h1>
+            <p className="mt-2 text-sm text-black/65">{t.desc}</p>
+
+            <form onSubmit={handleSubmit} className="mt-6">
+              <div className="space-y-4">
+                <label className="grid gap-1.5 text-sm">
+                  <span className="block font-medium text-black/70">{t.email}</span>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="h-12 w-full rounded-2xl border border-black/10 bg-white px-3.5 outline-none transition focus:border-[rgb(var(--navy))]/35"
+                  />
+                </label>
+
+                <label className="grid gap-1.5 text-sm">
+                  <span className="block font-medium text-black/70">{t.password}</span>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="h-12 w-full rounded-2xl border border-black/10 bg-white px-3.5 outline-none transition focus:border-[rgb(var(--navy))]/35"
+                  />
+                </label>
+              </div>
+
+              {errorMsg ? <div className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{errorMsg}</div> : null}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[rgb(var(--navy))] text-sm font-semibold text-white hover:opacity-95 disabled:opacity-60"
+              >
+                {loading ? t.loading : t.submit}
+                {!loading ? <ArrowRight size={15} className={dir === "rtl" ? "rotate-180" : ""} /> : null}
+              </button>
+            </form>
+
+            <p className="mt-4 text-center text-sm text-black/65">
+              {t.noAccount}{" "}
+              <Link href="/agency/signup" className="font-semibold text-[rgb(var(--navy))] hover:underline">
+                {t.signup}
+              </Link>
+            </p>
+          </div>
+        </article>
+
+        <aside className="space-y-4">
+          <section className="rounded-3xl border border-black/10 bg-[rgb(var(--navy))] p-6 text-white shadow-sm md:p-7">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em]">
+              <ShieldCheck size={13} />
+              {t.sideBadge}
+            </div>
+            <h2 className="mt-4 text-xl font-extrabold md:text-2xl">{t.sideTitle}</h2>
+            <div className="mt-4 space-y-3">
+              {t.sidePoints.map((point) => (
+                <div key={point} className="flex items-start gap-2.5 rounded-2xl border border-white/15 bg-white/10 p-3 text-sm text-white/90">
+                  <Sparkles size={15} className="mt-0.5 shrink-0" />
+                  <span>{point}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        </aside>
+      </section>
+    </main>
+  );
+}
+

@@ -1,16 +1,100 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/admin";
 import sharp from "sharp";
+import { hasAdminAccess } from "@/lib/admin-auth";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+
+type PropertyImageRow = {
+  id: string;
+  property_id: string;
+  path: string;
+  sort: number | null;
+  is_cover: boolean | null;
+};
+
+const BUCKET = "property-images";
+
+async function ensureAdminOrError() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+  }
+
+  const isAdmin = await hasAdminAccess(supabase, user);
+  if (!isAdmin) {
+    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+  }
+
+  return { error: null };
+}
+
+function parseError(err: unknown, fallback: string) {
+  if (err instanceof Error && err.message) return err.message;
+  return fallback;
+}
+
+function isNotFoundStorageError(message: string | undefined) {
+  const m = String(message ?? "").toLowerCase();
+  return m.includes("not found") || m.includes("no such file");
+}
+
+async function compressImageToJpeg(file: File) {
+  const arrayBuffer = await file.arrayBuffer();
+  const input = Buffer.from(arrayBuffer);
+  return sharp(input)
+    .resize({ width: 1600, withoutEnlargement: true })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+}
+
+function makePath(ref: string) {
+  return `${ref}/${crypto.randomUUID()}.jpg`;
+}
+
+async function getImageById(admin: ReturnType<typeof supabaseAdmin>, imageId: string) {
+  const { data, error } = await admin
+    .from("property_images")
+    .select("id, property_id, path, sort, is_cover")
+    .eq("id", imageId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Image introuvable.");
+  return data as PropertyImageRow;
+}
+
+async function ensureSingleCover(admin: ReturnType<typeof supabaseAdmin>, propertyId: string) {
+  const { data: rows, error } = await admin
+    .from("property_images")
+    .select("id, is_cover, sort")
+    .eq("property_id", propertyId)
+    .order("sort", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  const images = (rows ?? []) as Array<{ id: string; is_cover: boolean | null; sort: number | null }>;
+  if (!images.length) return;
+
+  const hasCover = images.some((x) => !!x.is_cover);
+  if (hasCover) return;
+
+  const first = images[0];
+  const { error: coverErr } = await admin.from("property_images").update({ is_cover: true }).eq("id", first.id);
+  if (coverErr) throw new Error(coverErr.message);
+}
 
 export async function POST(req: Request) {
-  // Use admin client (service role) for storage + DB writes.
-  const supabase = supabaseAdmin();
+  const guard = await ensureAdminOrError();
+  if (guard.error) return guard.error;
 
-
+  const admin = supabaseAdmin();
   const form = await req.formData();
 
-  const propertyId = String(form.get("propertyId") || "");
-  const ref = String(form.get("ref") || "");
+  const propertyId = String(form.get("propertyId") || "").trim();
+  const ref = String(form.get("ref") || "").trim();
   if (!propertyId || !ref) {
     return NextResponse.json({ error: "Missing propertyId/ref" }, { status: 400 });
   }
@@ -20,80 +104,197 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No files" }, { status: 400 });
   }
 
-  const bucket = "property-images";
   const uploadedPaths: string[] = [];
 
-  for (const file of files) {
-    if (!file.type.startsWith("image/")) continue;
+  try {
+    for (const file of files) {
+      if (!file.type.startsWith("image/")) continue;
 
-    // Compress/resize image server-side using sharp for smaller uploads
-    const ext = "jpg";
-    const path = `${ref}/${crypto.randomUUID()}.${ext}`;
+      const path = makePath(ref);
+      const compressed = await compressImageToJpeg(file);
 
-    const arrayBuffer = await file.arrayBuffer();
-    const inputBuffer = Buffer.from(arrayBuffer);
-
-    let compressedBuffer: Buffer;
-    try {
-      compressedBuffer = await sharp(inputBuffer)
-        .resize({ width: 1600, withoutEnlargement: true })
-        .jpeg({ quality: 80 })
-        .toBuffer();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Image processing failed";
-      return NextResponse.json({ error: message }, { status: 500 });
-    }
-
-    const { error: upErr } = await supabase.storage
-      .from(bucket)
-      .upload(path, compressedBuffer, {
+      const { error: upErr } = await admin.storage.from(BUCKET).upload(path, compressed, {
         contentType: "image/jpeg",
         upsert: false,
       });
-
-    if (upErr) {
-      return NextResponse.json({ error: upErr.message }, { status: 400 });
+      if (upErr) throw new Error(upErr.message);
+      uploadedPaths.push(path);
     }
 
-    uploadedPaths.push(path);
-  }
+    if (!uploadedPaths.length) {
+      return NextResponse.json({ error: "No valid image files" }, { status: 400 });
+    }
 
-  // Insert DB rows (align with schema: uses "sort").
-  // For existing properties, append at max(sort)+1 to keep stable ordering.
-  let hasExistingImages = false;
-  let nextSort = 0;
-  try {
-    const { data: existing, error: selErr } = await supabase
+    const { data: existingRows, error: existingErr } = await admin
       .from("property_images")
-      .select("sort")
-      .eq("property_id", propertyId)
-      .order("sort", { ascending: false })
-      .limit(1);
+      .select("id, sort")
+      .eq("property_id", propertyId);
+    if (existingErr) throw new Error(existingErr.message);
 
-    if (selErr) {
-      hasExistingImages = false;
-      nextSort = 0;
-    } else {
-      hasExistingImages = Array.isArray(existing) && existing.length > 0;
-      const maxSort = hasExistingImages ? Number(existing?.[0]?.sort ?? 0) : 0;
-      nextSort = Number.isFinite(maxSort) ? maxSort + 1 : 0;
+    const maxSort = (existingRows ?? []).reduce((max, row) => {
+      const parsed = Number((row as { sort: number | null }).sort);
+      return Number.isFinite(parsed) ? Math.max(max, parsed) : max;
+    }, -1);
+    const baseSort = maxSort + 1;
+    const isFirstBatch = (existingRows?.length ?? 0) === 0;
+
+    const rows = uploadedPaths.map((path, idx) => ({
+      property_id: propertyId,
+      path,
+      sort: baseSort + idx,
+      is_cover: isFirstBatch && idx === 0,
+    }));
+
+    const { error: dbErr } = await admin.from("property_images").insert(rows);
+    if (dbErr) throw new Error(dbErr.message);
+
+    await ensureSingleCover(admin, propertyId);
+    return NextResponse.json({ paths: uploadedPaths });
+  } catch (err: unknown) {
+    return NextResponse.json({ error: parseError(err, "Upload failed") }, { status: 400 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  const guard = await ensureAdminOrError();
+  if (guard.error) return guard.error;
+
+  const admin = supabaseAdmin();
+
+  try {
+    const body = await req.json();
+    const imageId = String(body?.imageId ?? "").trim();
+    if (!imageId) {
+      return NextResponse.json({ error: "Missing imageId" }, { status: 400 });
     }
-  } catch {
-    hasExistingImages = false;
-    nextSort = 0;
+
+    const image = await getImageById(admin, imageId);
+
+    const { error: storageErr } = await admin.storage.from(BUCKET).remove([image.path]);
+    if (storageErr && !isNotFoundStorageError(storageErr.message)) {
+      throw new Error(storageErr.message);
+    }
+
+    const { error: deleteErr } = await admin.from("property_images").delete().eq("id", image.id);
+    if (deleteErr) throw new Error(deleteErr.message);
+
+    await ensureSingleCover(admin, image.property_id);
+    return NextResponse.json({ ok: true });
+  } catch (err: unknown) {
+    return NextResponse.json({ error: parseError(err, "Delete failed") }, { status: 400 });
+  }
+}
+
+export async function PATCH(req: Request) {
+  const guard = await ensureAdminOrError();
+  if (guard.error) return guard.error;
+
+  const admin = supabaseAdmin();
+
+  try {
+    const body = await req.json();
+    const propertyId = String(body?.propertyId ?? "").trim();
+    if (!propertyId) {
+      return NextResponse.json({ error: "Missing propertyId" }, { status: 400 });
+    }
+
+    const orderedImageIds = Array.isArray(body?.orderedImageIds)
+      ? body.orderedImageIds.map((x: unknown) => String(x)).filter(Boolean)
+      : null;
+    const coverImageId = String(body?.coverImageId ?? "").trim() || null;
+
+    const { data: rows, error: rowsErr } = await admin
+      .from("property_images")
+      .select("id")
+      .eq("property_id", propertyId);
+    if (rowsErr) throw new Error(rowsErr.message);
+
+    const existingIds = new Set((rows ?? []).map((x) => String((x as { id: string }).id)));
+
+    if (orderedImageIds) {
+      if (orderedImageIds.length !== existingIds.size) {
+        return NextResponse.json({ error: "orderedImageIds must include all property images" }, { status: 400 });
+      }
+      for (const id of orderedImageIds) {
+        if (!existingIds.has(id)) {
+          return NextResponse.json({ error: "orderedImageIds contains invalid image id" }, { status: 400 });
+        }
+      }
+
+      for (let i = 0; i < orderedImageIds.length; i += 1) {
+        const id = orderedImageIds[i];
+        const { error: sortErr } = await admin.from("property_images").update({ sort: i }).eq("id", id);
+        if (sortErr) throw new Error(sortErr.message);
+      }
+    }
+
+    if (coverImageId) {
+      if (!existingIds.has(coverImageId)) {
+        return NextResponse.json({ error: "coverImageId does not belong to property" }, { status: 400 });
+      }
+
+      const { error: resetCoverErr } = await admin
+        .from("property_images")
+        .update({ is_cover: false })
+        .eq("property_id", propertyId);
+      if (resetCoverErr) throw new Error(resetCoverErr.message);
+
+      const { error: setCoverErr } = await admin
+        .from("property_images")
+        .update({ is_cover: true })
+        .eq("id", coverImageId);
+      if (setCoverErr) throw new Error(setCoverErr.message);
+    }
+
+    await ensureSingleCover(admin, propertyId);
+    return NextResponse.json({ ok: true });
+  } catch (err: unknown) {
+    return NextResponse.json({ error: parseError(err, "Patch failed") }, { status: 400 });
+  }
+}
+
+export async function PUT(req: Request) {
+  const guard = await ensureAdminOrError();
+  if (guard.error) return guard.error;
+
+  const admin = supabaseAdmin();
+  const form = await req.formData();
+
+  const imageId = String(form.get("imageId") || "").trim();
+  const ref = String(form.get("ref") || "").trim();
+  const file = form.get("file");
+
+  if (!imageId || !ref || !(file instanceof File)) {
+    return NextResponse.json({ error: "Missing imageId/ref/file" }, { status: 400 });
+  }
+  if (!file.type.startsWith("image/")) {
+    return NextResponse.json({ error: "File must be an image" }, { status: 400 });
   }
 
-  const rows = uploadedPaths.map((path, idx) => ({
-    property_id: propertyId,
-    path,
-    sort: nextSort + idx,
-    is_cover: !hasExistingImages && idx === 0,
-  }));
+  try {
+    const image = await getImageById(admin, imageId);
 
-  const { error: dbErr } = await supabase.from("property_images").insert(rows);
-  if (dbErr) {
-    return NextResponse.json({ error: dbErr.message }, { status: 400 });
+    const nextPath = makePath(ref);
+    const compressed = await compressImageToJpeg(file);
+    const { error: upErr } = await admin.storage.from(BUCKET).upload(nextPath, compressed, {
+      contentType: "image/jpeg",
+      upsert: false,
+    });
+    if (upErr) throw new Error(upErr.message);
+
+    const { error: updateErr } = await admin
+      .from("property_images")
+      .update({ path: nextPath })
+      .eq("id", image.id);
+    if (updateErr) throw new Error(updateErr.message);
+
+    const { error: removeOldErr } = await admin.storage.from(BUCKET).remove([image.path]);
+    if (removeOldErr && !isNotFoundStorageError(removeOldErr.message)) {
+      throw new Error(removeOldErr.message);
+    }
+
+    return NextResponse.json({ ok: true, path: nextPath });
+  } catch (err: unknown) {
+    return NextResponse.json({ error: parseError(err, "Replace failed") }, { status: 400 });
   }
-
-  return NextResponse.json({ paths: uploadedPaths });
 }

@@ -6,6 +6,21 @@ function isMissingLocationTypeColumn(message: string | undefined) {
   return m.includes("location_type") && (m.includes("does not exist") || m.includes("column"));
 }
 
+function isMissingAmenitiesColumn(message: string | undefined) {
+  const m = (message || "").toLowerCase();
+  return m.includes("amenities") && (m.includes("does not exist") || m.includes("column"));
+}
+
+function toOptionalStringArray(value: unknown): string[] | null {
+  if (value == null) return null;
+  if (!Array.isArray(value)) return null;
+
+  const cleaned = value
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean);
+  return Array.from(new Set(cleaned));
+}
+
 export async function POST(req: Request) {
   const supabase = await createClient();
 
@@ -24,24 +39,47 @@ export async function POST(req: Request) {
     baths: body.baths ?? null,
     area: body.area ?? null,
     description: body.description ?? null,
+    amenities: toOptionalStringArray(body.amenities),
   };
 
-  let { data, error } = await supabase
-    .from("properties")
-    .insert(payload)
-    .select("id, ref")
-    .single();
+  const attemptPayloads = [
+    payload,
+    (() => {
+      const next = { ...payload };
+      delete (next as { location_type?: string | null }).location_type;
+      return next;
+    })(),
+    (() => {
+      const next = { ...payload };
+      delete (next as { amenities?: string[] | null }).amenities;
+      return next;
+    })(),
+    (() => {
+      const next = { ...payload };
+      delete (next as { location_type?: string | null }).location_type;
+      delete (next as { amenities?: string[] | null }).amenities;
+      return next;
+    })(),
+  ];
 
-  if (error && isMissingLocationTypeColumn(error.message)) {
-    const legacyPayload = { ...payload };
-    delete (legacyPayload as { location_type?: string | null }).location_type;
-    const fallback = await supabase
+  let data: { id: string; ref: string } | null = null;
+  let error: { message?: string } | null = null;
+
+  for (let i = 0; i < attemptPayloads.length; i += 1) {
+    const attempt = await supabase
       .from("properties")
-      .insert(legacyPayload)
+      .insert(attemptPayloads[i])
       .select("id, ref")
       .single();
-    data = fallback.data;
-    error = fallback.error;
+
+    data = attempt.data as { id: string; ref: string } | null;
+    error = attempt.error;
+
+    if (!error) break;
+    const canRetry =
+      isMissingLocationTypeColumn(error.message) ||
+      isMissingAmenitiesColumn(error.message);
+    if (!canRetry) break;
   }
 
   if (error || !data) {

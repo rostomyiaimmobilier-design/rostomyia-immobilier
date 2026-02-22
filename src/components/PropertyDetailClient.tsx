@@ -24,6 +24,7 @@ import {
   ReceiptText,
 } from "lucide-react";
 import PropertyImageSlider from "@/components/PropertyImageSlider";
+import { formatPaymentLabel, normalizeFold } from "@/lib/payment-fallback";
 
 type Dict = {
   back: string;
@@ -105,74 +106,8 @@ export default function PropertyDetailClient({
 }: Props) {
   const isArabic = dir === "rtl";
 
-  function normalizeText(input?: string) {
-    return (input ?? "")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase();
-  }
-
-  function isUndefinedPaymentValue(raw: string | null | undefined) {
-    const n = normalizeText(String(raw ?? "").trim());
-    if (!n) return true;
-    return (
-      n === normalizeText(t.undefinedLabel) ||
-      n.includes("a definir") ||
-      n.includes("a preciser") ||
-      n.includes("non defini") ||
-      n.includes("non precise") ||
-      n.includes("a convenir") ||
-      n.includes("selon accord") ||
-      n.includes("غير محدد")
-    );
-  }
-
-  function hasPaymentUnit(raw: string) {
-    const n = normalizeText(raw);
-    return (
-      /\bmois\b/.test(n) ||
-      /\bmonth(s)?\b/.test(n) ||
-      n.includes("mensuel") ||
-      n.includes("شهري") ||
-      n.includes("nuit") ||
-      n.includes("jour") ||
-      n.includes("sejour")
-    );
-  }
-
-  function paymentFromLocationType(raw?: string | null) {
-    const n = normalizeText(raw);
-    if (!n) return null;
-
-    const isArabic = dir === "rtl";
-    if (n.includes("par_mois") || n.includes("par mois") || n.includes("mensuel")) {
-      return isArabic ? "تسبيق + شهري" : "Avance + par mois";
-    }
-    if (n.includes("six_mois") || n.includes("six mois") || n.includes("6 mois") || n.includes("6mois")) {
-      return isArabic ? "تسبيق + 6 اشهر" : "Avance + 6 mois";
-    }
-    if (
-      n.includes("douze_mois") ||
-      n.includes("douze mois") ||
-      n.includes("12 mois") ||
-      n.includes("12mois") ||
-      n.includes("annuel")
-    ) {
-      return isArabic ? "تسبيق + 12 شهر" : "Avance + 12 mois";
-    }
-    if (n.includes("par_nuit") || n.includes("par nuit") || n.includes("nuit")) {
-      return isArabic ? "تسبيق + بالليلة" : "Avance + par nuit";
-    }
-    if (n.includes("court_sejour") || n.includes("court sejour") || n.includes("sejour")) {
-      return isArabic ? "تسبيق + اقامة قصيرة" : "Avance + court sejour";
-    }
-    if (n === "location" || n.includes("location")) {
-      return isArabic ? "تسبيق" : "Avance";
-    }
-    if (n === "vente" || n.includes("vente")) {
-      return isArabic ? "Vente" : "Vente";
-    }
-    return null;
+  function normalizeText(input?: string | null) {
+    return normalizeFold(input);
   }
 
   function formatDzd(raw: string | number | null | undefined) {
@@ -186,13 +121,32 @@ export default function PropertyDetailClient({
   }
 
   function formatPayment(raw: string | null | undefined) {
+    return formatPaymentLabel({
+      rawPayment: raw,
+      undefinedLabel: t.undefinedLabel,
+      isArabic,
+    });
+  }
+
+  function parseMoneyToInt(raw: string | number | null | undefined) {
     const txt = String(raw ?? "").trim();
-    const fromLocationType = paymentFromLocationType(txt);
-    if (fromLocationType) return fromLocationType;
-    if (isUndefinedPaymentValue(txt)) return t.undefinedLabel;
-    if (hasPaymentUnit(txt)) return txt;
-    if (/^\d+(?:[.,]\d+)?$/.test(txt.replace(/\s+/g, ""))) return `${txt} mois`;
-    return txt;
+    if (!txt) return null;
+    const digits = txt.replace(/[^\d]/g, "");
+    if (!digits) return null;
+    const n = Number(digits);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function isShortStayLocationType(raw: string | null | undefined) {
+    const n = normalizeText(raw);
+    return (
+      n.includes("par_nuit") ||
+      n.includes("par nuit") ||
+      n.includes("nuit") ||
+      n.includes("court_sejour") ||
+      n.includes("court sejour") ||
+      n.includes("sejour")
+    );
   }
 
   function sectionMeta(title?: string) {
@@ -212,15 +166,29 @@ export default function PropertyDetailClient({
   const featureLineArabicMap: Record<string, string> = {
     "suite parentale": "جناح رئيسي",
     "residence fermee": "إقامة مغلقة",
+    "parking sous-sol": "موقف سيارات تحت الارض",
+    "parking sous sol": "موقف سيارات تحت الارض",
+    garage: "مرآب",
     box: "مرآب",
     luxe: "فاخر",
     "haut standing": "رفيع المستوى",
+    domotique: "نظام منزل ذكي",
     "double ascenseur": "مصعدان",
+    concierge: "خدمة الاستقبال",
+    "camera de surveillance": "كاميرات مراقبة",
+    "groupe electrogene": "مولد كهربائي",
     "chauffage central": "تدفئة مركزية",
     climatisation: "تكييف",
+    cheminee: "مدفاة",
+    dressing: "غرفة ملابس",
+    "porte blindee": "باب مصفح",
     "cuisine equipee": "مطبخ مجهز",
     "salle de bain italienne": "حمام عصري",
     "deux balcons": "شرفتان",
+    terrasse: "شرفة كبيرة",
+    jardin: "حديقة",
+    piscine: "مسبح",
+    "salle de sport": "قاعة رياضة",
     interphone: "إنترفون",
   };
 
@@ -317,19 +285,29 @@ export default function PropertyDetailClient({
       .replace(/\s*[-|–—]?\s*rostomyia\s+immobilier\.?/gi, "")
       .trim();
 
-    const priceLabel = priceFromDesc || property.price;
-    const paymentValue = paymentTerms.trim();
-    const paymentFromType = paymentFromLocationType(property.locationType);
-    const paymentWithUnit =
-      !paymentValue || isUndefinedPaymentValue(paymentValue)
-        ? paymentFromType ?? t.undefinedLabel
-        : formatPayment(paymentValue);
+    const priceSource = priceFromDesc || property.price;
+    const priceNumber = parseMoneyToInt(priceSource);
+    const agencyFeesNumber = parseMoneyToInt(cleanedAgencyFees);
+    const shouldAddAgencyToPrice = isShortStayLocationType(property.locationType);
+    const totalPrice =
+      shouldAddAgencyToPrice && priceNumber != null && agencyFeesNumber != null
+        ? priceNumber + agencyFeesNumber
+        : null;
+    const paymentWithUnit = formatPaymentLabel({
+      rawPayment: paymentTerms.trim(),
+      locationType: property.locationType,
+      undefinedLabel: t.undefinedLabel,
+      isArabic,
+    });
 
     return {
       location,
       paymentTerms: paymentWithUnit,
-      agencyFees: cleanedAgencyFees || t.undefinedLabel,
-      priceLabel: formatDzd(priceLabel),
+      agencyFees:
+        shouldAddAgencyToPrice && agencyFeesNumber != null
+          ? formatDzd(agencyFeesNumber)
+          : cleanedAgencyFees || t.undefinedLabel,
+      priceLabel: formatDzd(totalPrice ?? priceSource),
     };
   }
 
@@ -469,7 +447,7 @@ export default function PropertyDetailClient({
             </p>
 
             <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
-              <p className="text-2xl font-bold text-[rgb(var(--navy))]">{formatDzd(property.price)}</p>
+              <p className="text-2xl font-bold text-[rgb(var(--navy))]">{sidebarDetails.priceLabel}</p>
               <div className="h-1 w-44 rounded-full bg-gradient-to-r from-[rgb(var(--gold))]/25 via-[rgb(var(--gold))]/70 to-[rgb(var(--gold))]/25 opacity-70" />
             </div>
           </motion.div>

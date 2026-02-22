@@ -10,7 +10,6 @@ import { cookies } from "next/headers";
 import "./globals.css";
 
 import { LanguageProvider } from "@/components/LanguageProvider";
-import AppLayoutShell from "@/components/AppLayoutShell";
 import { LANG_COOKIE_KEY, LEGACY_LANG_COOKIE_KEY, langToDir, normalizeLang } from "@/lib/i18n";
 
 
@@ -45,6 +44,11 @@ const arabicDisplay = Amiri({
 export const metadata: Metadata = {
   title: "Rostomyia Immobilier",
   description: "Agence immobilière à Oran, Algérie",
+  icons: {
+    icon: [{ url: "/icon.png", type: "image/png" }],
+    shortcut: ["/icon.png"],
+    apple: [{ url: "/apple-icon.png", type: "image/png" }],
+  },
 };
 
 export default async function RootLayout({
@@ -62,9 +66,7 @@ export default async function RootLayout({
       <body
         className={`${manrope.variable} ${cormorant.variable} ${geistMono.variable} ${arabicSans.variable} ${arabicDisplay.variable} min-h-screen bg-[rgb(var(--bg))] text-[rgb(var(--text))] antialiased`}
       >
-        <LanguageProvider initialLang={lang}>
-          <AppLayoutShell>{children}</AppLayoutShell>
-        </LanguageProvider>
+        <LanguageProvider initialLang={lang}>{children}</LanguageProvider>
       </body>
     </html>
   );

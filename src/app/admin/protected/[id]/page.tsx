@@ -10,6 +10,28 @@ function isMissingLocationTypeColumn(message: string | undefined) {
   return m.includes("location_type") && (m.includes("does not exist") || m.includes("column"));
 }
 
+function isMissingAmenitiesColumn(message: string | undefined) {
+  const m = (message || "").toLowerCase();
+  return m.includes("amenities") && (m.includes("does not exist") || m.includes("column"));
+}
+
+type PropertyRow = {
+  id: string;
+  ref: string;
+  title: string | null;
+  type: string | null;
+  location_type?: string | null;
+  category: string | null;
+  apartment_type: string | null;
+  price: string | null;
+  location: string | null;
+  beds: number | null;
+  baths: number | null;
+  area: number | null;
+  description: string | null;
+  amenities?: string[] | null;
+};
+
 export default async function AdminEditPropertyPage({
   params,
 }: {
@@ -18,11 +40,12 @@ export default async function AdminEditPropertyPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const selectWithoutLocationType = `
+  const selectWithLocationTypeAndAmenities = `
     id,
     ref,
     title,
     type,
+    location_type,
     category,
     apartment_type,
     price,
@@ -30,10 +53,11 @@ export default async function AdminEditPropertyPage({
     beds,
     baths,
     area,
-    description
+    description,
+    amenities
   `;
 
-  const selectWithLocationType = `
+  const selectWithLocationTypeOnly = `
     id,
     ref,
     title,
@@ -49,34 +73,99 @@ export default async function AdminEditPropertyPage({
     description
   `;
 
-  const queryWithLocationType = async () =>
+  const selectWithAmenitiesOnly = `
+    id,
+    ref,
+    title,
+    type,
+    category,
+    apartment_type,
+    price,
+    location,
+    beds,
+    baths,
+    area,
+    description,
+    amenities
+  `;
+
+  const selectWithoutLocationTypeAndAmenities = `
+    id,
+    ref,
+    title,
+    type,
+    category,
+    apartment_type,
+    price,
+    location,
+    beds,
+    baths,
+    area,
+    description
+  `;
+
+  const queryWithLocationTypeAndAmenities = async () =>
     supabase
       .from("properties")
-      .select(selectWithLocationType)
+      .select(selectWithLocationTypeAndAmenities)
       .eq("id", id)
       .single();
 
-  const queryWithoutLocationType = async () =>
+  const queryWithLocationTypeOnly = async () =>
     supabase
       .from("properties")
-      .select(selectWithoutLocationType)
+      .select(selectWithLocationTypeOnly)
       .eq("id", id)
       .single();
 
-  let { data: property, error } = await queryWithLocationType();
+  const queryWithAmenitiesOnly = async () =>
+    supabase
+      .from("properties")
+      .select(selectWithAmenitiesOnly)
+      .eq("id", id)
+      .single();
 
-  if (error && isMissingLocationTypeColumn(error.message)) {
-    const fallback = await queryWithoutLocationType();
-    property = fallback.data;
-    error = fallback.error;
+  const queryWithoutLocationTypeAndAmenities = async () =>
+    supabase
+      .from("properties")
+      .select(selectWithoutLocationTypeAndAmenities)
+      .eq("id", id)
+      .single();
+
+  const initial = await queryWithLocationTypeAndAmenities();
+  let property = (initial.data as PropertyRow | null) ?? null;
+  let error = initial.error;
+
+  if (error && (isMissingLocationTypeColumn(error.message) || isMissingAmenitiesColumn(error.message))) {
+    const attempts = [
+      queryWithLocationTypeOnly,
+      queryWithAmenitiesOnly,
+      queryWithoutLocationTypeAndAmenities,
+    ];
+
+    for (const attempt of attempts) {
+      const fallback = await attempt();
+      property = (fallback.data as PropertyRow | null) ?? null;
+      error = fallback.error;
+      if (!error) break;
+      const stillMissing =
+        isMissingLocationTypeColumn(error.message) || isMissingAmenitiesColumn(error.message);
+      if (!stillMissing) break;
+    }
   }
 
   if (error || !property) {
     notFound();
   }
 
+  const { data: propertyImages } = await supabase
+    .from("property_images")
+    .select("id, path, sort, is_cover")
+    .eq("property_id", id)
+    .order("sort", { ascending: true });
+
   return (
-    <main className="mx-auto max-w-4xl p-8">
+    <main className="mx-auto w-full max-w-[1400px] px-4 py-8 sm:px-6 lg:px-8">
       <div className="space-y-1">
         <div>
           <Link href="/admin/protected" className="text-sm text-slate-600 hover:text-slate-900">
@@ -103,6 +192,18 @@ export default async function AdminEditPropertyPage({
             baths: property.baths != null ? Number(property.baths) : null,
             area: property.area != null ? Number(property.area) : null,
             description: property.description ?? null,
+            amenities:
+              "amenities" in property && Array.isArray(property.amenities)
+                ? property.amenities
+                    .map((x) => (typeof x === "string" ? x.trim() : ""))
+                    .filter(Boolean)
+                : [],
+            images: (propertyImages ?? []).map((img) => ({
+              id: String((img as { id: string }).id),
+              path: String((img as { path: string }).path),
+              sort: Number((img as { sort: number | null }).sort ?? 0),
+              is_cover: Boolean((img as { is_cover: boolean | null }).is_cover),
+            })),
           }}
         />
       </div>

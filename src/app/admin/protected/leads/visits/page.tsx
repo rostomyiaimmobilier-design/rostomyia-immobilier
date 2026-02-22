@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { updateViewingRequestStatus } from "../actions";
+import ViewingRequestsFilters from "./ViewingRequestsFilters";
+import AppDropdown from "@/components/ui/app-dropdown";
 
 const STATUS = ["new", "contacted", "scheduled", "closed"] as const;
 
@@ -28,9 +30,31 @@ type ViewingRequestRow = {
   status: string | null;
 };
 
+type SearchParams = Record<string, string | string[] | undefined>;
+
 function fmt(value: string | null | undefined) {
   const v = (value || "").trim();
   return v || "-";
+}
+
+function firstParam(input: string | string[] | undefined) {
+  if (Array.isArray(input)) return input[0] ?? "";
+  return input ?? "";
+}
+
+function normalizeFold(input: string | null | undefined) {
+  return String(input ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function statusLabel(status: string | null | undefined) {
+  if (status === "contacted") return "contacte";
+  if (status === "scheduled") return "planifie";
+  if (status === "closed") return "ferme";
+  return "nouveau";
 }
 
 function statusPill(status: string | null) {
@@ -46,14 +70,24 @@ function statusPill(status: string | null) {
   }
 }
 
-export default async function ViewingRequestsPage() {
+export default async function ViewingRequestsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<SearchParams>;
+}) {
+  const params = searchParams ? await searchParams : {};
+  const q = firstParam(params.q).trim();
+  const statusFilter = firstParam(params.status).trim().toLowerCase();
+  const langFilter = firstParam(params.lang).trim().toLowerCase();
+  const createdFilter = firstParam(params.created_within).trim();
+
   const supabase = await createClient();
 
   const { data, error } = await supabase
     .from("viewing_requests")
     .select("id, created_at, lang, property_ref, name, phone, preferred_date, preferred_time, message, status")
     .order("created_at", { ascending: false })
-    .limit(200);
+    .limit(500);
 
   if (error) {
     return (
@@ -66,45 +100,99 @@ export default async function ViewingRequestsPage() {
   }
 
   const requests = ((data ?? []) as ViewingRequestRow[]) ?? [];
-  const total = requests.length;
-  const fresh = requests.filter((x) => (x.status ?? "new") === "new").length;
-  const contacted = requests.filter((x) => x.status === "contacted").length;
-  const scheduled = requests.filter((x) => x.status === "scheduled").length;
+  const qFold = normalizeFold(q);
+  const createdDays = createdFilter === "7" || createdFilter === "30" || createdFilter === "90" ? Number(createdFilter) : 0;
+  const referenceTs = requests
+    .map((x) => new Date(x.created_at).getTime())
+    .filter((ts) => Number.isFinite(ts))
+    .reduce<number | null>((max, ts) => (max === null || ts > max ? ts : max), null);
+
+  const filteredRequests = requests.filter((x) => {
+    const normalizedStatus = String(x.status ?? "new").toLowerCase();
+    const normalizedLang = String(x.lang ?? "fr").toLowerCase();
+
+    if (statusFilter && statusFilter !== "all" && normalizedStatus !== statusFilter) return false;
+    if (langFilter && langFilter !== "all" && normalizedLang !== langFilter) return false;
+
+    if (createdDays > 0) {
+      const createdAtTs = new Date(x.created_at).getTime();
+      if (!Number.isFinite(createdAtTs) || referenceTs === null) return false;
+      const ageDays = (referenceTs - createdAtTs) / (1000 * 60 * 60 * 24);
+      if (ageDays > createdDays) return false;
+    }
+
+    if (!qFold) return true;
+
+    const haystack = normalizeFold(
+      [
+        x.property_ref,
+        x.name,
+        x.phone,
+        x.message,
+        x.preferred_date,
+        x.preferred_time,
+      ].join(" ")
+    );
+
+    return haystack.includes(qFold);
+  });
+
+  const total = filteredRequests.length;
+  const fresh = filteredRequests.filter((x) => (x.status ?? "new") === "new").length;
+  const contacted = filteredRequests.filter((x) => x.status === "contacted").length;
+  const scheduled = filteredRequests.filter((x) => x.status === "scheduled").length;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-4 py-10">
-      <section className="rounded-3xl border border-black/10 bg-white/75 p-6 shadow-sm backdrop-blur md:p-8">
+    <div className="space-y-8">
+      <section className="relative overflow-hidden rounded-3xl border border-black/10 bg-white/75 p-6 shadow-sm backdrop-blur md:p-8">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute -left-20 -top-16 h-56 w-56 rounded-full bg-[rgb(var(--gold))]/18 blur-3xl" />
+          <div className="absolute right-0 top-8 h-52 w-52 rounded-full bg-[rgb(var(--navy))]/10 blur-3xl" />
+        </div>
+
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
+          <div className="relative">
             <div className="inline-flex items-center gap-2 rounded-full bg-[rgb(var(--gold))]/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]">
               <Sparkles size={14} />
               Visit Desk
             </div>
-            <h1 className="mt-3 text-3xl font-extrabold text-[rgb(var(--navy))]">Viewing Requests</h1>
-            <p className="mt-2 text-sm text-black/60">Demandes de visite</p>
+            <h1 className="mt-3 text-3xl font-extrabold text-[rgb(var(--navy))]">Demandes de visite</h1>
+            <p className="mt-2 max-w-2xl text-sm text-black/65">
+              Suivez les nouvelles demandes, qualifiez les contacts et planifiez les visites depuis un flux unique.
+            </p>
           </div>
           <Link
             href="/admin/protected/leads"
             className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-medium text-[rgb(var(--navy))] hover:bg-black/5"
           >
             <ArrowLeft size={15} />
-            Back
+            Retour
           </Link>
         </div>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+        <div className="relative mt-6 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
           <StatCard label="Total" value={String(total)} icon={<CalendarClock size={15} />} />
           <StatCard label="Nouvelles" value={String(fresh)} icon={<Hourglass size={15} />} />
           <StatCard label="Contactees" value={String(contacted)} icon={<Phone size={15} />} />
           <StatCard label="Planifiees" value={String(scheduled)} icon={<BadgeCheck size={15} />} />
         </div>
+
+        <ViewingRequestsFilters
+          key={`${q}|${statusFilter}|${langFilter}|${createdFilter}`}
+          initialQ={q}
+          initialStatus={statusFilter || "all"}
+          initialLang={langFilter || "all"}
+          initialCreatedWithin={createdFilter}
+          totalCount={requests.length}
+          filteredCount={filteredRequests.length}
+        />
       </section>
 
       <section className="space-y-4">
-        {requests.map((x) => (
+        {filteredRequests.map((x) => (
           <article
             key={x.id}
-            className="rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm backdrop-blur md:p-6"
+            className="rounded-3xl border border-black/10 bg-white/82 p-5 shadow-sm backdrop-blur md:p-6"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -128,7 +216,7 @@ export default async function ViewingRequestsPage() {
                   x.status
                 )}`}
               >
-                {x.status ?? "new"}
+                {statusLabel(x.status)}
               </span>
             </div>
 
@@ -170,19 +258,15 @@ export default async function ViewingRequestsPage() {
                 }}
               >
                 <div className="text-xs uppercase tracking-wide text-black/50">Mise a jour</div>
-                <select
+                <AppDropdown
                   name="status"
                   defaultValue={x.status ?? "new"}
-                  className="mt-2 h-10 w-full rounded-xl border border-black/10 bg-white px-3 text-sm outline-none"
-                >
-                  {STATUS.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
+                  className="mt-2"
+                  triggerClassName="h-10"
+                  options={STATUS.map((s) => ({ value: s, label: s }))}
+                />
                 <button className="mt-2 h-10 w-full rounded-xl bg-[rgb(var(--navy))] px-3 text-xs font-semibold text-white hover:opacity-95">
-                  Save
+                  Enregistrer
                 </button>
               </form>
             </div>
@@ -196,9 +280,9 @@ export default async function ViewingRequestsPage() {
           </article>
         ))}
 
-        {requests.length === 0 && (
+        {filteredRequests.length === 0 && (
           <div className="rounded-2xl border border-black/10 bg-white/75 p-6 text-sm text-black/60">
-            No viewing requests yet.
+            Aucun resultat pour les filtres actuels.
           </div>
         )}
       </section>
@@ -216,7 +300,7 @@ function StatCard({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-black/10 bg-white p-4">
+    <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
       <div className="inline-flex items-center gap-2 text-xs uppercase tracking-wide text-black/50">
         {icon}
         {label}

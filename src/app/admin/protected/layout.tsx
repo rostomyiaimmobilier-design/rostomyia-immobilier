@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2, LayoutDashboard, ListChecks, PlusCircle } from "lucide-react";
+import { Building2, LayoutDashboard, ListChecks, PlusCircle, UserRound, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { hasAdminAccess } from "@/lib/admin-auth";
 
 export default async function AdminProtectedLayout({
   children,
@@ -15,13 +16,8 @@ export default async function AdminProtectedLayout({
   } = await supabase.auth.getUser();
   if (!user) redirect("/admin/login");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("is_admin")
-    .eq("id", user.id)
-    .single();
-
-  if (!profile?.is_admin) redirect("/");
+  const isAdmin = await hasAdminAccess(supabase, user);
+  if (!isAdmin) redirect("/admin/login?error=forbidden");
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[rgb(var(--brand-bg))]">
@@ -59,6 +55,20 @@ export default async function AdminProtectedLayout({
             >
               <ListChecks size={15} />
               Leads
+            </Link>
+            <Link
+              href="/admin/protected/agencies"
+              className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-medium text-[rgb(var(--navy))] hover:bg-black/5"
+            >
+              <Users size={15} />
+              Agencies
+            </Link>
+            <Link
+              href="/admin/protected/users"
+              className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-medium text-[rgb(var(--navy))] hover:bg-black/5"
+            >
+              <UserRound size={15} />
+              Users
             </Link>
             <Link
               href="/admin/new"

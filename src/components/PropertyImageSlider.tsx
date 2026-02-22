@@ -14,6 +14,7 @@ import {
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, Search, ZoomIn, ZoomOut, X } from "lucide-react";
+import { propertyImageBlurDataURL } from "@/lib/property-image-url";
 
 type Props = {
   images: string[];
@@ -46,6 +47,7 @@ export default function PropertyImageSlider({
   enableZoom = true,
 }: Props) {
   const safeImages = useMemo(() => images.filter(Boolean), [images]);
+  const blurDataURL = useMemo(() => propertyImageBlurDataURL(), []);
   const [index, setIndex] = useState(0);
   const [zoomOpen, setZoomOpen] = useState(false);
   const [zoomScale, setZoomScale] = useState(1);
@@ -283,6 +285,8 @@ export default function PropertyImageSlider({
                 src={current}
                 alt={alt}
                 fill
+                placeholder="blur"
+                blurDataURL={blurDataURL}
                 className="object-cover transition-transform duration-200"
                 style={{
                   transform:
@@ -330,7 +334,7 @@ export default function PropertyImageSlider({
               onClick={prev}
               className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-white/80 p-2
                          text-[rgb(var(--navy))] shadow-sm backdrop-blur ring-1 ring-black/5
-                         opacity-0 transition-opacity duration-200 group-hover/slider:opacity-100"
+                         opacity-100 transition-opacity duration-200 md:opacity-0 md:group-hover/slider:opacity-100"
               aria-label="Image precedente"
             >
               <ChevronLeft size={18} />
@@ -341,7 +345,7 @@ export default function PropertyImageSlider({
               onClick={next}
               className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-white/80 p-2
                          text-[rgb(var(--navy))] shadow-sm backdrop-blur ring-1 ring-black/5
-                         opacity-0 transition-opacity duration-200 group-hover/slider:opacity-100"
+                         opacity-100 transition-opacity duration-200 md:opacity-0 md:group-hover/slider:opacity-100"
               aria-label="Image suivante"
             >
               <ChevronRight size={18} />
@@ -386,7 +390,15 @@ export default function PropertyImageSlider({
               }`}
               aria-label={`Miniature ${i + 1}`}
             >
-              <Image src={src} alt={`${alt} ${i + 1}`} fill className="object-cover" sizes="20vw" />
+              <Image
+                src={src}
+                alt={`${alt} ${i + 1}`}
+                fill
+                placeholder="blur"
+                blurDataURL={blurDataURL}
+                className="object-cover"
+                sizes="20vw"
+              />
               {i === index ? <div className="pointer-events-none absolute inset-0 bg-[rgb(var(--gold))]/10" /> : null}
             </button>
           ))}

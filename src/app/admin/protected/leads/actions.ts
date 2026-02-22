@@ -47,6 +47,8 @@ export async function updateOwnerLeadStatus(id: string, status: string, validati
 
   revalidatePath("/admin/protected/leads/owners");
   revalidatePath("/admin/leads/owners");
+  revalidatePath("/admin/protected/leads/depot-tiers");
+  revalidatePath("/admin/leads/depot-tiers");
 
   if (isValidated) {
     const ts = Date.now().toString().slice(-6);

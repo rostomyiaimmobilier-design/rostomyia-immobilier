@@ -55,12 +55,15 @@ export async function createProperty(payload: Payload) {
       .insert(legacyPayload)
       .select("id")
       .single();
-    prop = fallback.data;
+    prop = (fallback.data as { id: string } | null) ?? null;
     error = fallback.error;
   }
 
   if (error) {
     return { ok: false as const, message: error.message };
+  }
+  if (!prop?.id) {
+    return { ok: false as const, message: "Property creation failed: missing id." };
   }
 
   if (payload.imageUrls.length) {
