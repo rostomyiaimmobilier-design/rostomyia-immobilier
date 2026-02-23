@@ -39,35 +39,35 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const AMENITY_OPTIONS = [
-  { key: "residence_fermee", label: "Residence fermee" },
-  { key: "parking_sous_sol", label: "Parking sous-sol" },
-  { key: "garage", label: "Garage" },
-  { key: "box", label: "Box" },
-  { key: "luxe", label: "Luxe" },
-  { key: "haut_standing", label: "Haut standing" },
-  { key: "domotique", label: "Domotique" },
-  { key: "double_ascenseur", label: "Double ascenseur" },
-  { key: "concierge", label: "Concierge" },
-  { key: "camera_surveillance", label: "Camera de surveillance" },
-  { key: "groupe_electrogene", label: "Groupe electrogene" },
-  { key: "chauffage_central", label: "Chauffage central" },
-  { key: "climatisation", label: "Climatisation" },
-  { key: "cheminee", label: "Cheminee" },
-  { key: "dressing", label: "Dressing" },
-  { key: "porte_blindee", label: "Porte blindee" },
-  { key: "cuisine_equipee", label: "Cuisine equipee" },
-  { key: "sdb_italienne", label: "Salle de bain italienne" },
-  { key: "deux_balcons", label: "Deux balcons" },
-  { key: "terrasse", label: "Terrasse" },
-  { key: "jardin", label: "Jardin" },
-  { key: "piscine", label: "Piscine" },
-  { key: "salle_sport", label: "Salle de sport" },
-  { key: "interphone", label: "Interphone" },
-  { key: "fibre", label: "Wifi fibre optique" },
-  { key: "lumineux", label: "Appartement tres lumineux" },
-  { key: "securite_h24", label: "Agent de securite H24" },
-  { key: "vue_ville", label: "Vue ville" },
-  { key: "vue_mer", label: "Vue mer" },
+  { key: "residence_fermee", label: "Residence fermee", labelAr: "إقامة مغلقة" },
+  { key: "parking_sous_sol", label: "Parking sous-sol", labelAr: "موقف سيارات تحت الأرض" },
+  { key: "garage", label: "Garage", labelAr: "مرآب" },
+  { key: "box", label: "Box", labelAr: "بوكس" },
+  { key: "luxe", label: "Luxe", labelAr: "فاخر" },
+  { key: "haut_standing", label: "Haut standing", labelAr: "راقي" },
+  { key: "domotique", label: "Domotique", labelAr: "منزل ذكي" },
+  { key: "double_ascenseur", label: "Double ascenseur", labelAr: "مصعدان" },
+  { key: "concierge", label: "Concierge", labelAr: "خدمة الاستقبال" },
+  { key: "camera_surveillance", label: "Camera de surveillance", labelAr: "كاميرات مراقبة" },
+  { key: "groupe_electrogene", label: "Groupe electrogene", labelAr: "مولد كهربائي" },
+  { key: "chauffage_central", label: "Chauffage central", labelAr: "تدفئة مركزية" },
+  { key: "climatisation", label: "Climatisation", labelAr: "تكييف" },
+  { key: "cheminee", label: "Cheminee", labelAr: "مدفأة" },
+  { key: "dressing", label: "Dressing", labelAr: "غرفة ملابس" },
+  { key: "porte_blindee", label: "Porte blindee", labelAr: "باب مصفح" },
+  { key: "cuisine_equipee", label: "Cuisine equipee", labelAr: "مطبخ مجهز" },
+  { key: "sdb_italienne", label: "Salle de bain italienne", labelAr: "حمام عصري" },
+  { key: "deux_balcons", label: "Deux balcons", labelAr: "شرفتان" },
+  { key: "terrasse", label: "Terrasse", labelAr: "تراس" },
+  { key: "jardin", label: "Jardin", labelAr: "حديقة" },
+  { key: "piscine", label: "Piscine", labelAr: "مسبح" },
+  { key: "salle_sport", label: "Salle de sport", labelAr: "قاعة رياضة" },
+  { key: "interphone", label: "Interphone", labelAr: "إنترفون" },
+  { key: "fibre", label: "Wifi fibre optique", labelAr: "إنترنت ألياف بصرية" },
+  { key: "lumineux", label: "Appartement tres lumineux", labelAr: "إضاءة طبيعية قوية" },
+  { key: "securite_h24", label: "Agent de securite H24", labelAr: "أمن 24/24" },
+  { key: "vue_ville", label: "Vue ville", labelAr: "إطلالة مدينة" },
+  { key: "vue_mer", label: "Vue mer", labelAr: "إطلالة بحر" },
 ] as const;
 
 const ROOMS_OPTIONS = [
@@ -600,8 +600,10 @@ type FavoriteStorageItem = {
   coverImage: string | null;
 };
 
-function amenityLabel(key: AmenityKey): string {
-  return AMENITY_OPTIONS.find((x) => x.key === key)?.label ?? key.replaceAll("_", " ");
+function amenityLabel(key: AmenityKey, lang: Lang = "fr"): string {
+  const option = AMENITY_OPTIONS.find((x) => x.key === key);
+  if (!option) return key.replaceAll("_", " ");
+  return lang === "ar" ? option.labelAr : option.label;
 }
 
 function serializeAmenities(amenities: AmenityKey[]): string {
@@ -1149,8 +1151,8 @@ function buildSearchableListingText(
   const parsed = smartParseLocation(item.location, communeMatchers);
   const categories = inferListingCategories(item);
   const amenityLabels = (item.amenities ?? []).flatMap((key) => {
-    const label = AMENITY_OPTIONS.find((a) => a.key === key)?.label;
-    return label ? [label] : [];
+    const option = AMENITY_OPTIONS.find((a) => a.key === key);
+    return option ? [option.label, option.labelAr] : [];
   });
 
   const normalizedLocationType = normalizeStoredLocationType(item.locationType);
@@ -2543,10 +2545,19 @@ export default function ListingsClient({
   };
 
   const filteredAmenities = useMemo(() => {
-    const s = amenitySearch.trim().toLowerCase();
-    if (!s) return AMENITY_OPTIONS;
-    return AMENITY_OPTIONS.filter((a) => a.label.toLowerCase().includes(s));
-  }, [amenitySearch]);
+    const sNorm = normalizeText(amenitySearch);
+    const localized = AMENITY_OPTIONS.map((a) => ({
+      ...a,
+      displayLabel: amenityLabel(a.key, lang),
+    }));
+    if (!sNorm) return localized;
+    return localized.filter(
+      (a) =>
+        normalizeText(a.displayLabel).includes(sNorm) ||
+        normalizeText(a.label).includes(sNorm) ||
+        normalizeText(a.labelAr).includes(sNorm)
+    );
+  }, [amenitySearch, lang]);
 
   const activeChips = useMemo(() => {
     const chips: Array<{ key: string; label: string; remove: () => void }> = [];
@@ -2608,11 +2619,9 @@ export default function ListingsClient({
     }
 
     filters.amenities.forEach((k) => {
-      const opt = AMENITY_OPTIONS.find((a) => a.key === k);
-      if (!opt) return;
       chips.push({
         key: `amenity:${k}`,
-        label: `✨ ${opt.label}`,
+        label: `✨ ${amenityLabel(k, lang)}`,
         remove: () =>
           setFilters((f) => {
             const next = new Set(f.amenities);
@@ -2622,11 +2631,9 @@ export default function ListingsClient({
       });
     });
     filters.excludedAmenities.forEach((key) => {
-      const opt = AMENITY_OPTIONS.find((a) => a.key === key);
-      if (!opt) return;
       chips.push({
         key: `excludedAmenity:${key}`,
-        label: `🚫 ${opt.label}`,
+        label: `🚫 ${amenityLabel(key, lang)}`,
         remove: () =>
           setFilters((f) => {
             const next = new Set(f.excludedAmenities);
@@ -2666,7 +2673,7 @@ export default function ListingsClient({
     }
 
     return chips;
-  }, [filters, dealTypeLabelMap, setFilters, t]);
+  }, [filters, dealTypeLabelMap, setFilters, t, lang]);
 
   const backgroundRecommendationBoostByRef = useMemo(() => {
     const map = new Map<string, number>();
@@ -3110,12 +3117,12 @@ export default function ListingsClient({
     if (filters.district) rows.push(filters.district);
     if (filters.excludedAmenities.size > 0) {
       const labels = Array.from(filters.excludedAmenities)
-        .map((key) => AMENITY_OPTIONS.find((row) => row.key === key)?.label)
+        .map((key) => amenityLabel(key, lang))
         .filter(Boolean) as string[];
       if (labels.length > 0) rows.push(`-${labels.slice(0, 2).join(", ")}`);
     }
     return rows;
-  }, [filters, dealTypeLabelMap]);
+  }, [filters, dealTypeLabelMap, lang]);
   const listingInsights = useMemo(() => {
     const visible = boundedResults.length > 0 ? boundedResults : computed;
     const communes = new Set<string>();
@@ -3566,12 +3573,12 @@ export default function ListingsClient({
       .map(([signature, value]) => ({
         key: `generated:${signature}`,
         icon: "⚡",
-        label: `${amenityLabel(value.amenities[0])} + ${amenityLabel(value.amenities[1])}`,
+        label: `${amenityLabel(value.amenities[0], lang)} + ${amenityLabel(value.amenities[1], lang)}`,
         amenities: value.amenities,
         source: "generated",
         generated: true,
       }));
-  }, [items]);
+  }, [items, lang]);
 
   const aiPresets = useMemo<AiPreset[]>(() => {
     const merged = [...curatedAiPresets, ...generatedAiPresets, ...customAiPresets];
@@ -4359,7 +4366,7 @@ export default function ListingsClient({
                     key={a.key}
                     className="flex cursor-pointer items-center justify-between rounded-xl border border-black/10 bg-white px-3 py-2 text-sm hover:bg-neutral-50"
                   >
-                    <span>{a.label}</span>
+                    <span>{a.displayLabel}</span>
                     <input
                       type="checkbox"
                       checked={checked}
@@ -4561,7 +4568,7 @@ export default function ListingsClient({
                     const lowInventory = count <= 2;
                     const description = `${
                       lang === "ar" ? "يشمل" : "Inclut"
-                    }: ${preset.amenities.map((a) => amenityLabel(a)).join(", ")} · ${count} ${t.results}${
+                    }: ${preset.amenities.map((a) => amenityLabel(a, lang)).join(", ")} · ${count} ${t.results}${
                       trend !== 0 ? ` · ${lang === "ar" ? "اتجاه" : "Tendance"} ${trend > 0 ? `+${trend}` : trend}` : ""
                     }`;
                     return (

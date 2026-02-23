@@ -32,24 +32,24 @@ const copy = {
     ],
   },
   ar: {
-    badge: "Ø¯Ø®ÙˆÙ„ Ø§Ù„ÙˆÙƒØ§Ù„Ø©",
-    title: "Ø§Ø¯Ø®Ù„ Ø¥Ù„Ù‰ Ù„ÙˆØ­Ø© Ø§Ù„ÙˆÙƒØ§Ù„Ø©",
-    desc: "Ø³Ø¬Ù‘Ù„ Ø§Ù„Ø¯Ø®ÙˆÙ„ Ù„Ø¥ÙŠØ¯Ø§Ø¹ Ø§Ù„Ø¹Ù‚Ø§Ø±Ø§ØªØŒ Ù…ØªØ§Ø¨Ø¹Ø© Ø§Ù„ØªØ­Ù‚Ù‚ØŒ ÙˆØ¥Ø¯Ø§Ø±Ø© Ø·Ù„Ø¨Ø§ØªÙƒ Ø¨Ø³Ù‡ÙˆÙ„Ø©.",
-    email: "Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ",
-    password: "ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ±",
-    submit: "ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø¯Ø®ÙˆÙ„",
-    loading: "Ø¬Ø§Ø±Ù ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø¯Ø®ÙˆÙ„...",
-    noAccount: "Ù„ÙŠØ³ Ù„Ø¯ÙŠÙƒ Ø­Ø³Ø§Ø¨ Ø¨Ø¹Ø¯ØŸ",
-    signup: "ØªØ³Ø¬ÙŠÙ„ Ø§Ù„ÙˆÙƒØ§Ù„Ø©",
-    notAgencyError: "Ù‡Ø°Ø§ Ø§Ù„Ø­Ø³Ø§Ø¨ Ù„ÙŠØ³ Ø­Ø³Ø§Ø¨ ÙˆÙƒØ§Ù„Ø©.",
-    pendingError: "Account pending activation. Please confirm email and wait for admin approval.",
-    suspendedError: "Agency account is suspended. Please contact support.",
-    sideBadge: "ÙˆØµÙˆÙ„ Ø¢Ù…Ù†",
-    sideTitle: "Ø¯Ø®ÙˆÙ„ Ù…Ø®ØµØµ Ù„ÙˆÙƒØ§Ù„Ø§ØªÙ†Ø§ Ø§Ù„Ø´Ø±ÙŠÙƒØ©",
+    badge: "دخول الوكالة",
+    title: "ادخل إلى لوحة الوكالة",
+    desc: "سجّل الدخول لإيداع العقارات، متابعة التحقق، وإدارة طلباتك بسهولة.",
+    email: "البريد الإلكتروني",
+    password: "كلمة المرور",
+    submit: "تسجيل الدخول",
+    loading: "جارٍ تسجيل الدخول...",
+    noAccount: "ليس لديك حساب بعد؟",
+    signup: "تسجيل الوكالة",
+    notAgencyError: "هذا الحساب ليس حساب وكالة.",
+    pendingError: "الحساب قيد التفعيل. يرجى تأكيد البريد الإلكتروني وانتظار موافقة الإدارة.",
+    suspendedError: "حساب الوكالة موقوف. يرجى التواصل مع الدعم.",
+    sideBadge: "وصول آمن",
+    sideTitle: "دخول مخصص لوكالاتنا الشريكة",
     sidePoints: [
-      "Ø¥ÙŠØ¯Ø§Ø¹ Ø§Ù„Ø¹Ù‚Ø§Ø±Ø§Øª Ù…Ù† Ù…Ø³Ø§Ø­Ø© ÙˆØ§Ø­Ø¯Ø©.",
-      "ØªØ­Ù‚Ù‚ Ù…ÙƒØªØ¨ÙŠ Ù‚Ø¨Ù„ Ø§Ù„Ù†Ø´Ø±.",
-      "Ù…ØªØ§Ø¨Ø¹Ø© Ø­Ø§Ù„Ø© Ø§Ù„Ø·Ù„Ø¨Ø§Øª Ø¨ÙˆØ¶ÙˆØ­.",
+      "إيداع العقارات من مساحة واحدة.",
+      "تحقق مكتبي قبل النشر.",
+      "متابعة حالة الطلبات بوضوح.",
     ],
   },
 } as const;
@@ -59,6 +59,7 @@ export default function AgencyLoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { lang, dir } = useLang();
+  const isArabic = lang === "ar";
   const t = copy[lang];
 
   const [email, setEmail] = useState("");
@@ -107,7 +108,10 @@ export default function AgencyLoginPage() {
   }
 
   return (
-    <main dir={dir} className="relative min-h-screen overflow-hidden bg-[rgb(var(--brand-bg))] px-4 py-12 md:py-16">
+    <main
+      dir={dir}
+      className={`${isArabic ? "font-arabic-luxury" : ""} relative min-h-screen overflow-hidden bg-[rgb(var(--brand-bg))] px-4 py-12 md:py-16`}
+    >
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -left-28 -top-24 h-80 w-80 rounded-full bg-[rgb(var(--gold))]/20 blur-3xl" />
         <div className="absolute right-0 top-20 h-80 w-80 rounded-full bg-[rgb(var(--navy))]/12 blur-3xl" />
@@ -125,7 +129,9 @@ export default function AgencyLoginPage() {
               <Building2 size={13} />
               {t.badge}
             </div>
-            <h1 className="mt-4 text-2xl font-bold text-[rgb(var(--navy))] md:text-3xl">{t.title}</h1>
+            <h1 className={`${isArabic ? "font-arabic-luxury leading-[1.25]" : ""} mt-4 text-2xl font-bold text-[rgb(var(--navy))] md:text-3xl`}>
+              {t.title}
+            </h1>
             <p className="mt-2 text-sm text-black/65">{t.desc}</p>
 
             <form onSubmit={handleSubmit} className="mt-6">

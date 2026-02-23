@@ -9,6 +9,12 @@ import { toUiErrorMessage } from "@/lib/ui-errors";
 
 type Step = "phone" | "otp";
 
+function getAccountType(user: { user_metadata?: Record<string, unknown> | null } | null) {
+  return String(user?.user_metadata?.account_type ?? "")
+    .trim()
+    .toLowerCase();
+}
+
 function getGoogleOAuthRedirectTo() {
   const siteUrlFromEnv = String(process.env.NEXT_PUBLIC_SITE_URL ?? "").trim();
   const browserOrigin = typeof window !== "undefined" ? window.location.origin : "";
@@ -94,7 +100,7 @@ export default function SignupPage() {
     setErrorMsg(null);
     setMsg(null);
 
-    const { error } = await supabase.auth.verifyOtp({
+    const { data, error } = await supabase.auth.verifyOtp({
       phone: (countryPrefix + localNumber).trim(),
       token: otp.trim(),
       type: "sms",
@@ -104,6 +110,18 @@ export default function SignupPage() {
 
     if (error) {
       setErrorMsg("Code incorrect ou expiré. Réessayez.");
+      return;
+    }
+
+    const accountType = getAccountType(data.user ?? null);
+    if (accountType === "agency") {
+      await supabase.auth.signOut();
+      setErrorMsg("Ce compte agence doit se connecter via l'espace agence.");
+      return;
+    }
+    if (accountType === "admin" || accountType === "super_admin") {
+      await supabase.auth.signOut();
+      setErrorMsg("Ce compte administrateur doit se connecter via /admin/login.");
       return;
     }
 

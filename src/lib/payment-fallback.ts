@@ -12,7 +12,7 @@ export function hasPaymentUnit(raw: string) {
     /\bmois\b/.test(n) ||
     /\bmonth(s)?\b/.test(n) ||
     n.includes("mensuel") ||
-    n.includes("Ø´Ù‡Ø±ÙŠ") ||
+    n.includes("شهري") ||
     n.includes("nuit") ||
     n.includes("jour") ||
     n.includes("sejour")
@@ -31,7 +31,7 @@ export function isUndefinedPaymentValue(raw: string | null | undefined, undefine
     n.includes("non precise") ||
     n.includes("a convenir") ||
     n.includes("selon accord") ||
-    n.includes("ØºÙŠØ± Ù…Ø­Ø¯Ø¯")
+    n.includes("غير محدد")
   );
 }
 
@@ -40,10 +40,10 @@ export function paymentFromLocationType(raw?: string | null, isArabic = false) {
   if (!n) return null;
 
   if (n.includes("par_mois") || n.includes("par mois") || n.includes("mensuel")) {
-    return isArabic ? "ØªØ³Ø¨ÙŠÙ‚ + Ø´Ù‡Ø±ÙŠ" : "par mois";
+    return isArabic ? "تسبيق + شهري" : "par mois";
   }
   if (n.includes("six_mois") || n.includes("six mois") || n.includes("6 mois") || n.includes("6mois")) {
-    return isArabic ? "ØªØ³Ø¨ÙŠÙ‚ + 6 Ø§Ø´Ù‡Ø±" : "6 mois";
+    return isArabic ? "تسبيق + 6 أشهر" : "6 mois";
   }
   if (
     n.includes("douze_mois") ||
@@ -52,19 +52,19 @@ export function paymentFromLocationType(raw?: string | null, isArabic = false) {
     n.includes("12mois") ||
     n.includes("annuel")
   ) {
-    return isArabic ? "ØªØ³Ø¨ÙŠÙ‚ + 12 Ø´Ù‡Ø±" : "12 mois";
+    return isArabic ? "تسبيق + 12 شهر" : "12 mois";
   }
   if (n.includes("par_nuit") || n.includes("par nuit") || n.includes("nuit")) {
-    return isArabic ? "ØªØ³Ø¨ÙŠÙ‚ + Ø¨Ø§Ù„Ù„ÙŠÙ„Ø©" : "par nuit";
+    return isArabic ? "تسبيق + بالليلة" : "par nuit";
   }
   if (n.includes("court_sejour") || n.includes("court sejour") || n.includes("sejour")) {
-    return isArabic ? "ØªØ³Ø¨ÙŠÙ‚ + Ø§Ù‚Ø§Ù…Ø© Ù‚ØµÙŠØ±Ø©" : "court sejour";
+    return isArabic ? "تسبيق + إقامة قصيرة" : "court sejour";
   }
   if (n === "location" || n.includes("location")) {
-    return isArabic ? "ØªØ³Ø¨ÙŠÙ‚" : "duree a preciser";
+    return isArabic ? "تسبيق" : "duree a preciser";
   }
   if (n === "vente" || n.includes("vente")) {
-    return isArabic ? "Vente" : "Vente";
+    return isArabic ? "بيع" : "Vente";
   }
   return null;
 }
@@ -82,7 +82,7 @@ export function formatPaymentLabel({
 }) {
   const payment = String(rawPayment ?? "").trim();
   const paymentNorm = normalizeFold(payment);
-  const durationOnlyFallback = "duree a preciser";
+  const durationOnlyFallback = isArabic ? "المدة غير محددة" : "duree a preciser";
 
   const fromExplicitType = paymentFromLocationType(payment, isArabic);
   if (fromExplicitType) return fromExplicitType;

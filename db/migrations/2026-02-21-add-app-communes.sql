@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS public.app_communes (
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT app_communes_name_not_blank CHECK (char_length(btrim(name)) >= 2)
 );
-
+A
 CREATE INDEX IF NOT EXISTS app_communes_active_name_idx
   ON public.app_communes (is_active, name);
 

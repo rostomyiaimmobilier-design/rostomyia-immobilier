@@ -4,7 +4,9 @@ import {
   Cormorant_Garamond,
   Geist_Mono,
   Noto_Naskh_Arabic,
+  Noto_Kufi_Arabic,
   Amiri,
+  Cairo,
 } from "next/font/google";
 import { cookies } from "next/headers";
 import "./globals.css";
@@ -41,6 +43,18 @@ const arabicDisplay = Amiri({
   weight: ["400", "700"],
 });
 
+const arabicUi = Cairo({
+  variable: "--font-arabic-ui",
+  subsets: ["arabic"],
+  weight: ["400", "500", "600", "700"],
+});
+
+const arabicLuxury = Noto_Kufi_Arabic({
+  variable: "--font-arabic-luxury",
+  subsets: ["arabic"],
+  weight: ["400", "500", "600", "700"],
+});
+
 export const metadata: Metadata = {
   title: "Rostomyia Immobilier",
   description: "Agence immobilière à Oran, Algérie",
@@ -64,7 +78,7 @@ export default async function RootLayout({
   return (
     <html lang={lang} dir={langToDir(lang)} className="dark">
       <body
-        className={`${manrope.variable} ${cormorant.variable} ${geistMono.variable} ${arabicSans.variable} ${arabicDisplay.variable} min-h-screen bg-[rgb(var(--bg))] text-[rgb(var(--text))] antialiased`}
+        className={`${manrope.variable} ${cormorant.variable} ${geistMono.variable} ${arabicSans.variable} ${arabicDisplay.variable} ${arabicUi.variable} ${arabicLuxury.variable} min-h-screen bg-[rgb(var(--bg))] text-[rgb(var(--text))] antialiased`}
       >
         <LanguageProvider initialLang={lang}>{children}</LanguageProvider>
       </body>

@@ -10,6 +10,12 @@ export default async function AccountPage() {
 
   if (!user) redirect("/auth/login");
 
+  const accountType = String(user.user_metadata?.account_type ?? "")
+    .trim()
+    .toLowerCase();
+  if (accountType === "agency") redirect("/agency/login");
+  if (accountType === "admin" || accountType === "super_admin") redirect("/admin/login");
+
   const safeMetadata = JSON.parse(JSON.stringify(user.user_metadata ?? {})) as Record<string, unknown>;
 
   return (

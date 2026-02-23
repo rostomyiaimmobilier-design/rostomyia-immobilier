@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { CircleUserRound } from "lucide-react";
 import { useLang } from "@/components/LanguageProvider";
 import { createClient } from "@/lib/supabase/client";
@@ -17,6 +17,7 @@ type AuthUserState = {
 export default function Navbar() {
   const { lang, setLang, dir } = useLang();
   const router = useRouter();
+  const pathname = usePathname();
 
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -104,12 +105,24 @@ export default function Navbar() {
       admin: "لوحة التحكم",
     },
   }[lang];
-  const agencyLabel = lang === "ar" ? "Agency" : "Espace agence";
+  const agencyLabel = lang === "ar" ? "فضاء الوكالات" : "Espace Agence";
+
+  const shouldSkipRefreshOnLangSwitch = (() => {
+    const p = String(pathname ?? "");
+    if (!p) return false;
+    if (p.startsWith("/proposer")) return true;
+    if (p.startsWith("/admin/protected/new")) return true;
+    if (/^\/admin\/protected\/[^/]+$/.test(p)) return true;
+    return false;
+  })();
 
   const changeLang = (newLang: "fr" | "ar") => {
     if (newLang === lang) return;
     setLang(newLang);
-    router.refresh();
+    // Keep selected files/state intact on upload/edit screens.
+    if (!shouldSkipRefreshOnLangSwitch) {
+      router.refresh();
+    }
   };
 
   const isAgencyUser = authUser?.accountType === "agency";

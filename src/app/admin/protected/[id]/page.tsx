@@ -15,6 +15,11 @@ function isMissingAmenitiesColumn(message: string | undefined) {
   return m.includes("amenities") && (m.includes("does not exist") || m.includes("column"));
 }
 
+function isMissingOwnerPhoneColumn(message: string | undefined) {
+  const m = (message || "").toLowerCase();
+  return m.includes("owner_phone") && (m.includes("does not exist") || m.includes("column"));
+}
+
 type PropertyRow = {
   id: string;
   ref: string;
@@ -24,6 +29,7 @@ type PropertyRow = {
   category: string | null;
   apartment_type: string | null;
   price: string | null;
+  owner_phone?: string | null;
   location: string | null;
   beds: number | null;
   baths: number | null;
@@ -40,118 +46,50 @@ export default async function AdminEditPropertyPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const selectWithLocationTypeAndAmenities = `
-    id,
-    ref,
-    title,
-    type,
-    location_type,
-    category,
-    apartment_type,
-    price,
-    location,
-    beds,
-    baths,
-    area,
-    description,
-    amenities
-  `;
+  const requiredFields = [
+    "id",
+    "ref",
+    "title",
+    "type",
+    "category",
+    "apartment_type",
+    "price",
+    "location",
+    "beds",
+    "baths",
+    "area",
+    "description",
+  ];
+  const optionalFields = new Set(["location_type", "amenities", "owner_phone"]);
 
-  const selectWithLocationTypeOnly = `
-    id,
-    ref,
-    title,
-    type,
-    location_type,
-    category,
-    apartment_type,
-    price,
-    location,
-    beds,
-    baths,
-    area,
-    description
-  `;
-
-  const selectWithAmenitiesOnly = `
-    id,
-    ref,
-    title,
-    type,
-    category,
-    apartment_type,
-    price,
-    location,
-    beds,
-    baths,
-    area,
-    description,
-    amenities
-  `;
-
-  const selectWithoutLocationTypeAndAmenities = `
-    id,
-    ref,
-    title,
-    type,
-    category,
-    apartment_type,
-    price,
-    location,
-    beds,
-    baths,
-    area,
-    description
-  `;
-
-  const queryWithLocationTypeAndAmenities = async () =>
-    supabase
+  let property: PropertyRow | null = null;
+  let error: { message?: string } | null = null;
+  for (let i = 0; i < 6; i += 1) {
+    const selectFields = [...requiredFields, ...Array.from(optionalFields)].join(",");
+    const attempt = await supabase
       .from("properties")
-      .select(selectWithLocationTypeAndAmenities)
+      .select(selectFields)
       .eq("id", id)
       .single();
+    property = (attempt.data as PropertyRow | null) ?? null;
+    error = attempt.error;
 
-  const queryWithLocationTypeOnly = async () =>
-    supabase
-      .from("properties")
-      .select(selectWithLocationTypeOnly)
-      .eq("id", id)
-      .single();
+    if (!error) break;
 
-  const queryWithAmenitiesOnly = async () =>
-    supabase
-      .from("properties")
-      .select(selectWithAmenitiesOnly)
-      .eq("id", id)
-      .single();
-
-  const queryWithoutLocationTypeAndAmenities = async () =>
-    supabase
-      .from("properties")
-      .select(selectWithoutLocationTypeAndAmenities)
-      .eq("id", id)
-      .single();
-
-  const initial = await queryWithLocationTypeAndAmenities();
-  let property = (initial.data as PropertyRow | null) ?? null;
-  let error = initial.error;
-
-  if (error && (isMissingLocationTypeColumn(error.message) || isMissingAmenitiesColumn(error.message))) {
-    const attempts = [
-      queryWithLocationTypeOnly,
-      queryWithAmenitiesOnly,
-      queryWithoutLocationTypeAndAmenities,
-    ];
-
-    for (const attempt of attempts) {
-      const fallback = await attempt();
-      property = (fallback.data as PropertyRow | null) ?? null;
-      error = fallback.error;
-      if (!error) break;
-      const stillMissing =
-        isMissingLocationTypeColumn(error.message) || isMissingAmenitiesColumn(error.message);
-      if (!stillMissing) break;
+    let changed = false;
+    if (isMissingLocationTypeColumn(error.message) && optionalFields.has("location_type")) {
+      optionalFields.delete("location_type");
+      changed = true;
     }
+    if (isMissingAmenitiesColumn(error.message) && optionalFields.has("amenities")) {
+      optionalFields.delete("amenities");
+      changed = true;
+    }
+    if (isMissingOwnerPhoneColumn(error.message) && optionalFields.has("owner_phone")) {
+      optionalFields.delete("owner_phone");
+      changed = true;
+    }
+    if (!changed) break;
   }
 
   if (error || !property) {
@@ -187,6 +125,7 @@ export default async function AdminEditPropertyPage({
             category: property.category ?? null,
             apartmentType: property.apartment_type ?? null,
             price: property.price ?? null,
+            ownerPhone: ("owner_phone" in property ? property.owner_phone : null) ?? null,
             location: property.location ?? null,
             beds: property.beds != null ? Number(property.beds) : null,
             baths: property.baths != null ? Number(property.baths) : null,

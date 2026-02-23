@@ -41,12 +41,17 @@ export async function GET(request: Request) {
   };
 
   if (userMeta.account_type === "agency") {
+    await supabase.auth.signOut();
     if ((userMeta.agency_status ?? "pending") === "active") {
       return redirectTo("/agency/dashboard", requestUrl);
     }
     return redirectTo("/agency/signup/success", requestUrl);
   }
 
+  if (userMeta.account_type === "admin" || userMeta.account_type === "super_admin") {
+    await supabase.auth.signOut();
+    return redirectTo("/admin/login", requestUrl);
+  }
+
   return redirectTo(next ?? "/account", requestUrl);
 }
-

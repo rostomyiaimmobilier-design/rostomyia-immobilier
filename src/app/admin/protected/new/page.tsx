@@ -15,9 +15,19 @@ function normalizeRefParam(value: string | string[] | undefined): string | undef
   return trimmed;
 }
 
+function normalizeOwnerLeadIdParam(value: string | string[] | undefined): string | undefined {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  if (!/^[0-9a-fA-F-]{36}$/.test(trimmed)) return undefined;
+  return trimmed;
+}
+
 export default async function AdminNewPage({ searchParams }: AdminNewPageProps) {
   const params = (await searchParams) ?? {};
   const initialRef = normalizeRefParam(params.ref);
+  const ownerLeadId = normalizeOwnerLeadIdParam(params.ownerLeadId);
 
   return (
     <main className="mx-auto w-full max-w-[1400px] px-4 py-8 sm:px-6 lg:px-8">
@@ -29,7 +39,7 @@ export default async function AdminNewPage({ searchParams }: AdminNewPageProps) 
       </div>
 
       <div className="mt-6">
-        <NewPropertyForm initialRef={initialRef} />
+        <NewPropertyForm initialRef={initialRef} ownerLeadId={ownerLeadId} />
       </div>
     </main>
   );

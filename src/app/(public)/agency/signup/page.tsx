@@ -58,6 +58,7 @@ const copy = {
     address: "Adresse *",
     website: "Site web",
     serviceAreas: "Zones de couverture",
+    serviceAreasPlaceholder: "Oran, Bir El Djir, Es Senia",
     yearsExperience: "Annees d'experience",
     email: "Email de connexion *",
     password: "Mot de passe *",
@@ -90,51 +91,52 @@ const copy = {
     ],
   },
   ar: {
-    badge: "ØªØ³Ø¬ÙŠÙ„ Ø§Ù„ÙˆÙƒØ§Ù„Ø©",
-    title: "Ø£Ù†Ø´Ø¦ Ø­Ø³Ø§Ø¨ ÙˆÙƒØ§Ù„ØªÙƒ",
-    desc: "Ø£ÙƒÙ…Ù„ Ù…Ù„Ù Ø§Ù„ÙˆÙƒØ§Ù„Ø© Ù„ØªÙØ¹ÙŠÙ„ Ø­Ø³Ø§Ø¨ Ù…Ù‡Ù†ÙŠ Ù…ØªÙƒØ§Ù…Ù„.",
-    requiredHint: "Ø§Ù„Ø­Ù‚ÙˆÙ„ Ø§Ù„Ø¥Ù„Ø²Ø§Ù…ÙŠØ©",
-    optionalHint: "Ø§Ù„Ø­Ù‚ÙˆÙ„ Ø§Ù„Ø§Ø®ØªÙŠØ§Ø±ÙŠØ©",
-    sectionIdentity: "Ù‡ÙˆÙŠØ© Ø§Ù„ÙˆÙƒØ§Ù„Ø©",
-    sectionContact: "Ø§Ù„Ø§ØªØµØ§Ù„ ÙˆØ§Ù„ØªØºØ·ÙŠØ©",
-    sectionAccount: "Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø¯Ø®ÙˆÙ„",
-    agencyName: "Ø§Ø³Ù… Ø§Ù„ÙˆÙƒØ§Ù„Ø© *",
-    managerName: "Ø§Ø³Ù… Ø§Ù„Ù…Ø³Ø¤ÙˆÙ„ *",
-    phone: "Ø§Ù„Ù‡Ø§ØªÙ Ø§Ù„Ø±Ø¦ÙŠØ³ÙŠ *",
-    whatsapp: "ÙˆØ§ØªØ³Ø§Ø¨",
-    city: "Ø§Ù„Ù…Ø¯ÙŠÙ†Ø© *",
-    address: "Ø§Ù„Ø¹Ù†ÙˆØ§Ù† *",
-    website: "Ø§Ù„Ù…ÙˆÙ‚Ø¹ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ",
-    serviceAreas: "Ù…Ù†Ø§Ø·Ù‚ Ø§Ù„ØªØºØ·ÙŠØ©",
-    yearsExperience: "Ø³Ù†ÙˆØ§Øª Ø§Ù„Ø®Ø¨Ø±Ø©",
-    email: "Ø¨Ø±ÙŠØ¯ ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø¯Ø®ÙˆÙ„ *",
-    password: "ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± *",
-    confirmPassword: "ØªØ£ÙƒÙŠØ¯ ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± *",
+    badge: "تسجيل الوكالة",
+    title: "أنشئ حساب وكالتك",
+    desc: "أكمل ملف الوكالة لتفعيل حساب مهني متكامل.",
+    requiredHint: "الحقول الإلزامية",
+    optionalHint: "الحقول الاختيارية",
+    sectionIdentity: "هوية الوكالة",
+    sectionContact: "الاتصال والتغطية",
+    sectionAccount: "بيانات الدخول",
+    agencyName: "اسم الوكالة *",
+    managerName: "اسم المسؤول *",
+    phone: "الهاتف الرئيسي *",
+    whatsapp: "واتساب",
+    city: "المدينة *",
+    address: "العنوان *",
+    website: "الموقع الإلكتروني",
+    serviceAreas: "مناطق التغطية",
+    serviceAreasPlaceholder: "وهران، بئر الجير، السانية",
+    yearsExperience: "سنوات الخبرة",
+    email: "بريد تسجيل الدخول *",
+    password: "كلمة المرور *",
+    confirmPassword: "تأكيد كلمة المرور *",
     terms:
-      "Ø£Ø¤ÙƒØ¯ ØµØ­Ø© Ø§Ù„Ù…Ø¹Ù„ÙˆÙ…Ø§Øª Ø§Ù„Ù…Ù‚Ø¯Ù…Ø© ÙˆØ£ÙˆØ§ÙÙ‚ Ø¹Ù„Ù‰ Ù…Ø¹Ø§Ù„Ø¬Ø© Ù‡Ø°Ù‡ Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª Ù„Ø£ØºØ±Ø§Ø¶ Ø¥Ø¯Ø§Ø±Ø© Ø­Ø³Ø§Ø¨ Ø§Ù„ÙˆÙƒØ§Ù„Ø©.",
-    submit: "Ø¥Ù†Ø´Ø§Ø¡ Ø­Ø³Ø§Ø¨ Ø§Ù„ÙˆÙƒØ§Ù„Ø©",
-    loading: "Ø¬Ø§Ø±Ù Ø§Ù„Ø¥Ù†Ø´Ø§Ø¡...",
-    hasAccount: "Ù„Ø¯ÙŠÙƒ Ø­Ø³Ø§Ø¨ Ø¨Ø§Ù„ÙØ¹Ù„ØŸ",
-    login: "Ø¯Ø®ÙˆÙ„ Ø§Ù„ÙˆÙƒØ§Ù„Ø©",
-    passwordMinError: "ÙŠØ¬Ø¨ Ø£Ù† ØªØ­ØªÙˆÙŠ ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± Ø¹Ù„Ù‰ 6 Ø£Ø­Ø±Ù Ø¹Ù„Ù‰ Ø§Ù„Ø£Ù‚Ù„.",
-    confirmError: "ØªØ£ÙƒÙŠØ¯ ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± ØºÙŠØ± Ù…Ø·Ø§Ø¨Ù‚.",
-    requiredError: "ÙŠØ±Ø¬Ù‰ Ù…Ù„Ø¡ Ø¬Ù…ÙŠØ¹ Ø§Ù„Ø­Ù‚ÙˆÙ„ Ø§Ù„Ø¥Ù„Ø²Ø§Ù…ÙŠØ©.",
-    invalidPhone: "Ø±Ù‚Ù… Ø§Ù„Ù‡Ø§ØªÙ ØºÙŠØ± ØµØ§Ù„Ø­.",
-    termsError: "ÙŠØ±Ø¬Ù‰ Ø§Ù„Ù…ÙˆØ§ÙÙ‚Ø© Ø¹Ù„Ù‰ ØªØ£ÙƒÙŠØ¯ Ø§Ù„Ù…Ø¹Ù„ÙˆÙ…Ø§Øª.",
-    duplicateEmailError: "This account already exists. Please sign in.",
-    successMsg: "ØªÙ… Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø­Ø³Ø§Ø¨. ØªØ­Ù‚Ù‚ Ù…Ù† Ø¨Ø±ÙŠØ¯Ùƒ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ Ø«Ù… Ù‚Ù… Ø¨ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø¯Ø®ÙˆÙ„.",
-    sideBadge: "Ù…Ù„Ù Ø§Ù„ÙˆÙƒØ§Ù„Ø©",
-    sideTitle: "Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ù…Ø·Ù„ÙˆØ¨Ø© Ù„ØªÙØ¹ÙŠÙ„ Ø­Ø³Ø§Ø¨Ùƒ Ø§Ù„Ù…Ù‡Ù†ÙŠ",
+      "أؤكد صحة المعلومات المقدمة وأوافق على معالجة هذه البيانات لأغراض إدارة حساب الوكالة.",
+    submit: "إنشاء حساب الوكالة",
+    loading: "جاري الإنشاء...",
+    hasAccount: "لديك حساب بالفعل؟",
+    login: "دخول الوكالة",
+    passwordMinError: "يجب أن تحتوي كلمة المرور على 6 أحرف على الأقل.",
+    confirmError: "تأكيد كلمة المرور غير مطابق.",
+    requiredError: "يرجى ملء جميع الحقول الإلزامية.",
+    invalidPhone: "رقم الهاتف غير صالح.",
+    termsError: "يرجى الموافقة على تأكيد المعلومات.",
+    duplicateEmailError: "هذا الحساب موجود بالفعل. يرجى تسجيل الدخول.",
+    successMsg: "تم إنشاء الحساب. تحقق من بريدك الإلكتروني ثم قم بتسجيل الدخول.",
+    sideBadge: "ملف الوكالة",
+    sideTitle: "البيانات المطلوبة لتفعيل حسابك المهني",
     sidePoints: [
-      "Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø§ØªØµØ§Ù„ Ø§Ù„Ø±Ø³Ù…ÙŠØ© Ù„Ù„ÙˆÙƒØ§Ù„Ø©",
-      "Ø§Ù„Ù…Ø¯ÙŠÙ†Ø© ÙˆØ§Ù„Ø¹Ù†ÙˆØ§Ù† Ø§Ù„Ù…Ù‡Ù†ÙŠ",
-      "Ù†Ø·Ø§Ù‚ Ø§Ù„Ù†Ø´Ø§Ø· ÙˆÙ…Ù†Ø§Ø·Ù‚ Ø§Ù„ØªØºØ·ÙŠØ©",
+      "بيانات الاتصال الرسمية للوكالة",
+      "المدينة والعنوان المهني",
+      "نطاق النشاط ومناطق التغطية",
     ],
-    nextStepsTitle: "Ø¨Ø¹Ø¯ Ø§Ù„ØªØ³Ø¬ÙŠÙ„",
+    nextStepsTitle: "بعد التسجيل",
     nextSteps: [
-      "ØªØ£ÙƒÙŠØ¯ Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ",
-      "ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø¯Ø®ÙˆÙ„ Ø¥Ù„Ù‰ Ù„ÙˆØ­Ø© Ø§Ù„ÙˆÙƒØ§Ù„Ø©",
-      "Ø¥ÙŠØ¯Ø§Ø¹ Ø£ÙˆÙ„ Ø¹Ù‚Ø§Ø±",
+      "تأكيد البريد الإلكتروني",
+      "تسجيل الدخول إلى لوحة الوكالة",
+      "إيداع أول عقار",
     ],
   },
 } as const;
@@ -158,6 +160,7 @@ export default function AgencySignupPage() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const { lang, dir } = useLang();
+  const isArabic = lang === "ar";
   const t = copy[lang];
 
   const [form, setForm] = useState<AgencySignupForm>(INITIAL_FORM);
@@ -271,7 +274,10 @@ export default function AgencySignupPage() {
   }
 
   return (
-    <main dir={dir} className="relative min-h-screen overflow-hidden bg-[rgb(var(--brand-bg))] px-4 py-12 md:py-16">
+    <main
+      dir={dir}
+      className={`${isArabic ? "font-arabic-luxury" : ""} relative min-h-screen overflow-hidden bg-[rgb(var(--brand-bg))] px-4 py-12 md:py-16`}
+    >
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -left-28 -top-24 h-80 w-80 rounded-full bg-[rgb(var(--gold))]/20 blur-3xl" />
         <div className="absolute right-0 top-20 h-80 w-80 rounded-full bg-[rgb(var(--navy))]/12 blur-3xl" />
@@ -289,7 +295,9 @@ export default function AgencySignupPage() {
               <UserPlus size={13} />
               {t.badge}
             </div>
-            <h1 className="mt-4 text-2xl font-bold text-[rgb(var(--navy))] md:text-3xl">{t.title}</h1>
+            <h1 className={`${isArabic ? "font-arabic-luxury leading-[1.25]" : ""} mt-4 text-2xl font-bold text-[rgb(var(--navy))] md:text-3xl`}>
+              {t.title}
+            </h1>
             <p className="mt-2 text-sm text-black/65">{t.desc}</p>
 
             <div className="mt-4 flex flex-wrap gap-2 text-[11px] font-semibold uppercase tracking-wide">
@@ -404,7 +412,7 @@ export default function AgencySignupPage() {
                       type="text"
                       value={form.serviceAreas}
                       onChange={(e) => updateField("serviceAreas", e.target.value)}
-                      placeholder="Oran, Bir El Djir, Es Senia"
+                      placeholder={t.serviceAreasPlaceholder}
                       className="h-11 w-full rounded-2xl border border-black/10 bg-white px-3.5 outline-none focus:border-[rgb(var(--navy))]/35"
                     />
                   </label>

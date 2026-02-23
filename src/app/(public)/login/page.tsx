@@ -9,6 +9,12 @@ import { toUiErrorMessage } from "@/lib/ui-errors";
 
 type LoginStep = "password" | "otp";
 
+function getAccountType(user: { user_metadata?: Record<string, unknown> | null } | null) {
+  return String(user?.user_metadata?.account_type ?? "")
+    .trim()
+    .toLowerCase();
+}
+
 export default function UserLoginPage() {
   const supabase = createClient();
   const router = useRouter();
@@ -58,7 +64,7 @@ export default function UserLoginPage() {
     setInfoMsg(null);
 
     const normalizedEmail = email.trim().toLowerCase();
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: normalizedEmail,
       password,
     });
@@ -72,6 +78,18 @@ export default function UserLoginPage() {
         return;
       }
       setErrorMsg(toUiErrorMessage(error.message, { context: "auth" }));
+      return;
+    }
+
+    const accountType = getAccountType(data.user ?? null);
+    if (accountType === "agency") {
+      await supabase.auth.signOut();
+      setErrorMsg("Ce compte agence doit se connecter via l'espace agence.");
+      return;
+    }
+    if (accountType === "admin" || accountType === "super_admin") {
+      await supabase.auth.signOut();
+      setErrorMsg("Ce compte administrateur doit se connecter via /admin/login.");
       return;
     }
 
@@ -96,7 +114,7 @@ export default function UserLoginPage() {
     setErrorMsg(null);
     setInfoMsg(null);
 
-    const { error } = await supabase.auth.verifyOtp({
+    const { data, error } = await supabase.auth.verifyOtp({
       email: normalizedEmail,
       token: otp.trim(),
       type: "email",
@@ -106,6 +124,18 @@ export default function UserLoginPage() {
 
     if (error) {
       setErrorMsg(toUiErrorMessage(error.message, { context: "otp" }));
+      return;
+    }
+
+    const accountType = getAccountType(data.user ?? null);
+    if (accountType === "agency") {
+      await supabase.auth.signOut();
+      setErrorMsg("Ce compte agence doit se connecter via l'espace agence.");
+      return;
+    }
+    if (accountType === "admin" || accountType === "super_admin") {
+      await supabase.auth.signOut();
+      setErrorMsg("Ce compte administrateur doit se connecter via /admin/login.");
       return;
     }
 

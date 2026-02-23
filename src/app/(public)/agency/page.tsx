@@ -32,7 +32,7 @@ const AGENCY_IMAGES = [
 
 const copy = {
   fr: {
-    badge: "Espace agence",
+    badge: "Espace Agence",
     heroTitle: "Boostez votre portefeuille immobilier avec Rostomyia",
     heroDesc:
       "Un espace dedie aux agences pour deposer des biens, accelerer la validation, et convertir plus vite avec une vitrine premium.",

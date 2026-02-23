@@ -12,16 +12,51 @@ function isMissingAmenitiesColumn(message: string | undefined) {
   return m.includes("amenities") && (m.includes("does not exist") || m.includes("column"));
 }
 
+function isMissingUploadedByTeamColumn(message: string | undefined) {
+  const m = (message || "").toLowerCase();
+  return m.includes("uploaded_byteam") && (m.includes("does not exist") || m.includes("column"));
+}
+
+function isMissingOwnerLeadIdColumn(message: string | undefined) {
+  const m = (message || "").toLowerCase();
+  return m.includes("owner_lead_id") && (m.includes("does not exist") || m.includes("column"));
+}
+
+function isMissingOwnerPhoneColumn(message: string | undefined) {
+  const m = (message || "").toLowerCase();
+  return m.includes("owner_phone") && (m.includes("does not exist") || m.includes("column"));
+}
+
 function toOptionalString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
 }
 
+function toOptionalDigitsString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const digits = value.replace(/\D/g, "");
+  return digits || null;
+}
+
 function toOptionalNumber(value: unknown): number | null {
   if (value == null || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toOptionalBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true" || normalized === "1") return true;
+    if (normalized === "false" || normalized === "0") return false;
+  }
+  if (typeof value === "number") {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+  return null;
 }
 
 function toOptionalStringArray(value: unknown): string[] | null {
@@ -71,6 +106,8 @@ export async function PUT(
 
   const type = body.type === "Vente" ? "Vente" : "Location";
   const locationType = toOptionalString(body.location_type) ?? (type === "Vente" ? "vente" : "location");
+  const uploadedByTeam = toOptionalBoolean(body.uploaded_byteam);
+  const ownerLeadId = toOptionalString(body.owner_lead_id);
 
   const payload = {
     title,
@@ -85,35 +122,19 @@ export async function PUT(
     area: toOptionalNumber(body.area),
     description: toOptionalString(body.description),
     amenities: toOptionalStringArray(body.amenities),
+    ...(body.owner_phone !== undefined ? { owner_phone: toOptionalDigitsString(body.owner_phone) } : {}),
+    ...(uploadedByTeam !== null ? { uploaded_byteam: uploadedByTeam } : {}),
+    ...(body.owner_lead_id !== undefined ? { owner_lead_id: ownerLeadId } : {}),
   };
-
-  const attemptPayloads = [
-    payload,
-    (() => {
-      const next = { ...payload };
-      delete (next as { location_type?: string | null }).location_type;
-      return next;
-    })(),
-    (() => {
-      const next = { ...payload };
-      delete (next as { amenities?: string[] | null }).amenities;
-      return next;
-    })(),
-    (() => {
-      const next = { ...payload };
-      delete (next as { location_type?: string | null }).location_type;
-      delete (next as { amenities?: string[] | null }).amenities;
-      return next;
-    })(),
-  ];
 
   let data: { id: string; ref: string } | null = null;
   let error: { message?: string } | null = null;
+  const attemptPayload: Record<string, unknown> = { ...payload };
 
-  for (let i = 0; i < attemptPayloads.length; i += 1) {
+  for (let i = 0; i < 10; i += 1) {
     const attempt = await supabase
       .from("properties")
-      .update(attemptPayloads[i])
+      .update(attemptPayload)
       .eq("id", id)
       .select("id, ref")
       .single();
@@ -122,10 +143,28 @@ export async function PUT(
     error = attempt.error;
 
     if (!error) break;
-    const canRetry =
-      isMissingLocationTypeColumn(error.message) ||
-      isMissingAmenitiesColumn(error.message);
-    if (!canRetry) break;
+    let changed = false;
+    if (isMissingLocationTypeColumn(error.message) && "location_type" in attemptPayload) {
+      delete attemptPayload.location_type;
+      changed = true;
+    }
+    if (isMissingAmenitiesColumn(error.message) && "amenities" in attemptPayload) {
+      delete attemptPayload.amenities;
+      changed = true;
+    }
+    if (isMissingUploadedByTeamColumn(error.message) && "uploaded_byteam" in attemptPayload) {
+      delete attemptPayload.uploaded_byteam;
+      changed = true;
+    }
+    if (isMissingOwnerLeadIdColumn(error.message) && "owner_lead_id" in attemptPayload) {
+      delete attemptPayload.owner_lead_id;
+      changed = true;
+    }
+    if (isMissingOwnerPhoneColumn(error.message) && "owner_phone" in attemptPayload) {
+      delete attemptPayload.owner_phone;
+      changed = true;
+    }
+    if (!changed) break;
   }
 
   if (error || !data) {

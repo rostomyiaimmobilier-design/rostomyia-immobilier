@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   AlertCircle,
@@ -53,7 +53,7 @@ type ViewingPayload = {
 };
 
 export default function VisitePage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const { lang, dir } = useLang();
   const searchParams = useSearchParams();
   const prefilledRef = (searchParams.get("ref") || "").trim();
@@ -124,6 +124,69 @@ export default function VisitePage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [lastPayload, setLastPayload] = useState<ViewingPayload | null>(null);
+  const [nameValue, setNameValue] = useState("");
+  const [phoneValue, setPhoneValue] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+
+    const applyUser = (user: {
+      phone?: string | null;
+      email?: string | null;
+      user_metadata?: Record<string, unknown> | null;
+    } | null) => {
+      if (!alive || !user) return;
+      const userMeta = (user.user_metadata ?? {}) as Record<string, unknown>;
+      const prefilledName = [
+        userMeta.full_name,
+        userMeta.username,
+        userMeta.name,
+        userMeta.agency_name,
+      ]
+        .map((x) => String(x ?? "").trim())
+        .find(Boolean);
+      const prefilledPhone = [
+        userMeta.phone,
+        userMeta.agency_phone,
+        user.phone,
+      ]
+        .map((x) => String(x ?? "").trim())
+        .find(Boolean);
+
+      if (prefilledName) {
+        setNameValue((prev) => (prev.trim() ? prev : prefilledName));
+      }
+      if (prefilledPhone) {
+        setPhoneValue((prev) => (prev.trim() ? prev : prefilledPhone));
+      }
+    };
+
+    async function prefillSignedInUser() {
+      const sessionResult = await supabase.auth.getSession();
+      if (!alive) return;
+      const sessionUser = sessionResult.data.session?.user ?? null;
+      if (sessionUser) {
+        applyUser(sessionUser);
+        return;
+      }
+
+      const userResult = await supabase.auth.getUser();
+      if (!alive) return;
+      applyUser(userResult.data.user ?? null);
+    }
+
+    prefillSignedInUser().catch(() => null);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      applyUser(session?.user ?? null);
+    });
+
+    return () => {
+      alive = false;
+      subscription.unsubscribe();
+    };
+  }, [supabase]);
 
   async function sendRequest(payload: ViewingPayload) {
     setIsSubmitting(true);
@@ -317,6 +380,8 @@ export default function VisitePage() {
                 name="name"
                 placeholder={t.namePlaceholder}
                 className="h-12 w-full rounded-2xl border border-black/10 bg-white px-11 text-sm outline-none ring-0 transition focus:border-[rgb(var(--gold))]/70"
+                value={nameValue}
+                onChange={(e) => setNameValue(e.target.value)}
                 required
               />
             </FieldShell>
@@ -327,6 +392,8 @@ export default function VisitePage() {
                 name="phone"
                 placeholder={t.phonePlaceholder}
                 className="h-12 w-full rounded-2xl border border-black/10 bg-white px-11 text-sm outline-none ring-0 transition focus:border-[rgb(var(--gold))]/70"
+                value={phoneValue}
+                onChange={(e) => setPhoneValue(e.target.value)}
                 required
               />
             </FieldShell>

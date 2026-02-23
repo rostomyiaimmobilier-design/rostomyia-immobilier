@@ -105,6 +105,7 @@ type EditProperty = {
   category: string | null;
   apartmentType: string | null;
   price: string | null;
+  ownerPhone: string | null;
   location: string | null;
   beds: number | null;
   baths: number | null;
@@ -120,6 +121,7 @@ type FormState = {
   category: string;
   apartmentType: string;
   price: string;
+  ownerPhone: string;
   commune: string;
   quartier: string;
   locationDetail: string;
@@ -251,6 +253,10 @@ function toOptionalNumber(value: string): number | null {
   if (!trimmed) return null;
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function digitsOnly(raw: string) {
+  return (raw || "").replace(/\D/g, "");
 }
 
 function toAmenityKey(value: string): AmenityKey | null {
@@ -466,6 +472,7 @@ export default function EditPropertyForm({ property }: { property: EditProperty 
     category: property.category ?? "",
     apartmentType: property.apartmentType ?? "",
     price: property.price ?? "",
+    ownerPhone: digitsOnly(property.ownerPhone ?? ""),
     commune: initialLocation.commune,
     quartier: initialLocation.quartier,
     locationDetail: initialLocation.locationDetail,
@@ -697,6 +704,7 @@ export default function EditPropertyForm({ property }: { property: EditProperty 
           category: form.category.trim() || null,
           apartment_type: form.apartmentType.trim() || null,
           price: form.price.trim() || null,
+          owner_phone: digitsOnly(form.ownerPhone) || null,
           location: location || null,
           beds: toOptionalNumber(form.beds),
           baths: toOptionalNumber(form.baths),
@@ -889,6 +897,18 @@ export default function EditPropertyForm({ property }: { property: EditProperty 
             value={form.price}
             onChange={(e) => setForm((s) => ({ ...s, price: e.target.value }))}
             placeholder="12 000 000 DA"
+          />
+        </Field>
+
+        <Field label="Telephone proprietaire">
+          <Input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            className="h-11 rounded-2xl border-0 bg-white/80 px-4 ring-1 ring-black/10"
+            value={form.ownerPhone}
+            onChange={(e) => setForm((s) => ({ ...s, ownerPhone: digitsOnly(e.target.value) }))}
+            placeholder="0555123456"
           />
         </Field>
 

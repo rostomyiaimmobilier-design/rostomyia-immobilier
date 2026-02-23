@@ -11,6 +11,7 @@ import {
   CalendarClock,
   Clock3,
   Heart,
+  LogOut,
   Mail,
   MapPin,
   MessageCircle,
@@ -509,7 +510,7 @@ export default function AccountClient({ user }: { user: AccountUser }) {
             </span>
           </div>
 
-          <div className="mt-4">
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             <Link
               href="/biens"
               className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-[rgb(var(--navy))] transition hover:opacity-90"
@@ -517,6 +518,15 @@ export default function AccountClient({ user }: { user: AccountUser }) {
               Parcourir les biens
               <ArrowUpRight size={14} />
             </Link>
+            <form action="/logout" method="post">
+              <button
+                type="submit"
+                className="inline-flex items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
+              >
+                <LogOut size={14} />
+                Deconnexion
+              </button>
+            </form>
           </div>
         </div>
       </section>

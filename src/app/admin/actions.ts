@@ -8,6 +8,11 @@ function isMissingLocationTypeColumn(message: string | undefined) {
   return m.includes("location_type") && (m.includes("does not exist") || m.includes("column"));
 }
 
+function isMissingUploadedByTeamColumn(message: string | undefined) {
+  const m = (message || "").toLowerCase();
+  return m.includes("uploaded_byteam") && (m.includes("does not exist") || m.includes("column"));
+}
+
 type Payload = {
   ref: string;
   title: string;
@@ -33,6 +38,7 @@ export async function createProperty(payload: Payload) {
     title: payload.title,
     type: payload.type,
     location_type: payload.locationType ?? null,
+    uploaded_byteam: true,
     price: payload.price,
     location: payload.location,
     beds: payload.beds,
@@ -41,22 +47,42 @@ export async function createProperty(payload: Payload) {
     description: payload.description,
   };
 
-  let { data: prop, error } = await supabase
-    .from("properties")
-    .insert(insertPayload)
-    .select("id")
-    .single();
+  const attemptPayloads = [
+    insertPayload,
+    (() => {
+      const next = { ...insertPayload };
+      delete (next as { location_type?: string | null }).location_type;
+      return next;
+    })(),
+    (() => {
+      const next = { ...insertPayload };
+      delete (next as { uploaded_byteam?: boolean }).uploaded_byteam;
+      return next;
+    })(),
+    (() => {
+      const next = { ...insertPayload };
+      delete (next as { uploaded_byteam?: boolean }).uploaded_byteam;
+      delete (next as { location_type?: string | null }).location_type;
+      return next;
+    })(),
+  ];
 
-  if (error && isMissingLocationTypeColumn(error.message)) {
-    const legacyPayload = { ...insertPayload };
-    delete (legacyPayload as { location_type?: string | null }).location_type;
-    const fallback = await supabase
+  let prop: { id: string } | null = null;
+  let error: { message?: string } | null = null;
+
+  for (let i = 0; i < attemptPayloads.length; i += 1) {
+    const attempt = await supabase
       .from("properties")
-      .insert(legacyPayload)
+      .insert(attemptPayloads[i])
       .select("id")
       .single();
-    prop = (fallback.data as { id: string } | null) ?? null;
-    error = fallback.error;
+    prop = (attempt.data as { id: string } | null) ?? null;
+    error = attempt.error;
+    if (!error) break;
+    const canRetry =
+      isMissingLocationTypeColumn(error.message) ||
+      isMissingUploadedByTeamColumn(error.message);
+    if (!canRetry) break;
   }
 
   if (error) {

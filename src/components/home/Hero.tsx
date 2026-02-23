@@ -15,20 +15,21 @@ const copy = {
     h1: "L’immobilier d’exception à Oran.",
     p: "Sélection soignée, visites rapides, accompagnement clair jusqu’à la signature.",
     primary: "Voir les biens",
-    secondary: "Espace agence",
+    secondary: "Espace Agence",
     tertiary: "Déposer un bien",
   },
   ar: {
-    badge: "ÙˆÙ‡Ø±Ø§Ù† â€¢ Ø¹Ù‚Ø§Ø±Ø§Øª Ù…Ù…ÙŠØ²Ø©",
-    h1: "Ø¹Ù‚Ø§Ø±Ø§Øª Ø§Ø³ØªØ«Ù†Ø§Ø¦ÙŠØ© ÙÙŠ ÙˆÙ‡Ø±Ø§Ù†.",
-    p: "Ø§Ø®ØªÙŠØ§Ø±Ø§Øª Ù…Ø¯Ø±ÙˆØ³Ø©ØŒ Ø²ÙŠØ§Ø±Ø§Øª Ø³Ø±ÙŠØ¹Ø©ØŒ ÙˆÙ…Ø±Ø§ÙÙ‚Ø© ÙˆØ§Ø¶Ø­Ø© Ø­ØªÙ‰ Ø§Ù„ØªÙˆÙ‚ÙŠØ¹.",
-    primary: "Ø¹Ø±Ø¶ Ø§Ù„Ø¹Ù‚Ø§Ø±Ø§Øª",
-    secondary: "Espace agence",
-    tertiary: "Ø§Ø¹Ø±Ø¶ Ø¹Ù‚Ø§Ø±Ùƒ",
+    badge: "وهران • عقارات مميزة",
+    h1: "عقارات استثنائية في وهران.",
+    p: "اختيارات مدروسة، زيارات سريعة، ومرافقة واضحة حتى التوقيع.",
+    primary: "عرض العقارات",
+    secondary: "فضاء الوكالات",
+    tertiary: "اعرض عقارك",
   },
 } as const;
 
 const APARTMENT_TYPES = ["Studio", "F2", "F3", "F4", "F5", "T1", "T2", "T3", "T4", "T5", "T6"] as const;
+const VILLA_LEVELS = ["R+1", "R+2", "R+3", "R+4", "R+5", "R+6"] as const;
 
 type QuickDealType =
   | "Tous"
@@ -131,6 +132,7 @@ function inferQuickFiltersFromQuery(
 export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHeroProps) {
   const router = useRouter();
   const t = copy[lang];
+  const isArabic = lang === "ar";
   const communeSource = communes.length > 0 ? communes : [...ORAN_COMMUNES];
   const communeMap = new Map<string, string>();
   communeSource.forEach((commune) => {
@@ -217,23 +219,23 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
   }, [quick.commune, quartierCatalog, allQuartierOptions]);
 
   const dealTypeOptions: Array<{ value: QuickDealType; label: string }> = [
-    { value: "Tous", label: lang === "ar" ? "All" : "Tous" },
-    { value: "Vente", label: lang === "ar" ? "Sale" : "Vente" },
-    { value: "Location", label: lang === "ar" ? "Rent" : "Location" },
-    { value: "par_mois", label: lang === "ar" ? "Rent / month" : "Location / par mois" },
-    { value: "six_mois", label: lang === "ar" ? "Rent / 6 months" : "Location / 6 mois" },
-    { value: "douze_mois", label: lang === "ar" ? "Rent / 12 months" : "Location / 12 mois" },
-    { value: "par_nuit", label: lang === "ar" ? "Rent / night" : "Location / par nuit" },
-    { value: "court_sejour", label: lang === "ar" ? "Short stay" : "Location / court sejour" },
+    { value: "Tous", label: lang === "ar" ? "الكل" : "Tous" },
+    { value: "Vente", label: lang === "ar" ? "بيع" : "Vente" },
+    { value: "Location", label: lang === "ar" ? "إيجار" : "Location" },
+    { value: "par_mois", label: lang === "ar" ? "إيجار / شهري" : "Location / par mois" },
+    { value: "six_mois", label: lang === "ar" ? "إيجار / 6 أشهر" : "Location / 6 mois" },
+    { value: "douze_mois", label: lang === "ar" ? "إيجار / 12 شهر" : "Location / 12 mois" },
+    { value: "par_nuit", label: lang === "ar" ? "إيجار / ليلة" : "Location / par nuit" },
+    { value: "court_sejour", label: lang === "ar" ? "إيجار قصير المدى" : "Location / court sejour" },
   ];
 
   const categoryOptions = [
-    { value: "", label: lang === "ar" ? "All categories" : "Toutes categories" },
-    { value: "appartement", label: lang === "ar" ? "Apartment" : "Appartement" },
+    { value: "", label: lang === "ar" ? "كل الفئات" : "Toutes categories" },
+    { value: "appartement", label: lang === "ar" ? "شقة" : "Appartement" },
     { value: "villa", label: "Villa" },
-    { value: "terrain", label: lang === "ar" ? "Land" : "Terrain" },
-    { value: "local", label: lang === "ar" ? "Local" : "Local" },
-    { value: "bureau", label: lang === "ar" ? "Office" : "Bureau" },
+    { value: "terrain", label: lang === "ar" ? "أرض" : "Terrain" },
+    { value: "local", label: lang === "ar" ? "محل" : "Local" },
+    { value: "bureau", label: lang === "ar" ? "مكتب" : "Bureau" },
   ];
 
   const districtOptions = useMemo(
@@ -243,7 +245,7 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
         label: (
           <span className="inline-flex items-center gap-2">
             <MapPin size={14} className="text-[rgb(var(--navy))]/70" />
-            {lang === "ar" ? "All districts" : "Tous quartiers"}
+            {lang === "ar" ? "كل الأحياء" : "Tous quartiers"}
           </span>
         ),
       },
@@ -267,7 +269,7 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
         label: (
           <span className="inline-flex items-center gap-2">
             <Building2 size={14} className="text-amber-700/80" />
-            {lang === "ar" ? "All apartment types" : "Tous types d'appartements"}
+            {lang === "ar" ? "كل أنواع الشقق" : "Tous types d'appartements"}
           </span>
         ),
       },
@@ -284,22 +286,67 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
     [lang]
   );
 
+  const categoryDetailMode = quick.category === "appartement" ? "appartement" : quick.category === "villa" ? "villa" : "none";
+
+  const categoryDetailOptions = useMemo(() => {
+    if (categoryDetailMode === "appartement") {
+      return roomOptions;
+    }
+    if (categoryDetailMode === "villa") {
+      return [
+        {
+          value: "",
+          label: (
+            <span className="inline-flex items-center gap-2">
+              <Building2 size={14} className="text-amber-700/80" />
+              {lang === "ar" ? "كل مستويات R+" : "Tous niveaux R+"}
+            </span>
+          ),
+        },
+        ...VILLA_LEVELS.map((level) => ({
+          value: level,
+          label: (
+            <span className="inline-flex items-center gap-2">
+              <Building2 size={14} className="text-amber-700/80" />
+              {level}
+            </span>
+          ),
+        })),
+      ];
+    }
+    return [
+      {
+        value: "",
+        label: (
+          <span className="inline-flex items-center gap-2">
+            <Building2 size={14} className="text-amber-700/80" />
+            {lang === "ar" ? "لا يوجد" : "Non"}
+          </span>
+        ),
+      },
+    ];
+  }, [categoryDetailMode, lang, roomOptions]);
+
   function onQuickSearchSubmit(e: FormEvent) {
     e.preventDefault();
 
     const params = new URLSearchParams();
     const query = quick.q.trim();
-    if (query) params.set("q", query);
 
     const inferred = inferQuickFiltersFromQuery(query, { communes: communeOptions });
     const district = quick.district;
-    const rooms = quick.rooms;
+    const categoryDetail = quick.rooms;
     const category = inferred.category ?? quick.category;
     const dealType = inferred.dealType ?? quick.dealType;
     const commune = inferred.commune ?? quick.commune;
+    const searchQuery =
+      category === "villa" && categoryDetail
+        ? `${query} ${categoryDetail}`.trim()
+        : query;
 
+    if (searchQuery) params.set("q", searchQuery);
     if (district) params.set("district", district);
-    if (rooms) params.set("rooms", rooms);
+    if (category === "appartement" && categoryDetail) params.set("rooms", categoryDetail);
     if (dealType !== "Tous") params.set("dealType", dealType);
     if (category) params.set("category", category);
     if (commune) params.set("commune", commune);
@@ -315,7 +362,7 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
       <div className="pointer-events-none absolute inset-0">
         <Image
           src="/images/background.png"
-          alt={lang === "ar" ? "Ø®Ù„ÙÙŠØ© ÙˆÙ‡Ø±Ø§Ù†" : "Oran background"}
+          alt={lang === "ar" ? "خلفية وهران" : "Oran background"}
           fill
           priority
           className="object-cover object-center saturate-[1.2] contrast-110 brightness-[0.9]"
@@ -337,7 +384,7 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
       <div className="relative mx-auto max-w-6xl px-4 py-14 md:py-20">
         <div className="grid items-center gap-10 md:grid-cols-12">
           {/* LEFT */}
-          <div className="md:col-span-7">
+          <div className={`${isArabic ? "font-arabic-luxury" : ""} md:col-span-7`}>
             <motion.div
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
@@ -352,7 +399,7 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.65, ease: "easeOut", delay: 0.05 }}
-              className="font-display mt-5 text-4xl font-semibold tracking-tight text-[rgb(var(--navy))] md:text-6xl"
+              className={`${isArabic ? "font-arabic-luxury leading-[1.25]" : "font-display"} mt-5 text-4xl font-semibold tracking-tight text-[rgb(var(--navy))] md:text-6xl`}
             >
               {t.h1}
             </motion.h1>
@@ -403,10 +450,10 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
             >
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.15em] text-[rgb(var(--navy))]/70">
-                  {lang === "ar" ? "Quick search" : "Recherche rapide"}
+                  {lang === "ar" ? "بحث سريع" : "Recherche rapide"}
                 </div>
                 <div className="text-xs text-black/55">
-                  {lang === "ar" ? "Redirect to listings" : "Redirection vers les biens"}
+                  {lang === "ar" ? "الانتقال إلى العقارات" : "Redirection vers les biens"}
                 </div>
               </div>
 
@@ -422,7 +469,13 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
                 <div className="relative md:col-span-4">
                   <AppDropdown
                     value={quick.category}
-                    onValueChange={(value) => setQuick((s) => ({ ...s, category: value }))}
+                    onValueChange={(value) =>
+                      setQuick((s) => ({
+                        ...s,
+                        category: value,
+                        rooms: "",
+                      }))
+                    }
                     options={categoryOptions}
                   />
                 </div>
@@ -438,7 +491,7 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
                       }))
                     }
                     options={[
-                      { value: "", label: lang === "ar" ? "All communes" : "Toutes communes" },
+                      { value: "", label: lang === "ar" ? "كل البلديات" : "Toutes communes" },
                       ...communeOptions.map((commune) => ({ value: commune, label: commune })),
                     ]}
                   />
@@ -455,14 +508,9 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
                 <div className="relative md:col-span-6">
                   <AppDropdown
                     value={quick.rooms}
-                    onValueChange={(value) =>
-                      setQuick((s) => ({
-                        ...s,
-                        rooms: value,
-                        category: value ? "appartement" : s.category,
-                      }))
-                    }
-                    options={roomOptions}
+                    onValueChange={(value) => setQuick((s) => ({ ...s, rooms: value }))}
+                    options={categoryDetailOptions}
+                    disabled={categoryDetailMode === "none"}
                   />
                 </div>
 
@@ -470,7 +518,7 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
                   <input
                     value={quick.q}
                     onChange={(e) => setQuick((s) => ({ ...s, q: e.target.value }))}
-                    placeholder={lang === "ar" ? "Keyword..." : "Mot-cle..."}
+                    placeholder={lang === "ar" ? "كلمة مفتاحية..." : "Mot-cle..."}
                     className="h-11 w-full rounded-xl border border-black/10 bg-white/90 px-3 text-sm text-[rgb(var(--navy))] outline-none transition focus:border-[rgb(var(--navy))]/35"
                   />
                 </div>
@@ -479,14 +527,14 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
                   type="submit"
                   className="inline-flex h-11 items-center justify-center rounded-xl bg-[rgb(var(--navy))] px-4 text-sm font-semibold text-white transition hover:opacity-95 md:col-span-12"
                 >
-                  {lang === "ar" ? "Search biens" : "Rechercher"}
+                  {lang === "ar" ? "بحث" : "Rechercher"}
                 </button>
               </div>
             </motion.form>
           </div>
 
           {/* RIGHT visual */}
-          <div className="md:col-span-5">
+          <div className={`${isArabic ? "font-arabic-luxury" : ""} md:col-span-5`}>
             <motion.div
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
@@ -494,7 +542,7 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
               className="relative aspect-[4/5] overflow-hidden bg-white/50 backdrop-blur"
             >
               {/* If you have a hero photo, put it in /public/images/hero-oran.jpg */}
-               <Image src="/images/hero-oran.jpg" alt="Oran" fill priority className="object-cover" />
+               <Image src="/images/hero-oran.jpg" alt={lang === "ar" ? "وهران" : "Oran"} fill priority className="object-cover" />
 
               {/* Premium placeholder */}
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(10,18,35,0.10),transparent_50%),radial-gradient(circle_at_70%_80%,rgba(201,167,98,0.18),transparent_55%)]" />
@@ -504,16 +552,16 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="text-sm font-semibold text-[rgb(var(--navy))]">
-                      {lang === "ar" ? "Ø§Ø®ØªÙŠØ§Ø±Ø§Øª Ø±Ø§Ù‚ÙŠØ©" : "Sélection standing"}
+                      {lang === "ar" ? "اختيارات راقية" : "Sélection standing"}
                     </div>
                     <div className="text-xs text-black/55">
                       {lang === "ar"
-                        ? "Ø´Ù‚Ù‚ â€¢ ÙÙŠÙ„Ø§Øª â€¢ Ù‚Ø·Ø¹ Ø£Ø±Ø¶"
+                        ? "شقق • فيلات • قطع أرض"
                         : "Appartements • Villas • Terrains"}
                     </div>
                   </div>
                   <div className="rounded-xl bg-[rgb(var(--gold))] px-3 py-2 text-xs font-semibold text-[rgb(var(--navy))]">
-                    {lang === "ar" ? "ÙˆÙ‡Ø±Ø§Ù†" : "Oran"}
+                    {lang === "ar" ? "وهران" : "Oran"}
                   </div>
                 </div>
               </div>
@@ -521,9 +569,9 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
 
             <div className="mt-3 flex flex-wrap gap-2 text-xs text-black/55">
               {[
-                lang === "ar" ? "Ù…ÙˆØ«Ù‘Ù‚" : "Vérifié",
-                lang === "ar" ? "Ø²ÙŠØ§Ø±Ø© Ø¨Ø³Ø±Ø¹Ø©" : "Visite rapide",
-                lang === "ar" ? "Ù…Ø±Ø§ÙÙ‚Ø©" : "Accompagnement",
+                lang === "ar" ? "موثّق" : "Vérifié",
+                lang === "ar" ? "زيارة سريعة" : "Visite rapide",
+                lang === "ar" ? "مرافقة" : "Accompagnement",
               ].map((chip) => (
                 <span
                   key={chip}

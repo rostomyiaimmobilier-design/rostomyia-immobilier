@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -58,56 +58,56 @@ const ORAN_COMMUNES = [
 ];
 
 const PROPERTY_OPTIONS: Array<{ value: PropertyType; fr: string; ar: string }> = [
-  { value: "appartement", fr: "Appartement", ar: "Ø´Ù‚Ø©" },
-  { value: "villa", fr: "Villa", ar: "ÙÙŠÙ„Ø§" },
-  { value: "terrain", fr: "Terrain", ar: "Ø§Ø±Ø¶" },
-  { value: "local", fr: "Local commercial", ar: "Ù…Ø­Ù„ ØªØ¬Ø§Ø±ÙŠ" },
-  { value: "bureau", fr: "Bureau", ar: "Ù…ÙƒØªØ¨" },
+  { value: "appartement", fr: "Appartement", ar: "شقة" },
+  { value: "villa", fr: "Villa", ar: "فيلا" },
+  { value: "terrain", fr: "Terrain", ar: "ارض" },
+  { value: "local", fr: "Local commercial", ar: "محل تجاري" },
+  { value: "bureau", fr: "Bureau", ar: "مكتب" },
 ];
 
 const TRANSACTION_OPTIONS: Array<{ value: TransactionType; fr: string; ar: string }> = [
-  { value: "vente", fr: "Vente", ar: "Ø¨ÙŠØ¹" },
-  { value: "location", fr: "Location", ar: "ÙƒØ±Ø§Ø¡" },
-  { value: "par_mois", fr: "Location / par mois", ar: "ÙƒØ±Ø§Ø¡ / Ø¨Ø§Ù„Ø´Ù‡Ø±" },
-  { value: "six_mois", fr: "Location / 6 mois", ar: "ÙƒØ±Ø§Ø¡ / 6 Ø§Ø´Ù‡Ø±" },
-  { value: "douze_mois", fr: "Location / 12 mois", ar: "ÙƒØ±Ø§Ø¡ / 12 Ø´Ù‡Ø±" },
-  { value: "par_nuit", fr: "Location / par nuit", ar: "ÙƒØ±Ø§Ø¡ / Ø¨Ø§Ù„Ù„ÙŠÙ„Ø©" },
-  { value: "court_sejour", fr: "Location / court sejour", ar: "ÙƒØ±Ø§Ø¡ / Ø§Ù‚Ø§Ù…Ø© Ù‚ØµÙŠØ±Ø©" },
+  { value: "vente", fr: "Vente", ar: "بيع" },
+  { value: "location", fr: "Location", ar: "كراء" },
+  { value: "par_mois", fr: "Location / par mois", ar: "كراء / بالشهر" },
+  { value: "six_mois", fr: "Location / 6 mois", ar: "كراء / 6 اشهر" },
+  { value: "douze_mois", fr: "Location / 12 mois", ar: "كراء / 12 شهر" },
+  { value: "par_nuit", fr: "Location / par nuit", ar: "كراء / بالليلة" },
+  { value: "court_sejour", fr: "Location / court sejour", ar: "كراء / اقامة قصيرة" },
 ];
 
 const FURNISHING_OPTIONS: Array<{ value: FurnishingType; fr: string; ar: string }> = [
-  { value: "meuble", fr: "Meuble", ar: "Ù…ÙØ±ÙˆØ´" },
-  { value: "vide", fr: "Vide", ar: "ÙØ§Ø±Øº" },
-  { value: "equipe", fr: "Equipe", ar: "Ù…Ø¬Ù‡Ø²" },
-  { value: "semi_equipe", fr: "Semi equipe", ar: "Ù†ØµÙ Ù…Ø¬Ù‡Ø²" },
+  { value: "meuble", fr: "Meuble", ar: "مفروش" },
+  { value: "vide", fr: "Vide", ar: "فارغ" },
+  { value: "equipe", fr: "Equipe", ar: "مجهز" },
+  { value: "semi_equipe", fr: "Semi equipe", ar: "نصف مجهز" },
 ];
 
 const CONDITION_OPTIONS: Array<{ value: PropertyCondition; fr: string; ar: string }> = [
-  { value: "neuf", fr: "Neuf", ar: "Ø¬Ø¯ÙŠØ¯" },
-  { value: "tres_bon", fr: "Tres bon etat", ar: "Ø­Ø§Ù„Ø© Ù…Ù…ØªØ§Ø²Ø©" },
-  { value: "bon", fr: "Bon etat", ar: "Ø­Ø§Ù„Ø© Ø¬ÙŠØ¯Ø©" },
-  { value: "a_renover", fr: "A renover", ar: "ÙŠØ­ØªØ§Ø¬ ØªØ±Ù…ÙŠÙ…" },
+  { value: "neuf", fr: "Neuf", ar: "جديد" },
+  { value: "tres_bon", fr: "Tres bon etat", ar: "حالة ممتازة" },
+  { value: "bon", fr: "Bon etat", ar: "حالة جيدة" },
+  { value: "a_renover", fr: "A renover", ar: "يحتاج ترميم" },
 ];
 
 const AVAILABILITY_OPTIONS: Array<{ value: Availability; fr: string; ar: string }> = [
-  { value: "immediate", fr: "Disponible immediatement", ar: "Ù…ØªÙˆÙØ± ÙÙˆØ±Ø§" },
-  { value: "moins_3_mois", fr: "Disponible sous 1-3 mois", ar: "Ù…ØªÙˆÙØ± Ø®Ù„Ø§Ù„ 1-3 Ø§Ø´Ù‡Ø±" },
-  { value: "plus_3_mois", fr: "Disponible apres 3 mois", ar: "Ù…ØªÙˆÙØ± Ø¨Ø¹Ø¯ 3 Ø§Ø´Ù‡Ø±" },
+  { value: "immediate", fr: "Disponible immediatement", ar: "متوفر فورا" },
+  { value: "moins_3_mois", fr: "Disponible sous 1-3 mois", ar: "متوفر خلال 1-3 اشهر" },
+  { value: "plus_3_mois", fr: "Disponible apres 3 mois", ar: "متوفر بعد 3 اشهر" },
 ];
 
 const CONTACT_OPTIONS: Array<{ value: ContactMethod; fr: string; ar: string }> = [
-  { value: "phone", fr: "Appel", ar: "Ø§ØªØµØ§Ù„" },
-  { value: "whatsapp", fr: "WhatsApp", ar: "ÙˆØ§ØªØ³Ø§Ø¨" },
-  { value: "email", fr: "Email", ar: "Ø§ÙŠÙ…ÙŠÙ„" },
+  { value: "phone", fr: "Appel", ar: "اتصال" },
+  { value: "whatsapp", fr: "WhatsApp", ar: "واتساب" },
+  { value: "email", fr: "Email", ar: "ايميل" },
 ];
 
 const LEGAL_DOC_OPTIONS = [
-  { value: "acte_notarie", fr: "Acte notarie", ar: "Ø¹Ù‚Ø¯ Ù…ÙˆØ«Ù‚" },
-  { value: "livret_foncier", fr: "Livret foncier", ar: "Ø¯ÙØªØ± Ø¹Ù‚Ø§Ø±ÙŠ" },
-  { value: "permis_construire", fr: "Permis de construire", ar: "Ø±Ø®ØµØ© Ø¨Ù†Ø§Ø¡" },
-  { value: "decision_attribution", fr: "Decision d'attribution", ar: "Ù‚Ø±Ø§Ø± Ø§Ø³ØªÙØ§Ø¯Ø©" },
-  { value: "contrat_location", fr: "Contrat de location", ar: "Ø¹Ù‚Ø¯ Ø§ÙŠØ¬Ø§Ø±" },
-  { value: "autre", fr: "Autre document", ar: "ÙˆØ«ÙŠÙ‚Ø© Ø§Ø®Ø±Ù‰" },
+  { value: "acte_notarie", fr: "Acte notarie", ar: "عقد موثق" },
+  { value: "livret_foncier", fr: "Livret foncier", ar: "دفتر عقاري" },
+  { value: "permis_construire", fr: "Permis de construire", ar: "رخصة بناء" },
+  { value: "decision_attribution", fr: "Decision d'attribution", ar: "قرار استفادة" },
+  { value: "contrat_location", fr: "Contrat de location", ar: "عقد ايجار" },
+  { value: "autre", fr: "Autre document", ar: "وثيقة اخرى" },
 ] as const;
 
 type FormState = {
@@ -168,19 +168,19 @@ export default function SubmitPropertyPage() {
   const t =
     lang === "ar"
       ? {
-          badge: "Ø¹Ø±Ø¶ Ø¹Ù‚Ø§Ø±Ùƒ",
-          title: "Ø§Ø±Ø³Ù„ ØªÙØ§ØµÙŠÙ„ Ø¹Ù‚Ø§Ø±Ùƒ Ù„Ù„Ù…Ø±Ø§Ø¬Ø¹Ø©",
-          subtitle: "ÙØ±ÙŠÙ‚Ù†Ø§ ÙŠØ±Ø§Ø¬Ø¹ Ø§Ù„Ø·Ù„Ø¨ Ø«Ù… ÙŠØªÙˆØ§ØµÙ„ Ù…Ø¹Ùƒ Ù‚Ø¨Ù„ Ø§Ù„Ù†Ø´Ø±.",
-          ownerBlock: "Ù…Ø¹Ù„ÙˆÙ…Ø§Øª Ø§Ù„Ù…Ø§Ù„Ùƒ",
-          propertyBlock: "Ù…Ø¹Ù„ÙˆÙ…Ø§Øª Ø§Ù„Ø¹Ù‚Ø§Ø±",
-          comfortBlock: "Ø§Ù„Ø­Ø§Ù„Ø© ÙˆØ§Ù„ØªÙˆÙØ±",
-          extraBlock: "ØªÙØ§ØµÙŠÙ„ Ø§Ø¶Ø§ÙÙŠØ©",
-          submit: "Ø§Ø±Ø³Ø§Ù„ Ø§Ù„Ø·Ù„Ø¨",
-          sending: "Ø¬Ø§Ø±ÙŠ Ø§Ù„Ø§Ø±Ø³Ø§Ù„...",
-          success: "ØªÙ… Ø§Ø±Ø³Ø§Ù„ Ø·Ù„Ø¨Ùƒ Ø¨Ù†Ø¬Ø§Ø­. Ø³Ù†ØªÙˆØ§ØµÙ„ Ù…Ø¹Ùƒ Ù‚Ø±ÙŠØ¨Ø§.",
-          error: "ØªØ¹Ø°Ø± Ø§Ø±Ø³Ø§Ù„ Ø§Ù„Ø·Ù„Ø¨ Ø­Ø§Ù„ÙŠØ§. Ø­Ø§ÙˆÙ„ Ù…Ø±Ø© Ø§Ø®Ø±Ù‰.",
-          required: "Ù‡Ø°Ø§ Ø§Ù„Ø­Ù‚Ù„ Ù…Ø·Ù„ÙˆØ¨",
-          consent: "Ø§ÙˆØ§ÙÙ‚ Ø¹Ù„Ù‰ Ø§Ø³ØªØ¹Ù…Ø§Ù„ Ø¨ÙŠØ§Ù†Ø§ØªÙŠ Ù„ØºØ±Ø¶ Ø¯Ø±Ø§Ø³Ø© Ø§Ù„Ø·Ù„Ø¨ ÙˆØ§Ù„ØªÙˆØ§ØµÙ„.",
+          badge: "عرض عقارك",
+          title: "ارسل تفاصيل عقارك للمراجعة",
+          subtitle: "فريقنا يراجع الطلب ثم يتواصل معك قبل النشر.",
+          ownerBlock: "معلومات المالك",
+          propertyBlock: "معلومات العقار",
+          comfortBlock: "الحالة والتوفر",
+          extraBlock: "تفاصيل اضافية",
+          submit: "ارسال الطلب",
+          sending: "جاري الارسال...",
+          success: "تم ارسال طلبك بنجاح. سنتواصل معك قريبا.",
+          error: "تعذر ارسال الطلب حاليا. حاول مرة اخرى.",
+          required: "هذا الحقل مطلوب",
+          consent: "اوافق على استعمال بياناتي لغرض دراسة الطلب والتواصل.",
         }
       : {
           badge: "Proposer un bien",
@@ -238,12 +238,12 @@ export default function SubmitPropertyPage() {
   const mediaStudioCard =
     lang === "ar"
       ? {
-          title: "ØªØºØ·ÙŠØ© Ø¥Ø¹Ù„Ø§Ù…ÙŠØ© Ø§Ø­ØªØ±Ø§ÙÙŠØ© Ù„Ø¹Ù‚Ø§Ø±Ùƒ",
-          intro: "ÙØ±ÙŠÙ‚ Ø±ÙˆØ³ØªÙˆÙ…ÙŠØ§ ÙŠØªÙƒÙÙ„ Ø¨Ø§Ù„ØªØµÙˆÙŠØ± Ø§Ù„ÙÙˆØªÙˆØºØ±Ø§ÙÙŠ ÙˆØªØµÙˆÙŠØ± Ø§Ù„ÙÙŠØ¯ÙŠÙˆ Ø¨Ø¬ÙˆØ¯Ø© Ø¹Ø§Ù„ÙŠØ© Ù‚Ø¨Ù„ Ø§Ù„Ù†Ø´Ø±.",
+          title: "تغطية إعلامية احترافية لعقارك",
+          intro: "فريق روستوميا يتكفل بالتصوير الفوتوغرافي وتصوير الفيديو بجودة عالية قبل النشر.",
           items: [
-            "ØªØµÙˆÙŠØ± ÙÙˆØªÙˆØºØ±Ø§ÙÙŠ Ø¨Ø²ÙˆØ§ÙŠØ§ Ø§Ø­ØªØ±Ø§ÙÙŠØ©",
-            "ÙÙŠØ¯ÙŠÙˆ walkthrough Ø¯Ø§Ø®Ù„ Ø§Ù„Ø¹Ù‚Ø§Ø±",
-            "ØªØ¬Ù‡ÙŠØ² Ø§Ù„Ù…Ø­ØªÙˆÙ‰ Ù„Ù„Ù†Ø´Ø± ÙˆØ§Ù„ØªØ­ÙˆÙŠÙ„",
+            "تصوير فوتوغرافي بزوايا احترافية",
+            "فيديو walkthrough داخل العقار",
+            "تجهيز المحتوى للنشر والتحويل",
           ],
         }
       : {
@@ -257,12 +257,12 @@ export default function SubmitPropertyPage() {
           ],
         };
   const mediaStudioIcons = [Camera, Video, Clapperboard] as const;
-  const retryLabel = isArabic ? "Ø§Ø¹Ø§Ø¯Ø© Ø§Ù„Ù…Ø­Ø§ÙˆÙ„Ø©" : "Reessayer";
-  const invalidPhoneLabel = isArabic ? "Ø±Ù‚Ù… Ø§Ù„Ù‡Ø§ØªÙ ØºÙŠØ± ØµØ§Ù„Ø­" : "Telephone invalide";
-  const invalidEmailLabel = isArabic ? "Email ØºÙŠØ± ØµØ§Ù„Ø­" : "Email invalide";
-  const invalidPriceLabel = isArabic ? "Ø³Ø¹Ø± ØºÙŠØ± ØµØ§Ù„Ø­" : "Prix invalide";
-  const sentToastLabel = isArabic ? "ØªÙ… Ø§Ø±Ø³Ø§Ù„ Ø§Ù„Ø·Ù„Ø¨ Ø¨Ù†Ø¬Ø§Ø­" : "Demande envoyee avec succes";
-  const errorToastLabel = isArabic ? "ØªØ¹Ø°Ø± Ø§Ù„Ø§Ø±Ø³Ø§Ù„. Ø­Ø§ÙˆÙ„ Ù…Ø±Ø© Ø§Ø®Ø±Ù‰" : "Erreur d'envoi. Merci de reessayer";
+  const retryLabel = isArabic ? "اعادة المحاولة" : "Reessayer";
+  const invalidPhoneLabel = isArabic ? "رقم الهاتف غير صالح" : "Telephone invalide";
+  const invalidEmailLabel = isArabic ? "Email غير صالح" : "Email invalide";
+  const invalidPriceLabel = isArabic ? "سعر غير صالح" : "Prix invalide";
+  const sentToastLabel = isArabic ? "تم ارسال الطلب بنجاح" : "Demande envoyee avec succes";
+  const errorToastLabel = isArabic ? "تعذر الارسال. حاول مرة اخرى" : "Erreur d'envoi. Merci de reessayer";
   const transactionOptions = useMemo(
     () =>
       TRANSACTION_OPTIONS.filter((x) => {
@@ -425,18 +425,23 @@ export default function SubmitPropertyPage() {
 
   if (submitStatus === "success") {
     return (
-      <main dir={dir} className="min-h-screen bg-[rgb(var(--brand-bg))] px-4 py-16">
+      <main
+        dir={dir}
+        className={`${isArabic ? "font-arabic-luxury" : ""} min-h-screen bg-[rgb(var(--brand-bg))] px-4 py-16`}
+      >
         <div className="mx-auto max-w-2xl rounded-3xl border border-emerald-200 bg-white p-10 text-center shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
-            {isArabic ? "ØªÙ… Ø§Ù„Ø§Ø³ØªÙ„Ø§Ù…" : "Demande recue"}
+            {isArabic ? "تم الاستلام" : "Demande recue"}
           </p>
-          <h1 className="mt-3 text-3xl font-bold text-slate-900">{t.badge}</h1>
+          <h1 className={`${isArabic ? "font-arabic-luxury" : ""} mt-3 text-3xl font-bold text-slate-900`}>
+            {t.badge}
+          </h1>
           <p className="mx-auto mt-4 max-w-xl text-sm text-slate-600">{t.success}</p>
           <Link
             href="/biens"
             className="mt-8 inline-flex rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:opacity-95"
           >
-            {isArabic ? "Ø§Ù„Ø¹ÙˆØ¯Ø© Ø§Ù„Ù‰ Ø§Ù„Ø¹Ù‚Ø§Ø±Ø§Øª" : "Voir les biens"}
+            {isArabic ? "العودة الى العقارات" : "Voir les biens"}
           </Link>
         </div>
       </main>
@@ -444,7 +449,10 @@ export default function SubmitPropertyPage() {
   }
 
   return (
-    <main dir={dir} className="relative min-h-screen overflow-hidden bg-[rgb(var(--brand-bg))] px-4 py-10 md:py-14">
+    <main
+      dir={dir}
+      className={`${isArabic ? "font-arabic-luxury" : ""} relative min-h-screen overflow-hidden bg-[rgb(var(--brand-bg))] px-4 py-10 md:py-14`}
+    >
       {toast ? (
         <div
           className={`fixed right-4 top-20 z-50 inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm shadow-md ${
@@ -466,7 +474,11 @@ export default function SubmitPropertyPage() {
       <div className="relative mx-auto max-w-5xl">
         <div className="rounded-3xl border border-black/10 bg-white/75 p-7 shadow-sm backdrop-blur md:p-10">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[rgb(var(--navy))]">{t.badge}</p>
-          <h1 className="mt-3 text-3xl font-extrabold text-[rgb(var(--navy))] md:text-4xl">{t.title}</h1>
+          <h1
+            className={`${isArabic ? "font-arabic-luxury leading-[1.25]" : ""} mt-3 text-3xl font-extrabold text-[rgb(var(--navy))] md:text-4xl`}
+          >
+            {t.title}
+          </h1>
           <p className="mt-3 max-w-3xl text-sm text-black/65">{t.subtitle}</p>
           <div className="relative mt-4 overflow-hidden rounded-2xl border border-[rgb(var(--gold))]/35 bg-[linear-gradient(130deg,rgba(255,255,255,0.86),rgba(248,244,235,0.92))] p-4 shadow-sm md:p-5">
             <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-[rgb(var(--gold))]/20 blur-2xl" />
@@ -475,7 +487,7 @@ export default function SubmitPropertyPage() {
             <div className="relative">
               <div className="inline-flex items-center gap-2 rounded-full bg-[rgb(var(--navy))]/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--navy))]/80">
                 <BadgeCheck size={14} />
-                {isArabic ? "Ø®Ø¯Ù…Ø© Ù…Ø¯Ù…Ø¬Ø©" : "Service inclus"}
+                {isArabic ? "خدمة مدمجة" : "Service inclus"}
               </div>
               <h3 className="mt-2 text-base font-bold text-[rgb(var(--navy))] md:text-lg">{mediaStudioCard.title}</h3>
               <p className="mt-1.5 max-w-3xl text-sm text-black/70">{mediaStudioCard.intro}</p>
@@ -500,18 +512,18 @@ export default function SubmitPropertyPage() {
           <div className="mt-6 grid gap-3 md:grid-cols-3">
             <HighlightCard
               icon={<Sparkles size={15} />}
-              title={isArabic ? "ØªÙ‚ÙŠÙŠÙ… Ø³Ø±ÙŠØ¹" : "Validation rapide"}
-              text={isArabic ? "ÙØ±ÙŠÙ‚Ù†Ø§ ÙŠØ±Ø§Ø¬Ø¹ Ø§Ù„Ø·Ù„Ø¨ Ø¨Ø³Ø±Ø¹Ø©." : "Notre equipe traite chaque demande rapidement."}
+              title={isArabic ? "تقييم سريع" : "Validation rapide"}
+              text={isArabic ? "فريقنا يراجع الطلب بسرعة." : "Notre equipe traite chaque demande rapidement."}
             />
             <HighlightCard
               icon={<ShieldCheck size={15} />}
-              title={isArabic ? "Ø¨ÙŠØ§Ù†Ø§ØªÙƒ Ù…Ø­Ù…ÙŠØ©" : "Donnees protegees"}
-              text={isArabic ? "Ù…Ø¹Ù„ÙˆÙ…Ø§ØªÙƒ Ù„Ù„Ø§Ø³ØªØ®Ø¯Ø§Ù… Ø§Ù„Ù…Ù‡Ù†ÙŠ ÙÙ‚Ø·." : "Vos informations sont utilisees uniquement pour le dossier."}
+              title={isArabic ? "بياناتك محمية" : "Donnees protegees"}
+              text={isArabic ? "معلوماتك للاستخدام المهني فقط." : "Vos informations sont utilisees uniquement pour le dossier."}
             />
             <HighlightCard
               icon={<CheckCircle2 size={15} />}
-              title={isArabic ? "Ù…ØªØ§Ø¨Ø¹Ø© Ø´Ø®ØµÙŠØ©" : "Suivi personalise"}
-              text={isArabic ? "Ù†ØªØµÙ„ Ø¨Ùƒ Ù‚Ø¨Ù„ Ø§Ù„Ù†Ø´Ø±." : "Nous vous contactons avant toute publication."}
+              title={isArabic ? "متابعة شخصية" : "Suivi personalise"}
+              text={isArabic ? "نتصل بك قبل النشر." : "Nous vous contactons avant toute publication."}
             />
           </div>
 
@@ -523,15 +535,15 @@ export default function SubmitPropertyPage() {
             >
             <FormSection title={t.ownerBlock}>
               <Field
-                label={isArabic ? "Ø§Ù„Ø§Ø³Ù… Ø§Ù„ÙƒØ§Ù…Ù„" : "Nom complet"}
+                label={isArabic ? "الاسم الكامل" : "Nom complet"}
                 required
                 value={form.name}
                 onChange={(v) => updateField("name", v)}
-                placeholder={isArabic ? "Ø§Ù„Ø§Ø³Ù… ÙƒÙ…Ø§ ÙÙŠ Ø§Ù„ÙˆØ«Ø§Ø¦Ù‚" : "Ex: Ahmed Benali"}
+                placeholder={isArabic ? "الاسم كما في الوثائق" : "Ex: Ahmed Benali"}
                 error={fieldErrors.name}
               />
               <Field
-                label={isArabic ? "Ø§Ù„Ù‡Ø§ØªÙ" : "Telephone"}
+                label={isArabic ? "الهاتف" : "Telephone"}
                 required
                 value={form.phone}
                 onChange={(v) => updateField("phone", v)}
@@ -553,7 +565,7 @@ export default function SubmitPropertyPage() {
                 error={fieldErrors.email}
               />
               <SelectField
-                label={isArabic ? "ÙˆØ³ÙŠÙ„Ø© Ø§Ù„Ø§ØªØµØ§Ù„ Ø§Ù„Ù…ÙØ¶Ù„Ø©" : "Moyen de contact prefere"}
+                label={isArabic ? "وسيلة الاتصال المفضلة" : "Moyen de contact prefere"}
                 value={form.preferredContactMethod}
                 onChange={(v) => updateField("preferredContactMethod", v as ContactMethod)}
                 options={CONTACT_OPTIONS.map((x) => ({
@@ -565,7 +577,7 @@ export default function SubmitPropertyPage() {
 
             <FormSection title={t.propertyBlock}>
               <SelectField
-                label={isArabic ? "Ø§Ù„Ù‡Ø¯Ù" : "Objectif"}
+                label={isArabic ? "الهدف" : "Objectif"}
                 required
                 value={form.intent}
                 onChange={(v) => {
@@ -574,12 +586,12 @@ export default function SubmitPropertyPage() {
                   updateField("transactionType", nextIntent === "vente" ? "vente" : "location");
                 }}
                 options={[
-                  { value: "vente", label: isArabic ? "Ø¨ÙŠØ¹" : "Vente" },
-                  { value: "location", label: isArabic ? "ÙƒØ±Ø§Ø¡" : "Location" },
+                  { value: "vente", label: isArabic ? "بيع" : "Vente" },
+                  { value: "location", label: isArabic ? "كراء" : "Location" },
                 ]}
               />
               <SelectField
-                label={isArabic ? "Ù†ÙˆØ¹ Ø§Ù„Ù…Ø¹Ø§Ù…Ù„Ø©" : "Type de transaction"}
+                label={isArabic ? "نوع المعاملة" : "Type de transaction"}
                 value={form.transactionType}
                 onChange={(v) => updateField("transactionType", v as TransactionType)}
                 options={transactionOptions.map((x) => ({
@@ -588,7 +600,7 @@ export default function SubmitPropertyPage() {
                 }))}
               />
               <SelectField
-                label={isArabic ? "Ù†ÙˆØ¹ Ø§Ù„Ø¹Ù‚Ø§Ø±" : "Categorie du bien"}
+                label={isArabic ? "نوع العقار" : "Categorie du bien"}
                 required
                 value={form.propertyType}
                 onChange={(v) => updateField("propertyType", v as PropertyType)}
@@ -598,42 +610,42 @@ export default function SubmitPropertyPage() {
                 }))}
               />
               <Field
-                label={isArabic ? "Ø¹Ù†ÙˆØ§Ù† Ù…Ø®ØªØµØ±" : "Titre court du bien"}
+                label={isArabic ? "عنوان مختصر" : "Titre court du bien"}
                 value={form.title}
                 onChange={(v) => updateField("title", v)}
-                placeholder={isArabic ? "Ù…Ø«Ø§Ù„: Ø´Ù‚Ø© F4 ÙƒØ§Ù†Ø§Ø³ØªÙŠÙ„" : "Ex: F4 Canastel"}
+                placeholder={isArabic ? "مثال: شقة F4 كاناستيل" : "Ex: F4 Canastel"}
               />
               <Field
-                label={isArabic ? "Ø§Ù„Ù…Ø¯ÙŠÙ†Ø©" : "Ville"}
+                label={isArabic ? "المدينة" : "Ville"}
                 required
                 value="Oran"
                 readOnly
               />
               <SelectField
-                label={isArabic ? "Ø§Ù„Ø¨Ù„Ø¯ÙŠØ©" : "Commune"}
+                label={isArabic ? "البلدية" : "Commune"}
                 required
                 value={form.commune}
                 onChange={(v) => updateField("commune", v)}
                 options={[
-                  { value: "", label: isArabic ? "Ø§Ø®ØªØ± Ø¨Ù„Ø¯ÙŠØ©" : "Selectionner une commune" },
+                  { value: "", label: isArabic ? "اختر بلدية" : "Selectionner une commune" },
                   ...ORAN_COMMUNES.map((c) => ({ value: c, label: c })),
                 ]}
                 error={fieldErrors.commune}
               />
               <Field
-                label={isArabic ? "Ø§Ù„Ø­ÙŠ" : "Quartier"}
+                label={isArabic ? "الحي" : "Quartier"}
                 value={form.district}
                 onChange={(v) => updateField("district", v)}
-                placeholder={isArabic ? "Ù…Ø«Ø§Ù„: ÙƒØ§Ù†Ø§Ø³ØªÙŠÙ„" : "Ex: Canastel"}
+                placeholder={isArabic ? "مثال: كاناستيل" : "Ex: Canastel"}
               />
               <Field
-                label={isArabic ? "Ø§Ù„Ø¹Ù†ÙˆØ§Ù† Ø§Ù„Ø¯Ù‚ÙŠÙ‚" : "Adresse detaillee"}
+                label={isArabic ? "العنوان الدقيق" : "Adresse detaillee"}
                 value={form.address}
                 onChange={(v) => updateField("address", v)}
-                placeholder={isArabic ? "Ø§Ù‚Ø§Ù…Ø©ØŒ Ù…Ø¹Ù„Ù… Ù‚Ø±ÙŠØ¨..." : "Residence, repere, rue..."}
+                placeholder={isArabic ? "اقامة، معلم قريب..." : "Residence, repere, rue..."}
               />
               <Field
-                label={isArabic ? "Ø§Ù„Ø³Ø¹Ø± Ø§Ù„Ù…Ø·Ù„ÙˆØ¨ (Ø¯Ø¬)" : "Prix demande (DZD)"}
+                label={isArabic ? "السعر المطلوب (دج)" : "Prix demande (DZD)"}
                 required
                 value={form.price}
                 onChange={(v) => updateField("price", v)}
@@ -641,13 +653,13 @@ export default function SubmitPropertyPage() {
                 error={fieldErrors.price}
               />
               <Field
-                label={isArabic ? "Ø§Ù„Ù…Ø³Ø§Ø­Ø© (Ù…2)" : "Surface (m2)"}
+                label={isArabic ? "المساحة (م2)" : "Surface (m2)"}
                 value={form.surface}
                 onChange={(v) => updateField("surface", v)}
                 placeholder="124"
               />
               <Field
-                label={isArabic ? "Ø§Ù„Ø·Ø§Ø¨Ù‚" : "Etage"}
+                label={isArabic ? "الطابق" : "Etage"}
                 value={form.floor}
                 onChange={(v) => updateField("floor", v)}
                 placeholder="3"
@@ -656,7 +668,7 @@ export default function SubmitPropertyPage() {
 
             <FormSection title={t.comfortBlock}>
               <SelectField
-                label={isArabic ? "Ø­Ø§Ù„Ø© Ø§Ù„ØªØ£Ø«ÙŠØ«" : "Etat d'ameublement"}
+                label={isArabic ? "حالة التأثيث" : "Etat d'ameublement"}
                 value={form.furnishingType}
                 onChange={(v) => updateField("furnishingType", v as FurnishingType)}
                 options={FURNISHING_OPTIONS.map((x) => ({
@@ -665,7 +677,7 @@ export default function SubmitPropertyPage() {
                 }))}
               />
               <SelectField
-                label={isArabic ? "Ø­Ø§Ù„Ø© Ø§Ù„Ø¹Ù‚Ø§Ø±" : "Etat du bien"}
+                label={isArabic ? "حالة العقار" : "Etat du bien"}
                 value={form.propertyCondition}
                 onChange={(v) => updateField("propertyCondition", v as PropertyCondition)}
                 options={CONDITION_OPTIONS.map((x) => ({
@@ -674,7 +686,7 @@ export default function SubmitPropertyPage() {
                 }))}
               />
               <SelectField
-                label={isArabic ? "Ø§Ù„ØªÙˆÙØ±" : "Disponibilite"}
+                label={isArabic ? "التوفر" : "Disponibilite"}
                 value={form.availability}
                 onChange={(v) => updateField("availability", v as Availability)}
                 options={AVAILABILITY_OPTIONS.map((x) => ({
@@ -684,7 +696,7 @@ export default function SubmitPropertyPage() {
               />
               <label className="space-y-1.5 text-sm md:col-span-2">
                 <span className="font-medium text-black/70">
-                  {isArabic ? "Ø§Ù„ÙˆØ«Ø§Ø¦Ù‚ Ø§Ù„Ù‚Ø§Ù†ÙˆÙ†ÙŠØ©" : "Documents legaux disponibles"}
+                  {isArabic ? "الوثائق القانونية" : "Documents legaux disponibles"}
                 </span>
                 <div className="grid gap-2 md:grid-cols-2">
                   {LEGAL_DOC_OPTIONS.map((option) => (
@@ -704,31 +716,31 @@ export default function SubmitPropertyPage() {
                 </div>
               </label>
               <Field
-                label={isArabic ? "Ø´Ø±ÙˆØ· Ø§Ù„Ø¯ÙØ¹" : "Conditions de paiement"}
+                label={isArabic ? "شروط الدفع" : "Conditions de paiement"}
                 value={form.paymentTerms}
                 onChange={(v) => updateField("paymentTerms", v)}
-                placeholder={isArabic ? "Ø¯ÙØ¹Ø© Ø§ÙˆÙ„Ù‰ØŒ ØªØ³Ù‡ÙŠÙ„Ø§Øª..." : "Cash, cheque, avance, echeancier..."}
+                placeholder={isArabic ? "دفعة اولى، تسهيلات..." : "Cash, cheque, avance, echeancier..."}
               />
             </FormSection>
 
             <FormSection title={t.extraBlock}>
               <TextareaField
-                label={isArabic ? "Ø±ÙˆØ§Ø¨Ø· ØµÙˆØ±/ÙÙŠØ¯ÙŠÙˆ (Ø§Ø®ØªÙŠØ§Ø±ÙŠ)" : "Liens photos/videos (optionnel)"}
+                label={isArabic ? "روابط صور/فيديو (اختياري)" : "Liens photos/videos (optionnel)"}
                 value={form.photoLinks}
                 onChange={(v) => updateField("photoLinks", v)}
                 placeholder={
                   isArabic
-                    ? "Ø¶Ø¹ Ø±ÙˆØ§Ø¨Ø· Google Drive Ø§Ùˆ Dropbox Ø§Ùˆ WhatsApp..."
+                    ? "ضع روابط Google Drive او Dropbox او WhatsApp..."
                     : "Collez les liens Drive/Dropbox/WhatsApp..."
                 }
               />
               <TextareaField
-                label={isArabic ? "ÙˆØµÙ Ù…ÙØµÙ„" : "Description detaillee"}
+                label={isArabic ? "وصف مفصل" : "Description detaillee"}
                 value={form.message}
                 onChange={(v) => updateField("message", v)}
                 placeholder={
                   isArabic
-                    ? "ÙƒÙ„Ù…Ø§ ÙƒØ§Ù†Øª Ø§Ù„ØªÙØ§ØµÙŠÙ„ Ø§ÙƒØ«Ø±ØŒ ÙƒØ§Ù†Øª Ø§Ù„Ù…Ø±Ø§Ø¬Ø¹Ø© Ø§Ø³Ø±Ø¹."
+                    ? "كلما كانت التفاصيل اكثر، كانت المراجعة اسرع."
                     : "Donnez un maximum d'infos: voisinage, points forts, etc."
                 }
               />

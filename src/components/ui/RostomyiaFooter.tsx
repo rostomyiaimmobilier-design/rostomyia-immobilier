@@ -46,7 +46,7 @@ const copy = {
 export default function RostomyiaFooter() {
   const { lang, dir } = useLang();
   const t = copy[lang];
-  const agencyLabel = lang === "ar" ? "Agency" : "Espace agence";
+  const agencyLabel = lang === "ar" ? "فضاء الوكالات" : "Espace Agence";
 
   return (
     <footer dir={dir} className="relative mt-auto overflow-hidden border-t border-white/10 bg-[#0B0F14] text-white">

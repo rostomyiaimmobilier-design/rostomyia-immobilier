@@ -6,6 +6,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { toUiErrorMessage } from "@/lib/ui-errors";
 
+function getAccountType(user: { user_metadata?: Record<string, unknown> | null } | null) {
+  return String(user?.user_metadata?.account_type ?? "")
+    .trim()
+    .toLowerCase();
+}
+
 export default function ConfirmOtpPage() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
@@ -62,7 +68,7 @@ export default function ConfirmOtpPage() {
     setErrorMsg(null);
     setInfoMsg(null);
 
-    const { error } = await supabase.auth.verifyOtp({
+    const { data, error } = await supabase.auth.verifyOtp({
       email: normalizedEmail,
       token: otp.trim(),
       type: "email",
@@ -72,6 +78,18 @@ export default function ConfirmOtpPage() {
 
     if (error) {
       setErrorMsg(toUiErrorMessage(error.message, { context: "otp" }));
+      return;
+    }
+
+    const accountType = getAccountType(data.user ?? null);
+    if (accountType === "agency") {
+      await supabase.auth.signOut();
+      setErrorMsg("Ce compte agence doit se connecter via l'espace agence.");
+      return;
+    }
+    if (accountType === "admin" || accountType === "super_admin") {
+      await supabase.auth.signOut();
+      setErrorMsg("Ce compte administrateur doit se connecter via /admin/login.");
       return;
     }
 

@@ -116,6 +116,7 @@ type FormState = {
   commune: string;
   quartier: string;
   locationDetail: string;
+  ownerPhone: string;
   residenceName: string;
   promotionName: string;
   deliveryYear: string;
@@ -132,6 +133,7 @@ type FormState = {
 
 type NewPropertyFormProps = {
   initialRef?: string;
+  ownerLeadId?: string;
   submissionMode?: "create" | "request";
 };
 
@@ -191,6 +193,10 @@ function parseOptionalNumber(raw: string) {
   if (!cleaned) return null;
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : null;
+}
+
+function digitsOnly(raw: string) {
+  return (raw || "").replace(/\D/g, "");
 }
 
 function isMissingColumnError(message: string | undefined) {
@@ -321,7 +327,11 @@ function generateDescription(form: FormState) {
   ].join("\n");
 }
 
-export default function NewPropertyForm({ initialRef, submissionMode = "create" }: NewPropertyFormProps) {
+export default function NewPropertyForm({
+  initialRef,
+  ownerLeadId,
+  submissionMode = "create",
+}: NewPropertyFormProps) {
   const router = useRouter();
   const supabase = createClient();
   const isRequestMode = submissionMode === "request";
@@ -338,6 +348,7 @@ export default function NewPropertyForm({ initialRef, submissionMode = "create" 
     commune: "",
     quartier: "",
     locationDetail: "",
+    ownerPhone: "",
     residenceName: "",
     promotionName: "",
     deliveryYear: "",
@@ -588,10 +599,12 @@ export default function NewPropertyForm({ initialRef, submissionMode = "create" 
           title: form.title.trim(),
           type: dbType,
           location_type: locationType,
+          owner_lead_id: ownerLeadId ?? null,
           category: form.type ? form.type.trim() : null,
           apartment_type: form.apartmentType ? form.apartmentType.trim() : null,
           price: form.price.trim() || null,
           location: location || null,
+          owner_phone: digitsOnly(form.ownerPhone) || null,
           beds: form.beds ? Number(form.beds) : null,
           baths: form.baths ? Number(form.baths) : null,
           area: form.area ? Number(form.area) : null,
@@ -869,6 +882,20 @@ export default function NewPropertyForm({ initialRef, submissionMode = "create" 
             placeholder="Ex: residence, point de repere..."
           />
         </Field>
+
+        {!isRequestMode ? (
+          <Field label="Telephone proprietaire">
+            <Input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              className="h-11 rounded-2xl border-0 bg-white/80 px-4 ring-1 ring-black/10"
+              value={form.ownerPhone}
+              onChange={(e) => setForm((s) => ({ ...s, ownerPhone: digitsOnly(e.target.value) }))}
+              placeholder="0555123456"
+            />
+          </Field>
+        ) : null}
 
         {form.type === "appartement" && (
           <>
