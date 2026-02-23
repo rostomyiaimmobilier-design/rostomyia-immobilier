@@ -2,10 +2,12 @@ import Link from "next/link";
 import {
   ArrowLeft,
   BadgeCheck,
+  CalendarDays,
   CalendarClock,
   Clock3,
   Eye,
   Hourglass,
+  MessageSquare,
   Phone,
   Sparkles,
   UserCircle2,
@@ -143,34 +145,34 @@ export default async function ViewingRequestsPage({
   const scheduled = filteredRequests.filter((x) => x.status === "scheduled").length;
 
   return (
-    <div className="space-y-8">
-      <section className="relative overflow-hidden rounded-3xl border border-black/10 bg-white/75 p-6 shadow-sm backdrop-blur md:p-8">
+    <div className="space-y-10">
+      <section className="relative overflow-hidden rounded-3xl border border-black/10 bg-white/80 p-6 backdrop-blur md:p-8">
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -left-20 -top-16 h-56 w-56 rounded-full bg-[rgb(var(--gold))]/18 blur-3xl" />
           <div className="absolute right-0 top-8 h-52 w-52 rounded-full bg-[rgb(var(--navy))]/10 blur-3xl" />
         </div>
 
-        <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-5">
           <div className="relative">
-            <div className="inline-flex items-center gap-2 rounded-full bg-[rgb(var(--gold))]/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]">
+            <div className="inline-flex items-center gap-2 rounded-full bg-[rgb(var(--gold))]/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]">
               <Sparkles size={14} />
               Visit Desk
             </div>
-            <h1 className="mt-3 text-3xl font-extrabold text-[rgb(var(--navy))]">Demandes de visite</h1>
-            <p className="mt-2 max-w-2xl text-sm text-black/65">
+            <h1 className="mt-3 text-3xl font-extrabold leading-tight text-[rgb(var(--navy))]">Demandes de visite</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-black/65">
               Suivez les nouvelles demandes, qualifiez les contacts et planifiez les visites depuis un flux unique.
             </p>
           </div>
           <Link
             href="/admin/protected/leads"
-            className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-medium text-[rgb(var(--navy))] hover:bg-black/5"
+            className="inline-flex h-11 items-center gap-2 rounded-xl border border-black/10 bg-white px-4 text-sm font-medium text-[rgb(var(--navy))] hover:bg-black/5"
           >
             <ArrowLeft size={15} />
             Retour
           </Link>
         </div>
 
-        <div className="relative mt-6 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+        <div className="relative mt-7 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
           <StatCard label="Total" value={String(total)} icon={<CalendarClock size={15} />} />
           <StatCard label="Nouvelles" value={String(fresh)} icon={<Hourglass size={15} />} />
           <StatCard label="Contactees" value={String(contacted)} icon={<Phone size={15} />} />
@@ -188,31 +190,36 @@ export default async function ViewingRequestsPage({
         />
       </section>
 
-      <section className="space-y-4">
+      <section className="space-y-5">
         {filteredRequests.map((x) => (
           <article
             key={x.id}
-            className="rounded-3xl border border-black/10 bg-white/82 p-5 shadow-sm backdrop-blur md:p-6"
+            className="relative overflow-hidden rounded-3xl border border-black/10 bg-white/92 p-6 ring-1 ring-white/70 backdrop-blur md:p-7"
           >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-2.5 py-1 text-xs text-black/65">
+            <div className="pointer-events-none absolute inset-0">
+              <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-[rgb(var(--gold))]/15 blur-2xl" />
+              <div className="absolute -left-8 bottom-0 h-20 w-20 rounded-full bg-[rgb(var(--navy))]/8 blur-2xl" />
+            </div>
+
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="relative">
+                <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/95 px-3 py-1 text-xs text-black/65">
                   <Clock3 size={12} />
                   {new Date(x.created_at).toLocaleString("fr-FR")}
                   {x.lang ? ` | ${x.lang.toUpperCase()}` : ""}
                 </div>
-                <h2 className="mt-2 inline-flex items-center gap-2 text-lg font-bold text-[rgb(var(--navy))]">
+                <h2 className="mt-2 inline-flex items-center gap-2 text-xl font-bold leading-tight text-[rgb(var(--navy))]">
                   <UserCircle2 size={18} />
                   {fmt(x.name)}
                 </h2>
-                <div className="mt-1 inline-flex items-center gap-2 text-sm text-black/70">
+                <div className="mt-2 inline-flex items-center gap-2 rounded-lg border border-black/10 bg-black/5 px-3 py-1.5 text-sm text-black/70">
                   <Phone size={14} />
                   {fmt(x.phone)}
                 </div>
               </div>
 
               <span
-                className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${statusPill(
+                className={`relative inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${statusPill(
                   x.status
                 )}`}
               >
@@ -220,15 +227,22 @@ export default async function ViewingRequestsPage({
               </span>
             </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <div className="rounded-2xl border border-black/10 bg-white p-3 text-sm">
-                <div className="text-xs uppercase tracking-wide text-black/50">Bien</div>
-                <div className="mt-1 font-semibold text-slate-900">{x.property_ref ? `REF: ${x.property_ref}` : "-"}</div>
-                <div className="mt-2 flex flex-wrap gap-2">
+            <div className="my-5 h-px w-full bg-gradient-to-r from-transparent via-black/10 to-transparent" />
+
+            <div className="relative grid gap-4 lg:grid-cols-[1.2fr_1fr_1fr]">
+              <div className="rounded-2xl border border-black/10 bg-white/95 p-4 text-sm">
+                <div className="inline-flex items-center gap-2 text-xs uppercase tracking-wide text-black/50">
+                  <Eye size={12} />
+                  Bien
+                </div>
+                <div className="mt-2 inline-flex rounded-full border border-black/10 bg-black/5 px-2.5 py-1 text-xs font-semibold text-[rgb(var(--navy))]">
+                  {x.property_ref ? `REF: ${x.property_ref}` : "REF: -"}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2.5">
                   {x.property_ref ? (
                     <a
                       href={`/biens/${encodeURIComponent(x.property_ref)}`}
-                      className="inline-flex items-center gap-1 rounded-lg border border-black/10 bg-white px-2.5 py-1.5 text-xs font-medium text-[rgb(var(--navy))] hover:bg-black/5"
+                      className="inline-flex h-9 items-center gap-1 rounded-lg border border-black/10 bg-white px-3 text-xs font-medium text-[rgb(var(--navy))] hover:bg-black/5"
                     >
                       <Eye size={12} />
                       Voir bien
@@ -236,45 +250,60 @@ export default async function ViewingRequestsPage({
                   ) : null}
                   <Link
                     href={`/admin/protected/leads/visits/plan/${x.id}`}
-                    className="inline-flex items-center gap-1 rounded-lg bg-[rgb(var(--navy))] px-2.5 py-1.5 text-xs font-semibold text-white hover:opacity-95"
+                    className="inline-flex h-9 items-center gap-1 rounded-lg bg-[rgb(var(--navy))] px-3 text-xs font-semibold text-white hover:opacity-95"
                   >
                     Planifier
                   </Link>
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-black/10 bg-white p-3 text-sm">
-                <div className="text-xs uppercase tracking-wide text-black/50">Preference</div>
-                <div className="mt-1 text-slate-900">{x.preferred_date ? String(x.preferred_date) : "-"}</div>
-                <div className="text-xs text-black/60">{x.preferred_time ?? "-"}</div>
+              <div className="rounded-2xl border border-black/10 bg-white/95 p-4 text-sm">
+                <div className="inline-flex items-center gap-2 text-xs uppercase tracking-wide text-black/50">
+                  <CalendarDays size={12} />
+                  Preference
+                </div>
+                <div className="mt-3 grid gap-2.5">
+                  <div className="rounded-xl border border-black/10 bg-black/5 px-3 py-2 text-xs text-black/70">
+                    <span className="font-semibold text-black/85">Date:</span>{" "}
+                    {x.preferred_date ? String(x.preferred_date) : "-"}
+                  </div>
+                  <div className="rounded-xl border border-black/10 bg-black/5 px-3 py-2 text-xs text-black/70">
+                    <span className="font-semibold text-black/85">Heure:</span> {x.preferred_time ?? "-"}
+                  </div>
+                </div>
               </div>
 
               <form
-                className="rounded-2xl border border-black/10 bg-white p-3"
+                className="rounded-2xl border border-black/10 bg-white/95 p-4"
                 action={async (formData) => {
                   "use server";
                   const status = String(formData.get("status") || "new");
                   await updateViewingRequestStatus(x.id, status);
                 }}
               >
-                <div className="text-xs uppercase tracking-wide text-black/50">Mise a jour</div>
+                <div className="text-xs uppercase tracking-wide text-black/50">Mise a jour statut</div>
                 <AppDropdown
                   name="status"
                   defaultValue={x.status ?? "new"}
-                  className="mt-2"
-                  triggerClassName="h-10"
+                  className="mt-3"
+                  triggerClassName="h-11"
                   options={STATUS.map((s) => ({ value: s, label: s }))}
                 />
-                <button className="mt-2 h-10 w-full rounded-xl bg-[rgb(var(--navy))] px-3 text-xs font-semibold text-white hover:opacity-95">
+                <button className="mt-3 h-11 w-full rounded-xl bg-[rgb(var(--navy))] px-3 text-xs font-semibold text-white hover:opacity-95">
                   Enregistrer
                 </button>
               </form>
             </div>
 
             {x.message ? (
-              <div className="mt-3 rounded-2xl border border-black/10 bg-white p-3 text-sm text-black/70">
-                <div className="text-xs uppercase tracking-wide text-black/50">Message client</div>
-                <div className="mt-1 whitespace-pre-wrap break-words">{x.message}</div>
+              <div className="relative mt-4 rounded-2xl border border-black/10 bg-[rgb(var(--navy))]/[0.03] p-4 text-sm text-black/70">
+                <div className="inline-flex items-center gap-1.5 text-xs uppercase tracking-wide text-black/50">
+                  <MessageSquare size={12} />
+                  Message client
+                </div>
+                <div className="mt-2 whitespace-pre-wrap break-words rounded-lg border border-black/10 bg-white/90 px-3 py-3 leading-relaxed">
+                  {x.message}
+                </div>
               </div>
             ) : null}
           </article>
@@ -300,12 +329,12 @@ function StatCard({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+    <div className="rounded-2xl border border-black/10 bg-white/95 p-4 ring-1 ring-white/70">
       <div className="inline-flex items-center gap-2 text-xs uppercase tracking-wide text-black/50">
         {icon}
         {label}
       </div>
-      <div className="mt-2 text-2xl font-extrabold text-[rgb(var(--navy))]">{value}</div>
+      <div className="mt-2 text-2xl font-extrabold leading-none text-[rgb(var(--navy))]">{value}</div>
     </div>
   );
 }

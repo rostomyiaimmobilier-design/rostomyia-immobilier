@@ -55,3 +55,60 @@ Manual test:
 curl -H "Authorization: Bearer $CRON_SECRET" \
   "https://<your-domain>/api/cron/recommendations/rebuild?limitUsers=200&topN=24&lookbackDays=120"
 ```
+
+## WhatsApp notifications via n8n
+
+Visit validation notifications can be sent through an n8n Webhook.
+
+### 1) Create n8n webhook
+
+- In n8n, create a workflow with a `Webhook` trigger.
+- Method: `POST`
+- Keep payload as JSON.
+- Copy the **Production URL** from n8n (this is your real webhook URL).
+
+Expected JSON payload from this app:
+
+```json
+{
+  "to": "213XXXXXXXXX",
+  "message": "Nouvelle visite validee...\nDate: ...",
+  "context": "agency_visit_validated"
+}
+```
+
+`context` can be:
+
+- `agency_visit_validated`
+- `owner_visit_validated`
+
+### 2) Configure environment variables
+
+Set at least one webhook URL:
+
+- `WHATSAPP_WEBHOOK_URL`
+
+Optional override URLs:
+
+- `AGENCY_WHATSAPP_WEBHOOK_URL`
+- `OWNER_WHATSAPP_WEBHOOK_URL`
+
+Optional webhook secrets (sent as both `Authorization: Bearer <secret>` and `x-webhook-secret: <secret>`):
+
+- `WHATSAPP_WEBHOOK_SECRET`
+- `AGENCY_WHATSAPP_WEBHOOK_SECRET`
+- `OWNER_WHATSAPP_WEBHOOK_SECRET`
+
+### 3) Minimal n8n flow
+
+- `Webhook` -> (optional secret validation) -> provider node/function -> `Respond to Webhook`
+- Provider step should send `message` to WhatsApp destination `to`.
+
+### 4) Test
+
+```bash
+curl -X POST "$WHATSAPP_WEBHOOK_URL" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $WHATSAPP_WEBHOOK_SECRET" \
+  -d '{"to":"213555000111","message":"Test visite validee","context":"agency_visit_validated"}'
+```

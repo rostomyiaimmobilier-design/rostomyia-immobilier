@@ -118,20 +118,37 @@ async function dispatchAgencyWhatsappNotification(input: {
   toDigits: string | null;
   message: string;
 }) {
-  const webhookUrl = process.env.AGENCY_WHATSAPP_WEBHOOK_URL;
+  const webhookUrl =
+    process.env.AGENCY_WHATSAPP_WEBHOOK_URL ||
+    process.env.WHATSAPP_WEBHOOK_URL;
+  const webhookSecret =
+    process.env.AGENCY_WHATSAPP_WEBHOOK_SECRET ||
+    process.env.WHATSAPP_WEBHOOK_SECRET;
   if (!webhookUrl || !input.toDigits) return;
 
   try {
-    await fetch(webhookUrl, {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (webhookSecret) {
+      headers.Authorization = `Bearer ${webhookSecret}`;
+      headers["x-webhook-secret"] = webhookSecret;
+    }
+
+    const response = await fetch(webhookUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         to: input.toDigits,
         message: input.message,
         context: "agency_visit_validated",
       }),
     });
-  } catch {
+    if (!response.ok) {
+      const reason = await response.text().catch(() => "");
+      throw new Error(reason || `http_${response.status}`);
+    }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "whatsapp_send_failed";
+    console.error("[leads.actions] agency WhatsApp notification failed:", reason);
     // Keep visit validation non-blocking if WhatsApp provider fails.
   }
 }
@@ -142,20 +159,37 @@ async function dispatchOwnerWhatsappNotification(input: {
 }) {
   const webhookUrl =
     process.env.OWNER_WHATSAPP_WEBHOOK_URL ||
-    process.env.AGENCY_WHATSAPP_WEBHOOK_URL;
+    process.env.AGENCY_WHATSAPP_WEBHOOK_URL ||
+    process.env.WHATSAPP_WEBHOOK_URL;
+  const webhookSecret =
+    process.env.OWNER_WHATSAPP_WEBHOOK_SECRET ||
+    process.env.AGENCY_WHATSAPP_WEBHOOK_SECRET ||
+    process.env.WHATSAPP_WEBHOOK_SECRET;
   if (!webhookUrl || !input.toDigits) return;
 
   try {
-    await fetch(webhookUrl, {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (webhookSecret) {
+      headers.Authorization = `Bearer ${webhookSecret}`;
+      headers["x-webhook-secret"] = webhookSecret;
+    }
+
+    const response = await fetch(webhookUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         to: input.toDigits,
         message: input.message,
         context: "owner_visit_validated",
       }),
     });
-  } catch {
+    if (!response.ok) {
+      const reason = await response.text().catch(() => "");
+      throw new Error(reason || `http_${response.status}`);
+    }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "whatsapp_send_failed";
+    console.error("[leads.actions] owner WhatsApp notification failed:", reason);
     // Keep visit validation non-blocking if WhatsApp provider fails.
   }
 }
@@ -316,7 +350,16 @@ async function notifyOwnerAfterVisitValidation(
   const property = await loadPropertyForVisitNotification(supabase, propertyRef);
   if (!property) return;
 
-  const ownerDigits = normalizePhoneDigits(property.owner_phone);
+  let ownerDigits = normalizePhoneDigits(property.owner_phone);
+  if (!ownerDigits) {
+    const ownerLeadId = toOptionalString(property.owner_lead_id);
+    if (ownerLeadId) {
+      const ownerLead = await loadOwnerLeadContact(supabase, ownerLeadId);
+      ownerDigits = normalizePhoneDigits(
+        toOptionalString(ownerLead?.whatsapp) ?? toOptionalString(ownerLead?.phone)
+      );
+    }
+  }
   if (!ownerDigits) return;
 
   const ownerMessage = [
@@ -437,4 +480,47 @@ export async function updateViewingRequestStatus(id: string, status: string) {
   if (normalizedStatus === "scheduled") {
     redirect(`/admin/protected/leads/visits/plan/${encodeURIComponent(id)}`);
   }
+}
+
+const SHORT_STAY_RESERVATION_STATUS = [
+  "new",
+  "contacted",
+  "confirmed",
+  "cancelled",
+  "closed",
+] as const;
+
+function isAllowedShortStayReservationStatus(value: string) {
+  return SHORT_STAY_RESERVATION_STATUS.includes(
+    value as (typeof SHORT_STAY_RESERVATION_STATUS)[number]
+  );
+}
+
+export async function updateShortStayReservationStatus(
+  id: string,
+  status: string,
+  adminNote?: string
+) {
+  const supabase = await createClient();
+  const normalizedStatus = status.trim().toLowerCase() || "new";
+  if (!isAllowedShortStayReservationStatus(normalizedStatus)) {
+    throw new Error("Invalid reservation status");
+  }
+
+  const note = (adminNote || "").trim();
+  const payload = {
+    status: normalizedStatus,
+    admin_note: note || null,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase
+    .from("short_stay_reservations")
+    .update(payload)
+    .eq("id", id);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/admin/protected/leads/reservations");
+  revalidatePath("/admin/leads/reservations");
 }

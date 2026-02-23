@@ -34,7 +34,7 @@ export async function POST(req: Request) {
   }
 
   if (!isAgencyAllowed(user.user_metadata as Record<string, unknown> | undefined)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return NextResponse.json({ error: "Permission denied" }, { status: 403 });
   }
 
   const form = await req.formData();

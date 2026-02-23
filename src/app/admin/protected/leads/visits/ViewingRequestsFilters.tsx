@@ -67,19 +67,19 @@ export default function ViewingRequestsFilters({
   }, [q, status, lang, createdWithin, pathname, router, searchParams]);
 
   return (
-    <div className="mt-5 rounded-2xl border border-black/10 bg-gradient-to-b from-white to-slate-50/70 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] md:p-5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="inline-flex items-center gap-2 rounded-xl bg-[rgb(var(--navy))]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]">
+    <div className="mt-6 rounded-2xl border border-black/10 bg-gradient-to-b from-white to-slate-50/80 p-5 ring-1 ring-white/70 md:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex items-center gap-2 rounded-xl bg-[rgb(var(--navy))]/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]">
           <SlidersHorizontal size={14} />
           Filtres avances
         </div>
-        <div className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-black/65">
+        <div className="inline-flex h-9 items-center gap-2 rounded-xl border border-black/10 bg-white px-3 text-xs font-semibold text-black/65">
           {isPending ? <Loader2 size={13} className="animate-spin" /> : null}
           Resultats: {filteredCount} / {totalCount}
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-4">
+      <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <label className="space-y-1 text-sm md:col-span-2">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-black/50">Recherche</span>
           <div className="relative">
@@ -88,7 +88,7 @@ export default function ViewingRequestsFilters({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Nom, telephone, ref, message..."
-              className="h-10 w-full rounded-xl border border-black/10 bg-white pl-9 pr-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
+              className="h-11 w-full rounded-xl border border-black/10 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-[rgb(var(--navy))]/40"
             />
           </div>
         </label>
@@ -98,7 +98,7 @@ export default function ViewingRequestsFilters({
           <AppDropdown
             value={status}
             onValueChange={setStatus}
-            triggerClassName="h-10"
+            triggerClassName="h-11"
             options={[
               { value: "all", label: "tous" },
               { value: "new", label: "nouveau" },
@@ -114,7 +114,7 @@ export default function ViewingRequestsFilters({
           <AppDropdown
             value={lang}
             onValueChange={setLang}
-            triggerClassName="h-10"
+            triggerClassName="h-11"
             options={[
               { value: "all", label: "toutes" },
               { value: "fr", label: "FR" },
@@ -128,7 +128,7 @@ export default function ViewingRequestsFilters({
           <AppDropdown
             value={createdWithin}
             onValueChange={setCreatedWithin}
-            triggerClassName="h-10"
+            triggerClassName="h-11"
             options={[
               { value: "", label: "toutes" },
               { value: "7", label: "7 jours" },
@@ -139,7 +139,7 @@ export default function ViewingRequestsFilters({
         </label>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex h-10 items-center gap-2 rounded-xl bg-[rgb(var(--navy))]/8 px-4 text-sm font-medium text-[rgb(var(--navy))]">
           <SlidersHorizontal size={14} />
           Recherche automatique active

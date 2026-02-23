@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 export type AppDropdownOption = {
   value: string;
   label: ReactNode;
+  searchText?: string;
   disabled?: boolean;
 };
 
@@ -29,6 +30,9 @@ type AppDropdownProps = {
   contentClassName?: string;
   itemClassName?: string;
   align?: "start" | "center" | "end";
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  noResultsLabel?: ReactNode;
 };
 
 const baseTriggerClass =
@@ -53,6 +57,9 @@ export default function AppDropdown({
   contentClassName,
   itemClassName,
   align = "start",
+  searchable = false,
+  searchPlaceholder = "Rechercher...",
+  noResultsLabel = "Aucun resultat",
 }: AppDropdownProps) {
   const fallbackValue = useMemo(
     () => defaultValue ?? value ?? options.find((option) => !option.disabled)?.value ?? "",
@@ -61,9 +68,21 @@ export default function AppDropdown({
 
   const isControlled = value !== undefined;
   const [internalValue, setInternalValue] = useState(() => fallbackValue);
+  const [searchQuery, setSearchQuery] = useState("");
   const hasCurrentInOptions = options.some((option) => option.value === internalValue);
   const currentValue = isControlled ? (value ?? "") : hasCurrentInOptions ? internalValue : fallbackValue;
   const selected = options.find((option) => option.value === currentValue);
+  const filteredOptions = useMemo(() => {
+    if (!searchable) return options;
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return options;
+
+    return options.filter((option) => {
+      const labelText = typeof option.label === "string" ? option.label : "";
+      const haystack = `${option.searchText ?? ""} ${labelText} ${option.value}`.toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [options, searchQuery, searchable]);
 
   function handleSelect(nextValue: string) {
     if (!isControlled) setInternalValue(nextValue);
@@ -80,25 +99,41 @@ export default function AppDropdown({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align={align} className={cn(baseContentClass, contentClassName)}>
-          {options.map((option) => (
-            <DropdownMenuItem
-              key={option.value}
-              disabled={disabled || option.disabled}
-              className={cn(baseItemClass, itemClassName)}
-              onSelect={(event) => {
-                if (disabled || option.disabled) {
-                  event.preventDefault();
-                  return;
-                }
-                handleSelect(option.value);
-              }}
-            >
-              <span className="truncate">{option.label}</span>
-              {currentValue === option.value ? (
-                <Check className="ml-auto h-4 w-4 text-[rgb(var(--navy))]" />
-              ) : null}
-            </DropdownMenuItem>
-          ))}
+          {searchable ? (
+            <div className="px-1 pb-1">
+              <input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder={searchPlaceholder}
+                className="h-9 w-full rounded-lg border border-black/10 bg-white px-2.5 text-sm text-[rgb(var(--navy))] outline-none focus:border-[rgb(var(--navy))]/35"
+                onKeyDown={(event) => event.stopPropagation()}
+              />
+            </div>
+          ) : null}
+
+          {filteredOptions.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-black/50">{noResultsLabel}</div>
+          ) : (
+            filteredOptions.map((option) => (
+              <DropdownMenuItem
+                key={option.value}
+                disabled={disabled || option.disabled}
+                className={cn(baseItemClass, itemClassName)}
+                onSelect={(event) => {
+                  if (disabled || option.disabled) {
+                    event.preventDefault();
+                    return;
+                  }
+                  handleSelect(option.value);
+                }}
+              >
+                <span className="truncate">{option.label}</span>
+                {currentValue === option.value ? (
+                  <Check className="ml-auto h-4 w-4 text-[rgb(var(--navy))]" />
+                ) : null}
+              </DropdownMenuItem>
+            ))
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       {name ? <input type="hidden" name={name} value={currentValue} /> : null}

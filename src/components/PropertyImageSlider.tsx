@@ -50,6 +50,7 @@ export default function PropertyImageSlider({
   const blurDataURL = useMemo(() => propertyImageBlurDataURL(), []);
   const [index, setIndex] = useState(0);
   const [zoomOpen, setZoomOpen] = useState(false);
+  const [allPhotosOpen, setAllPhotosOpen] = useState(false);
   const [zoomScale, setZoomScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
@@ -59,6 +60,11 @@ export default function PropertyImageSlider({
 
   const canSlide = count > 1;
   const current = safeImages[index] ?? null;
+  const hasMoreThanNine = count > 9;
+  const thumbLimit = hasMoreThanNine ? 9 : count;
+  const thumbs = safeImages.slice(0, thumbLimit);
+  const showAllLabel = "Show all photos";
+  const currentLabel = "Current";
 
   const rootRef = useRef<HTMLDivElement | null>(null);
   const touchX = useRef<number | null>(null);
@@ -171,6 +177,15 @@ export default function PropertyImageSlider({
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [closeZoom, enableZoom, zoomIn, zoomOpen, zoomOut]);
+
+  useEffect(() => {
+    if (!allPhotosOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [allPhotosOpen]);
 
   // Swipe.
   function onTouchStart(e: TouchEvent) {
@@ -372,6 +387,22 @@ export default function PropertyImageSlider({
             <div className="absolute bottom-3 right-3 rounded-full bg-white/75 px-2.5 py-1 text-[11px] font-semibold text-[rgb(var(--navy))] backdrop-blur ring-1 ring-black/5">
               {index + 1}/{count}
             </div>
+
+            {count > 1 ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setAllPhotosOpen(true);
+                }}
+                className="absolute bottom-3 left-3 rounded-full bg-white/82 px-2.5 py-1 text-[11px] font-semibold text-[rgb(var(--navy))] backdrop-blur ring-1 ring-black/8 transition hover:bg-white"
+                aria-label={`${showAllLabel} (${count})`}
+              >
+                {showAllLabel}
+              </button>
+            ) : null}
+
           </>
         ) : null}
 
@@ -380,13 +411,47 @@ export default function PropertyImageSlider({
 
       {showThumbs && count > 1 ? (
         <div className="mt-3 grid grid-cols-4 gap-2">
-          {safeImages.slice(0, 8).map((src, i) => (
+          {thumbs.map((src, i) => {
+            const isShowAllThumb = hasMoreThanNine && i === 8;
+            const remaining = count - 8;
+
+            if (isShowAllThumb) {
+              return (
+                <button
+                  key={`show-all-${i}`}
+                  type="button"
+                  onClick={() => {
+                    setIndex(i);
+                    setAllPhotosOpen(true);
+                  }}
+                  className="relative aspect-[4/3] overflow-hidden rounded-xl ring-1 ring-black/10 transition-transform duration-200 hover:scale-[1.02]"
+                  aria-label={`${showAllLabel} (${count})`}
+                >
+                  <Image
+                    src={src}
+                    alt={`${alt} ${i + 1}`}
+                    fill
+                    placeholder="blur"
+                    blurDataURL={blurDataURL}
+                    className="object-cover"
+                    sizes="20vw"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/35 to-black/50" />
+                  <div className="absolute inset-0 flex flex-col items-center justify-center px-2 text-center text-white">
+                    <span className="text-base font-semibold">+{remaining}</span>
+                    <span className="text-[11px] font-semibold uppercase tracking-wide">{showAllLabel}</span>
+                  </div>
+                </button>
+              );
+            }
+
+            return (
             <button
-              key={src}
+              key={`${src}-${i}`}
               type="button"
               onClick={() => setIndex(i)}
-              className={`relative aspect-[4/3] overflow-hidden rounded-xl ring-1 ring-black/5 transition ${
-                i === index ? "ring-2 ring-[rgb(var(--gold))]" : "opacity-85 hover:opacity-100"
+              className={`relative aspect-[4/3] overflow-hidden rounded-xl ring-1 ring-black/10 transition-all duration-200 ${
+                i === index ? "ring-2 ring-[rgb(var(--gold))]" : "opacity-85 hover:opacity-100 hover:scale-[1.02]"
               }`}
               aria-label={`Miniature ${i + 1}`}
             >
@@ -401,7 +466,8 @@ export default function PropertyImageSlider({
               />
               {i === index ? <div className="pointer-events-none absolute inset-0 bg-[rgb(var(--gold))]/10" /> : null}
             </button>
-          ))}
+            );
+          })}
         </div>
       ) : null}
 
@@ -480,6 +546,130 @@ export default function PropertyImageSlider({
                       transformOrigin: "center center",
                     }}
                   />
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {allPhotosOpen ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="fixed inset-0 z-[95] bg-black/92 p-3 md:p-6"
+            onClick={() => setAllPhotosOpen(false)}
+          >
+            <div
+              className="mx-auto flex h-full w-full max-w-7xl flex-col overflow-hidden rounded-2xl border border-white/20 bg-black/35 backdrop-blur-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between gap-2 border-b border-white/15 bg-white/5 px-3 py-2 text-white md:px-4">
+                <div>
+                  <div className="text-sm font-semibold">All photos ({count})</div>
+                  <div className="text-[11px] text-white/65">Select any photo to set it as current.</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAllPhotosOpen(false)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/20 bg-white/10 text-white transition hover:bg-white/20"
+                  aria-label="Close all photos"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-hidden p-3 md:p-4">
+                <div className="grid h-full gap-3 md:grid-cols-[minmax(0,1fr)_340px]">
+                  <div className="relative min-h-[260px] overflow-hidden rounded-2xl border border-white/15 bg-black/55 shadow-[0_18px_40px_-30px_rgba(0,0,0,0.9)]">
+                    {current ? (
+                      <>
+                        <Image
+                          src={current}
+                          alt={`${alt} ${index + 1}`}
+                          fill
+                          placeholder="blur"
+                          blurDataURL={blurDataURL}
+                          className="object-contain transition-transform duration-300"
+                          sizes="(max-width: 768px) 100vw, 70vw"
+                          priority
+                        />
+                        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-black/5 to-transparent" />
+                        <div className="pointer-events-none absolute bottom-2 left-2 rounded-full bg-black/55 px-2 py-1 text-xs font-semibold text-white">
+                          {index + 1}/{count}
+                        </div>
+                        <div className="pointer-events-none absolute right-2 top-2 rounded-full bg-[rgb(var(--gold))] px-2 py-1 text-xs font-semibold text-[rgb(var(--navy))]">
+                          {currentLabel}
+                        </div>
+
+                        {canSlide ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={prev}
+                              className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/88 p-2 text-[rgb(var(--navy))] shadow-sm ring-1 ring-black/10 transition hover:bg-white"
+                              aria-label="Image precedente"
+                            >
+                              <ChevronLeft size={16} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={next}
+                              className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/88 p-2 text-[rgb(var(--navy))] shadow-sm ring-1 ring-black/10 transition hover:bg-white"
+                              aria-label="Image suivante"
+                            >
+                              <ChevronRight size={16} />
+                            </button>
+                          </>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </div>
+
+                  <div className="overflow-y-auto rounded-2xl border border-white/15 bg-black/35 p-2">
+                    <div className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/70">
+                      Photo grid
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {safeImages.map((src, i) => (
+                        <button
+                          key={`${src}-all-${i}`}
+                          type="button"
+                          onClick={() => setIndex(i)}
+                          className={`relative aspect-[4/3] overflow-hidden rounded-xl ring-1 transition-all duration-200 ${
+                            i === index
+                              ? "ring-[rgb(var(--gold))] ring-2"
+                              : "ring-white/15 opacity-90 hover:scale-[1.02] hover:opacity-100"
+                          }`}
+                          aria-label={`Photo ${i + 1}`}
+                        >
+                          <Image
+                            src={src}
+                            alt={`${alt} ${i + 1}`}
+                            fill
+                            placeholder="blur"
+                            blurDataURL={blurDataURL}
+                            className="object-cover"
+                            sizes="(max-width: 768px) 45vw, 280px"
+                          />
+                          {i === index ? (
+                            <div className="pointer-events-none absolute inset-0 border-2 border-[rgb(var(--gold))] bg-[rgb(var(--gold))]/10" />
+                          ) : null}
+                          <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/45 to-transparent px-2 py-1 text-left text-[10px] font-semibold text-white/90">
+                            {i + 1}/{count}
+                          </div>
+                          {i === index ? (
+                            <div className="pointer-events-none absolute left-2 top-2 rounded-full bg-[rgb(var(--gold))] px-2 py-0.5 text-[10px] font-semibold text-[rgb(var(--navy))]">
+                              {currentLabel}
+                            </div>
+                          ) : null}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

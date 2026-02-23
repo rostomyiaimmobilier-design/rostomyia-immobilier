@@ -161,8 +161,13 @@ export async function PUT(
       changed = true;
     }
     if (isMissingOwnerPhoneColumn(error.message) && "owner_phone" in attemptPayload) {
-      delete attemptPayload.owner_phone;
-      changed = true;
+      return NextResponse.json(
+        {
+          error:
+            "La colonne owner_phone est absente. Lancez la migration 2026-02-22-add-owner-phone-to-properties.sql puis reessayez.",
+        },
+        { status: 400 }
+      );
     }
     if (!changed) break;
   }

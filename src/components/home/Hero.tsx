@@ -30,6 +30,7 @@ const copy = {
 
 const APARTMENT_TYPES = ["Studio", "F2", "F3", "F4", "F5", "T1", "T2", "T3", "T4", "T5", "T6"] as const;
 const VILLA_LEVELS = ["R+1", "R+2", "R+3", "R+4", "R+5", "R+6"] as const;
+const SALE_RENT_ONLY_CATEGORIES = new Set(["terrain", "local", "bureau"]);
 
 type QuickDealType =
   | "Tous"
@@ -129,6 +130,10 @@ function inferQuickFiltersFromQuery(
   };
 }
 
+function isSaleRentOnlyCategory(category: string | null | undefined) {
+  return SALE_RENT_ONLY_CATEGORIES.has(String(category ?? "").trim().toLowerCase());
+}
+
 export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHeroProps) {
   const router = useRouter();
   const t = copy[lang];
@@ -218,16 +223,26 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
       : allQuartierOptions;
   }, [quick.commune, quartierCatalog, allQuartierOptions]);
 
-  const dealTypeOptions: Array<{ value: QuickDealType; label: string }> = [
-    { value: "Tous", label: lang === "ar" ? "الكل" : "Tous" },
-    { value: "Vente", label: lang === "ar" ? "بيع" : "Vente" },
-    { value: "Location", label: lang === "ar" ? "إيجار" : "Location" },
-    { value: "par_mois", label: lang === "ar" ? "إيجار / شهري" : "Location / par mois" },
-    { value: "six_mois", label: lang === "ar" ? "إيجار / 6 أشهر" : "Location / 6 mois" },
-    { value: "douze_mois", label: lang === "ar" ? "إيجار / 12 شهر" : "Location / 12 mois" },
-    { value: "par_nuit", label: lang === "ar" ? "إيجار / ليلة" : "Location / par nuit" },
-    { value: "court_sejour", label: lang === "ar" ? "إيجار قصير المدى" : "Location / court sejour" },
-  ];
+  const dealTypeOptions = useMemo<Array<{ value: QuickDealType; label: string }>>(() => {
+    const saleAndRentOnly = [
+      { value: "Vente" as QuickDealType, label: lang === "ar" ? "بيع" : "Vente" },
+      { value: "Location" as QuickDealType, label: lang === "ar" ? "إيجار" : "Location" },
+    ];
+
+    if (isSaleRentOnlyCategory(quick.category)) {
+      return saleAndRentOnly;
+    }
+
+    return [
+      { value: "Tous", label: lang === "ar" ? "الكل" : "Tous" },
+      ...saleAndRentOnly,
+      { value: "par_mois", label: lang === "ar" ? "إيجار / شهري" : "Location / par mois" },
+      { value: "six_mois", label: lang === "ar" ? "إيجار / 6 أشهر" : "Location / 6 mois" },
+      { value: "douze_mois", label: lang === "ar" ? "إيجار / 12 شهر" : "Location / 12 mois" },
+      { value: "par_nuit", label: lang === "ar" ? "إيجار / ليلة" : "Location / par nuit" },
+      { value: "court_sejour", label: lang === "ar" ? "إيجار قصير المدى" : "Location / court sejour" },
+    ];
+  }, [lang, quick.category]);
 
   const categoryOptions = [
     { value: "", label: lang === "ar" ? "كل الفئات" : "Toutes categories" },
@@ -337,7 +352,12 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
     const district = quick.district;
     const categoryDetail = quick.rooms;
     const category = inferred.category ?? quick.category;
-    const dealType = inferred.dealType ?? quick.dealType;
+    const inferredDealType = inferred.dealType ?? quick.dealType;
+    const dealType = isSaleRentOnlyCategory(category)
+      ? inferredDealType === "Vente"
+        ? "Vente"
+        : "Location"
+      : inferredDealType;
     const commune = inferred.commune ?? quick.commune;
     const searchQuery =
       category === "villa" && categoryDetail
@@ -474,6 +494,11 @@ export default function HomeHero({ lang, communes = [], quartiers = [] }: HomeHe
                         ...s,
                         category: value,
                         rooms: "",
+                        dealType: isSaleRentOnlyCategory(value)
+                          ? s.dealType === "Vente"
+                            ? "Vente"
+                            : "Location"
+                          : s.dealType,
                       }))
                     }
                     options={categoryOptions}

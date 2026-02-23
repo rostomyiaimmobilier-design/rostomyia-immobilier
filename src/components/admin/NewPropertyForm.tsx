@@ -408,6 +408,13 @@ export default function NewPropertyForm({
       ...baseOptions,
     ];
   }, [form.commune, form.quartier, quartiers, quartiersLoading]);
+  const quartierErrorLabel = useMemo(() => {
+    if (!quartiersError) return null;
+    if (isRequestMode && /(forbidden|unauthorized|permission denied)/i.test(quartiersError)) {
+      return null;
+    }
+    return quartiersError;
+  }, [isRequestMode, quartiersError]);
 
   function generateRef() {
     const ts = Date.now().toString().slice(-6);
@@ -828,27 +835,32 @@ export default function NewPropertyForm({
             <div className="text-[13px] font-semibold tracking-wide text-[rgb(var(--navy))]">
               Quartier
             </div>
-            <QuartiersManagerModal
-              quartiers={quartiers}
-              loading={quartiersLoading}
-              saving={quartiersSaving}
-              managed={quartiersManaged}
-              warning={quartiersWarning}
-              error={quartiersError}
-              onRefresh={refreshQuartiers}
-              onAdd={addQuartier}
-              onUpdate={updateQuartier}
-              onDelete={removeQuartier}
-            />
+            {!isRequestMode ? (
+              <QuartiersManagerModal
+                quartiers={quartiers}
+                loading={quartiersLoading}
+                saving={quartiersSaving}
+                managed={quartiersManaged}
+                warning={quartiersWarning}
+                error={quartiersError}
+                onRefresh={refreshQuartiers}
+                onAdd={addQuartier}
+                onUpdate={updateQuartier}
+                onDelete={removeQuartier}
+              />
+            ) : null}
           </div>
           <AppDropdown
             value={form.quartier}
             onValueChange={(value) => setForm((s) => ({ ...s, quartier: value }))}
             options={quartierOptions}
             disabled={quartiersLoading && quartierOptions.length <= 1}
+            searchable={isRequestMode}
+            searchPlaceholder="Rechercher un quartier..."
+            noResultsLabel="Aucun quartier trouve"
           />
-          {quartiersError ? (
-            <p className="text-xs font-medium text-amber-700">{quartiersError}</p>
+          {quartierErrorLabel ? (
+            <p className="text-xs font-medium text-amber-700">{quartierErrorLabel}</p>
           ) : null}
         </div>
 

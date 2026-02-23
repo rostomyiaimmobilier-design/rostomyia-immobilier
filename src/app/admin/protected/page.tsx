@@ -12,6 +12,7 @@ import {
   Clock3,
   FileCheck2,
   Home,
+  Hotel,
   ListChecks,
   MapPin,
   Plus,
@@ -388,6 +389,7 @@ export default async function AdminPage({
             <QuickAction href="/admin/new" icon={<Plus size={15} />} label="Nouveau bien" kind="primary" />
             <QuickAction href="/admin/protected/leads/owners" icon={<FileCheck2 size={15} />} label="Leads proprietaires" />
             <QuickAction href="/admin/protected/leads/depot-tiers" icon={<ListChecks size={15} />} label="Depot tiers" />
+            <QuickAction href="/admin/protected/leads/reservations" icon={<Hotel size={15} />} label="Reservations" />
             <QuickAction href="/admin/protected/agencies" icon={<Users size={15} />} label="Agences" />
             <QuickAction href="/admin/protected/users" icon={<UserRound size={15} />} label="Users & roles" />
             <AdminQuartiersDashboardAction />

@@ -248,6 +248,7 @@ type PropertyRow = {
   ref: string;
   title: string;
   type: string;
+  category: string | null;
   location_type?: string | null;
   price: string;
   location: string;
@@ -264,14 +265,14 @@ async function fetchPropertyByRef(
   const queryPropertyWithLocationType = async () =>
     supabase
       .from("properties")
-      .select("id, ref, title, type, location_type, price, location, beds, baths, area, description")
+      .select("id, ref, title, type, category, location_type, price, location, beds, baths, area, description")
       .eq("ref", ref)
       .single();
 
   const queryPropertyWithoutLocationType = async () =>
     supabase
       .from("properties")
-      .select("id, ref, title, type, price, location, beds, baths, area, description")
+      .select("id, ref, title, type, category, price, location, beds, baths, area, description")
       .eq("ref", ref)
       .single();
 
@@ -476,6 +477,7 @@ export default async function PropertyDetailPage({
         ref: property.ref,
         title: property.title,
         type: property.type,
+        category: property.category ?? null,
         locationType: (property as { location_type?: string | null }).location_type ?? null,
         price: property.price,
         location: property.location,

@@ -4,6 +4,7 @@ import {
   BadgeCheck,
   Building2,
   Calendar,
+  ChevronDown,
   Clock3,
   Eye,
   FileCheck2,
@@ -265,46 +266,54 @@ export default async function OwnerLeadsPage() {
         {leads.map((lead) => (
           <article
             key={lead.id}
-            className="rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm backdrop-blur md:p-6"
+            className="relative overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-6 ring-1 ring-white/70 backdrop-blur md:p-7"
           >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="inline-flex items-center gap-2 rounded-xl bg-[rgb(var(--navy))]/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]">
+            <div className="pointer-events-none absolute inset-0">
+              <div className="absolute -right-10 -top-12 h-32 w-32 rounded-full bg-[rgb(var(--gold))]/15 blur-3xl" />
+              <div className="absolute -left-10 bottom-0 h-24 w-24 rounded-full bg-[rgb(var(--navy))]/10 blur-3xl" />
+            </div>
+
+            <div className="relative flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="inline-flex items-center gap-2 rounded-xl bg-[rgb(var(--navy))]/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]">
                   <Building2 size={13} />
                   Lead proprietaire
                 </div>
-                <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-2.5 py-1 text-xs text-black/65">
+                <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/95 px-3 py-1 text-xs text-black/65">
                   <Calendar size={12} />
                   {new Date(lead.created_at).toLocaleString("fr-FR")}
                   {lead.lang ? ` | ${lead.lang.toUpperCase()}` : ""}
                 </div>
-                <h2 className="mt-2 text-xl font-extrabold tracking-tight text-[rgb(var(--navy))]">
+                <h2 className="mt-3 text-xl font-extrabold tracking-tight text-[rgb(var(--navy))] md:text-2xl">
                   {fmt(lead.title) !== "-" ? lead.title : fmt(lead.property_type)}
                 </h2>
                 {fmt(lead.email) !== "-" ? (
-                  <div className="mt-1 inline-flex items-center gap-1.5 text-sm text-black/65">
+                  <div className="mt-2 inline-flex items-center gap-2 rounded-lg border border-black/10 bg-white/90 px-3 py-1.5 text-sm text-black/65">
                     <Mail size={14} className="text-[rgb(var(--navy))]/70" />
                     {fmt(lead.email)}
                   </div>
                 ) : null}
-                <div className="mt-1 text-sm text-black/65">
-                  {[lead.address, lead.district, lead.commune, lead.city].filter(Boolean).join(" | ") || "-"}
+                <div className="mt-2 inline-flex max-w-full items-center gap-1.5 text-sm text-black/65">
+                  <MapPin size={14} className="shrink-0 text-[rgb(var(--navy))]/70" />
+                  <span className="truncate">
+                    {[lead.address, lead.district, lead.commune, lead.city].filter(Boolean).join(" | ") || "-"}
+                  </span>
                 </div>
-                <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                  <span className="rounded-full border border-black/10 bg-black/5 px-2.5 py-1 text-black/70">
+                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  <span className="rounded-full border border-black/10 bg-black/5 px-2.5 py-1.5 text-black/70">
                     Intent: {fmt(lead.intent)}
                   </span>
-                  <span className="rounded-full border border-black/10 bg-black/5 px-2.5 py-1 text-black/70">
+                  <span className="rounded-full border border-black/10 bg-black/5 px-2.5 py-1.5 text-black/70">
                     Type: {fmt(lead.property_type)}
                   </span>
-                  <span className="rounded-full border border-black/10 bg-black/5 px-2.5 py-1 text-black/70">
+                  <span className="rounded-full border border-black/10 bg-black/5 px-2.5 py-1.5 text-black/70">
                     Transaction: {fmt(lead.transaction_type || lead.location_type)}
                   </span>
                 </div>
               </div>
 
               <span
-                className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${statusBadgeClass(
+                className={`inline-flex rounded-full border px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wide ${statusBadgeClass(
                   lead.status
                 )}`}
               >
@@ -312,15 +321,21 @@ export default async function OwnerLeadsPage() {
               </span>
             </div>
 
-            <details className="group mt-4 overflow-hidden rounded-2xl border border-black/10 bg-white/70 shadow-sm">
+            <div className="my-5 h-px w-full bg-gradient-to-r from-transparent via-black/10 to-transparent" />
+
+            <details className="group relative mt-5 overflow-hidden rounded-2xl border border-black/10 bg-white/80 ring-1 ring-white/70">
               <summary className="cursor-pointer list-none px-4 py-3 md:px-5">
-                <span className="inline-flex h-10 items-center gap-2 rounded-xl border border-black/10 bg-white px-4 text-sm font-semibold text-[rgb(var(--navy))]">
+                <span className="inline-flex h-11 items-center gap-2 rounded-xl border border-black/10 bg-white px-4 text-sm font-semibold text-[rgb(var(--navy))]">
                   <Eye size={14} />
                   Afficher les details
+                  <ChevronDown
+                    size={14}
+                    className="ml-1 transition group-open:rotate-180"
+                  />
                 </span>
               </summary>
 
-              <div className="space-y-4 border-t border-black/10 px-4 pb-4 pt-4 md:px-5 md:pb-5">
+              <div className="space-y-5 border-t border-black/10 px-4 pb-5 pt-5 md:px-5 md:pb-6">
                 <div className="grid gap-3 md:grid-cols-4">
                   <Metric label="Prix" value={formatPrice(lead.price)} />
                   <Metric label="Surface" value={lead.surface ? `${lead.surface} m2` : "-"} />
@@ -328,7 +343,7 @@ export default async function OwnerLeadsPage() {
                   <Metric label="SDB" value={fmt(lead.baths)} />
                 </div>
 
-                <div className="grid gap-3 text-sm md:grid-cols-2">
+                <div className="grid gap-3.5 text-sm md:grid-cols-2">
                   <Info label="Client" value={fmt(lead.name)} icon={<UserRound size={15} />} tone="blue" />
                   <Info label="Telephone" value={fmt(lead.phone)} icon={<Phone size={15} />} tone="blue" />
                   <Info label="WhatsApp" value={fmt(lead.whatsapp)} icon={<MessageCircle size={15} />} tone="green" />
@@ -356,22 +371,22 @@ export default async function OwnerLeadsPage() {
                 </div>
 
                 {(lead.photo_links || lead.message) && (
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="rounded-xl border border-black/10 bg-white p-3 text-sm">
-                      <div className="inline-flex items-center gap-2 font-medium text-black/70">
+                  <div className="grid gap-3.5 md:grid-cols-2">
+                    <div className="rounded-xl border border-black/10 bg-white p-4 text-sm">
+                      <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-black/55">
                         <FileCheck2 size={14} />
                         Liens photos/videos
                       </div>
-                      <div className="mt-1 whitespace-pre-wrap break-words text-black/70">
+                      <div className="mt-2 whitespace-pre-wrap break-words leading-relaxed text-black/70">
                         {fmt(lead.photo_links)}
                       </div>
                     </div>
-                    <div className="rounded-xl border border-black/10 bg-white p-3 text-sm">
-                      <div className="inline-flex items-center gap-2 font-medium text-black/70">
+                    <div className="rounded-xl border border-black/10 bg-white p-4 text-sm">
+                      <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-black/55">
                         <FileCheck2 size={14} />
                         Description client
                       </div>
-                      <div className="mt-1 whitespace-pre-wrap break-words text-black/70">
+                      <div className="mt-2 whitespace-pre-wrap break-words leading-relaxed text-black/70">
                         {fmt(lead.message)}
                       </div>
                     </div>
@@ -379,7 +394,7 @@ export default async function OwnerLeadsPage() {
                 )}
 
                 <form
-                  className="rounded-xl border border-black/10 bg-white/80 p-3"
+                  className="rounded-xl border border-black/10 bg-white/90 p-4"
                   action={async (formData) => {
                     "use server";
                     const status = String(formData.get("status") || "new");
@@ -387,43 +402,43 @@ export default async function OwnerLeadsPage() {
                     await updateOwnerLeadStatus(lead.id, status, note);
                   }}
                 >
-                  <div className="grid gap-3 md:grid-cols-[220px_1fr]">
+                  <div className="grid gap-3.5 md:grid-cols-[240px_1fr]">
                     <label className="text-sm">
-                      <div className="mb-1 font-medium text-black/70">Statut</div>
+                      <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-black/55">Statut</div>
                       <AppDropdown
                         name="status"
                         defaultValue={lead.status ?? "new"}
-                        triggerClassName="h-10"
+                        triggerClassName="h-11"
                         options={STATUS.map((status) => ({ value: status, label: status }))}
                       />
                     </label>
 
                     <label className="text-sm">
-                      <div className="mb-1 font-medium text-black/70">Note de validation</div>
+                      <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-black/55">Note de validation</div>
                       <textarea
                         name="validation_note"
                         defaultValue={lead.validation_note ?? ""}
                         placeholder="Remarques internes, corrections demandees, etat du dossier..."
-                        className="min-h-10 w-full rounded-xl border border-black/10 bg-white px-3 py-2 outline-none transition focus:border-[rgb(var(--navy))]/40"
+                        className="min-h-11 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[rgb(var(--navy))]/40"
                       />
                     </label>
                   </div>
 
                   {lead.status !== "validated" ? (
-                    <div className="mt-3 flex justify-end">
+                    <div className="mt-4 flex justify-end">
                       <button
                         type="submit"
-                        className="h-10 rounded-xl bg-[rgb(var(--navy))] px-5 text-xs font-semibold tracking-wide text-white shadow-sm transition hover:opacity-95"
+                        className="h-11 rounded-xl bg-[rgb(var(--navy))] px-5 text-xs font-semibold tracking-wide text-white transition hover:opacity-95"
                       >
                         Enregistrer
                       </button>
                     </div>
                   ) : (
-                    <p className="mt-3 text-xs text-[rgb(var(--navy))]">Lead valide, statut conserve.</p>
+                    <p className="mt-4 text-xs text-[rgb(var(--navy))]">Lead valide, statut conserve.</p>
                   )}
 
                   {lead.validated_at && (
-                    <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">
+                    <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">
                       <BadgeCheck size={12} />
                       Valide le {new Date(lead.validated_at).toLocaleString("fr-FR")}
                     </div>
@@ -466,7 +481,7 @@ function StatCard({
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-black/10 bg-gradient-to-b from-white to-slate-50/60 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+    <div className="rounded-xl border border-black/10 bg-gradient-to-b from-white to-slate-50/70 px-3.5 py-3">
       <div className="text-xs uppercase tracking-wide text-black/50">{label}</div>
       <div className="mt-1 text-sm font-semibold text-[rgb(var(--navy))]">{value}</div>
     </div>
@@ -505,7 +520,7 @@ function Info({
   const t = tones[tone];
 
   return (
-    <div className={`rounded-xl border bg-gradient-to-b from-white to-slate-50/60 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] ${t.border}`}>
+    <div className={`rounded-xl border bg-gradient-to-b from-white to-slate-50/70 px-3.5 py-3 ${t.border}`}>
       <div className="flex items-start gap-2.5">
         <span className={`mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${t.badge}`}>
           {icon}

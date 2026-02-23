@@ -20,6 +20,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { useLang } from "@/components/LanguageProvider";
 import { toUiErrorMessage } from "@/lib/ui-errors";
+import { isBackofficeAccount } from "@/lib/account-type";
 
 function toOptionalText(v: FormDataEntryValue | null): string | null {
   const s = String(v || "").trim();
@@ -117,6 +118,11 @@ export default function VisitePage() {
           submit: "Envoyer la demande",
           illustrationAlt: "Illustration visite",
         };
+  const blockedActionMessage =
+    lang === "ar"
+      ? "Ce compte ne peut pas envoyer de demandes client."
+      : "Ce compte ne peut pas envoyer de demandes client.";
+  const blockedActionCta = lang === "ar" ? "Action indisponible" : "Action indisponible";
 
   const [sent, setSent] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -126,6 +132,7 @@ export default function VisitePage() {
   const [lastPayload, setLastPayload] = useState<ViewingPayload | null>(null);
   const [nameValue, setNameValue] = useState("");
   const [phoneValue, setPhoneValue] = useState("");
+  const [isBackofficeBlocked, setIsBackofficeBlocked] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -134,8 +141,14 @@ export default function VisitePage() {
       phone?: string | null;
       email?: string | null;
       user_metadata?: Record<string, unknown> | null;
+      app_metadata?: Record<string, unknown> | null;
     } | null) => {
-      if (!alive || !user) return;
+      if (!alive) return;
+      if (!user) {
+        setIsBackofficeBlocked(false);
+        return;
+      }
+      setIsBackofficeBlocked(isBackofficeAccount(user));
       const userMeta = (user.user_metadata ?? {}) as Record<string, unknown>;
       const prefilledName = [
         userMeta.full_name,
@@ -189,6 +202,12 @@ export default function VisitePage() {
   }, [supabase]);
 
   async function sendRequest(payload: ViewingPayload) {
+    if (isBackofficeBlocked) {
+      setErrorMsg(blockedActionMessage);
+      setToast({ kind: "error", text: blockedActionMessage });
+      setTimeout(() => setToast(null), 3200);
+      return;
+    }
     setIsSubmitting(true);
     setErrorMsg(null);
     const { error } = await supabase.from("viewing_requests").insert(payload);
@@ -209,6 +228,10 @@ export default function VisitePage() {
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErrorMsg(null);
+    if (isBackofficeBlocked) {
+      setErrorMsg(blockedActionMessage);
+      return;
+    }
 
     const form = new FormData(e.currentTarget);
     const payload: ViewingPayload = {
@@ -366,6 +389,12 @@ export default function VisitePage() {
           <p className="mt-2 text-sm text-black/60">{t.infoSubtitle}</p>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            {isBackofficeBlocked ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                {blockedActionMessage}
+              </div>
+            ) : null}
+
             <FieldShell icon={<Home size={16} />}>
               <input
                 name="ref"
@@ -446,11 +475,11 @@ export default function VisitePage() {
             ) : null}
 
             <button
-              disabled={isSubmitting}
+              disabled={isSubmitting || isBackofficeBlocked}
               className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[rgb(var(--navy))] text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:opacity-60"
             >
               {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <CalendarDays size={16} />}
-              {isSubmitting ? t.sending : t.submit}
+              {isBackofficeBlocked ? blockedActionCta : isSubmitting ? t.sending : t.submit}
             </button>
           </form>
         </motion.section>

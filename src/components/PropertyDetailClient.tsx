@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
+import dayjs, { type Dayjs } from "dayjs";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import {
   ArrowLeft,
   MapPin,
@@ -25,7 +29,10 @@ import {
   Heart,
 } from "lucide-react";
 import PropertyImageSlider from "@/components/PropertyImageSlider";
+import AppDropdown from "@/components/ui/app-dropdown";
 import { formatPaymentLabel, normalizeFold } from "@/lib/payment-fallback";
+import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { isBackofficeAccount } from "@/lib/account-type";
 
 type Dict = {
   back: string;
@@ -66,6 +73,7 @@ type PropertyPayload = {
   ref: string;
   title: string;
   type: string;
+  category?: string | null;
   locationType?: string | null;
   price: string;
   location: string;
@@ -102,6 +110,14 @@ type FavoriteStorageItem = {
   price: string | null;
   coverImage: string | null;
 };
+
+type ReservationOption = {
+  value: string;
+  label: string;
+  nights: number | null;
+};
+
+const RESERVATION_BY_DATES_VALUE = "by_dates";
 
 const FAVORITES_STORAGE_KEYS = [
   "rostomyia_favorites",
@@ -167,6 +183,21 @@ function readFavoriteRows(value: string | null): FavoriteStorageItem[] {
   } catch {
     return [];
   }
+}
+
+function addDays(isoDate: string, days: number) {
+  const base = new Date(`${isoDate}T00:00:00`);
+  if (!Number.isFinite(base.getTime())) return isoDate;
+  base.setDate(base.getDate() + days);
+  return base.toISOString().slice(0, 10);
+}
+
+function daysBetween(startIso: string, endIso: string) {
+  const start = new Date(`${startIso}T00:00:00`);
+  const end = new Date(`${endIso}T00:00:00`);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return 0;
+  const diffMs = end.getTime() - start.getTime();
+  return Math.max(0, Math.round(diffMs / 86400000));
 }
 
 export default function PropertyDetailClient({
@@ -399,8 +430,80 @@ export default function PropertyDetailClient({
   const mapFallback = dir === "rtl" ? "الموقع غير محدد حالياً." : "Emplacement non precise pour le moment.";
   const [expandedSections, setExpandedSections] = useState<Record<number, boolean>>({});
   const [showContactMenu, setShowContactMenu] = useState(false);
+  const [reservationOpen, setReservationOpen] = useState(false);
   const [favoritesStorageKey, setFavoritesStorageKey] = useState<string>(DEFAULT_FAVORITES_STORAGE_KEY);
   const [isFavorite, setIsFavorite] = useState(false);
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const [reservationStartDate, setReservationStartDate] = useState(todayIso);
+  const [reservationEndDate, setReservationEndDate] = useState(addDays(todayIso, 1));
+  const [reservationOption, setReservationOption] = useState("");
+  const [reservationSubmitting, setReservationSubmitting] = useState(false);
+  const [reservationSubmitError, setReservationSubmitError] = useState<string | null>(null);
+  const [reservationSubmitSuccess, setReservationSubmitSuccess] = useState<string | null>(null);
+  const [isBackofficeBlocked, setIsBackofficeBlocked] = useState(false);
+  const isReservationMode = isShortStayLocationType(property.locationType);
+  const reservationModeNorm = normalizeText(property.locationType);
+  const reservationPresetOptions: ReservationOption[] =
+    reservationModeNorm.includes("par_nuit") || reservationModeNorm.includes("nuit")
+      ? [
+          { value: "par_nuit", label: isArabic ? "بالليلة" : "Par nuit", nights: 1 },
+          { value: "weekend", label: isArabic ? "عطلة نهاية الأسبوع" : "Week-end", nights: 2 },
+          { value: "semaine", label: isArabic ? "أسبوع" : "Semaine", nights: 7 },
+        ]
+      : [
+          { value: "court_sejour", label: isArabic ? "إقامة قصيرة" : "Court sejour", nights: 3 },
+          { value: "3_nuits", label: isArabic ? "3 ليالٍ" : "3 nuits", nights: 3 },
+          { value: "7_nuits", label: isArabic ? "7 ليالٍ" : "7 nuits", nights: 7 },
+        ];
+  const reservationOptions: ReservationOption[] = [
+    {
+      value: RESERVATION_BY_DATES_VALUE,
+      label: isArabic ? "حسب تواريخك" : "Selon vos dates",
+      nights: null,
+    },
+    ...reservationPresetOptions,
+  ];
+  const reservationButtonLabel = isArabic ? "حجز" : "Reservation";
+  const reservationModalTitle = isArabic ? "تأكيد الحجز" : "Confirmer la reservation";
+  const reservationOptionLabel = isArabic ? "خيار الحجز" : "Option de reservation";
+  const reservationStartDateLabel = isArabic ? "تاريخ الدخول" : "Date d'entree";
+  const reservationEndDateLabel = isArabic ? "تاريخ الخروج" : "Date de sortie";
+  const reservationNightsLabel = isArabic ? "عدد الليالي" : "Nombre de nuits";
+  const reservationCancelLabel = isArabic ? "إلغاء" : "Annuler";
+  const reservationConfirmLabel = isArabic ? "تأكيد الحجز" : "Confirmer";
+  const reservationSavingLabel = isArabic ? "جارٍ الحفظ..." : "Enregistrement...";
+  const reservationSavedLabel = isArabic ? "تم تسجيل الحجز بنجاح." : "Reservation enregistree avec succes.";
+  const reservationFallbackErrorLabel = isArabic
+    ? "تعذر تسجيل الحجز حالياً. حاول مرة اخرى."
+    : "Impossible d'enregistrer la reservation pour le moment.";
+  const reservationBlockedActionLabel = isArabic
+    ? "Ce compte ne peut pas creer de reservations client."
+    : "Ce compte ne peut pas creer de reservations client.";
+  const reservationNights = daysBetween(reservationStartDate, reservationEndDate);
+  const reservationStartDay = reservationStartDate ? dayjs(reservationStartDate) : null;
+  const reservationEndDay = reservationEndDate ? dayjs(reservationEndDate) : null;
+  const reservationStartError = !reservationStartDate
+    ? (isArabic ? "يرجى اختيار تاريخ الدخول" : "Choisissez la date d'entree")
+    : reservationStartDate < todayIso
+      ? (isArabic ? "لا يمكن اختيار تاريخ سابق" : "La date d'entree ne peut pas etre passee")
+      : "";
+  const reservationEndError = !reservationEndDate
+    ? (isArabic ? "يرجى اختيار تاريخ الخروج" : "Choisissez la date de sortie")
+    : reservationEndDate <= reservationStartDate
+      ? (isArabic ? "يجب أن يكون تاريخ الخروج بعد تاريخ الدخول" : "La date de sortie doit etre apres la date d'entree")
+      : "";
+  const isReservationRangeValid =
+    Boolean(reservationStartDate) &&
+    Boolean(reservationEndDate) &&
+    reservationStartDate >= todayIso &&
+    reservationEndDate > reservationStartDate &&
+    reservationNights > 0;
+  const selectedReservationOption =
+    reservationOptions.find((x) => x.value === reservationOption) ?? null;
+  const fixedReservationNights =
+    selectedReservationOption && selectedReservationOption.nights != null
+      ? selectedReservationOption.nights
+      : null;
 
   useEffect(() => {
     let selectedKey = DEFAULT_FAVORITES_STORAGE_KEY;
@@ -422,6 +525,62 @@ export default function PropertyDetailClient({
     setFavoritesStorageKey(selectedKey);
     setIsFavorite(selectedRows.some((row) => normalizeFold(row.ref) === refKey));
   }, [property.ref]);
+
+  useEffect(() => {
+    let alive = true;
+    const supabase = createBrowserSupabaseClient();
+
+    const applyUser = (user: {
+      user_metadata?: Record<string, unknown> | null;
+      app_metadata?: Record<string, unknown> | null;
+    } | null) => {
+      if (!alive) return;
+      setIsBackofficeBlocked(isBackofficeAccount(user));
+    };
+
+    async function hydrate() {
+      const sessionResult = await supabase.auth.getSession();
+      if (!alive) return;
+      const sessionUser = sessionResult.data.session?.user ?? null;
+      if (sessionUser) {
+        applyUser(sessionUser);
+        return;
+      }
+      const userResult = await supabase.auth.getUser();
+      if (!alive) return;
+      applyUser(userResult.data.user ?? null);
+    }
+
+    hydrate().catch(() => null);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      applyUser(session?.user ?? null);
+    });
+
+    return () => {
+      alive = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isReservationMode) return;
+    if (!reservationOption || !reservationOptions.some((x) => x.value === reservationOption)) {
+      setReservationOption(RESERVATION_BY_DATES_VALUE);
+    }
+  }, [isReservationMode, reservationOption, reservationOptions]);
+
+  useEffect(() => {
+    if (!isReservationMode) return;
+    const selected = findReservationOption(reservationOption);
+    if (!selected || selected.nights == null || !reservationStartDate) return;
+    const expectedEnd = addDays(reservationStartDate, selected.nights);
+    if (reservationEndDate !== expectedEnd) {
+      setReservationEndDate(expectedEnd);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReservationMode, reservationOption, reservationStartDate]);
 
   const favoriteLabel = isArabic
     ? isFavorite
@@ -455,6 +614,117 @@ export default function PropertyDetailClient({
 
     localStorage.setItem(favoritesStorageKey, JSON.stringify(next));
     setIsFavorite(!exists);
+  }
+
+  function openReservationModal() {
+    if (!isReservationMode) return;
+    if (isBackofficeBlocked) {
+      setReservationSubmitError(reservationBlockedActionLabel);
+      setReservationSubmitSuccess(null);
+      return;
+    }
+    if (!reservationStartDate) setReservationStartDate(todayIso);
+    if (!reservationEndDate || reservationEndDate <= reservationStartDate) {
+      setReservationEndDate(addDays(reservationStartDate || todayIso, 1));
+    }
+    if (!reservationOption) {
+      setReservationOption(RESERVATION_BY_DATES_VALUE);
+    }
+    setReservationSubmitError(null);
+    setReservationSubmitSuccess(null);
+    setReservationOpen(true);
+  }
+
+  async function submitReservation() {
+    if (!isReservationMode) return;
+    if (!isReservationRangeValid || reservationSubmitting) return;
+    if (isBackofficeBlocked) {
+      setReservationSubmitError(reservationBlockedActionLabel);
+      setReservationSubmitSuccess(null);
+      return;
+    }
+    const optionLabel =
+      reservationOptions.find((x) => x.value === reservationOption)?.label ||
+      reservationOptions[0]?.label ||
+      "";
+
+    const reservationText = [
+      isArabic
+        ? `مرحباً، أرغب في حجز العقار ${property.ref} (${property.title}).`
+        : `Bonjour, je souhaite reserver le bien ${property.ref} (${property.title}).`,
+      isArabic ? `خيار الحجز: ${optionLabel}` : `Option de reservation: ${optionLabel}`,
+      isArabic ? `تاريخ الدخول: ${reservationStartDate}` : `Date d'entree: ${reservationStartDate}`,
+      isArabic ? `تاريخ الخروج: ${reservationEndDate}` : `Date de sortie: ${reservationEndDate}`,
+      isArabic ? `عدد الليالي: ${reservationNights}` : `Nombre de nuits: ${reservationNights}`,
+    ].join("\n");
+
+    setReservationSubmitError(null);
+    setReservationSubmitSuccess(null);
+    setReservationSubmitting(true);
+
+    try {
+      const response = await fetch("/api/reservations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          property_ref: property.ref,
+          reservation_option: reservationOption || RESERVATION_BY_DATES_VALUE,
+          reservation_option_label: optionLabel,
+          check_in_date: reservationStartDate,
+          check_out_date: reservationEndDate,
+          message: reservationText,
+          lang: isArabic ? "ar" : "fr",
+        }),
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error || reservationFallbackErrorLabel);
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : reservationFallbackErrorLabel;
+      setReservationSubmitError(reason || reservationFallbackErrorLabel);
+      setReservationSubmitting(false);
+      return;
+    }
+
+    let finalLink = waLink;
+    try {
+      const url = new URL(waLink);
+      const existingText = url.searchParams.get("text");
+      const merged = [String(existingText ?? "").trim(), reservationText].filter(Boolean).join("\n");
+      url.searchParams.set("text", merged);
+      finalLink = url.toString();
+    } catch {
+      finalLink = waLink;
+    }
+
+    setReservationSubmitSuccess(reservationSavedLabel);
+    setReservationSubmitting(false);
+    window.open(finalLink, "_blank", "noopener,noreferrer");
+    setReservationOpen(false);
+  }
+
+  function handleReservationOptionChange(value: string) {
+    setReservationOption(value);
+    const selected = reservationOptions.find((x) => x.value === value);
+    if (!selected || !reservationStartDate) return;
+    if (selected.nights != null && selected.nights > 0) {
+      setReservationEndDate(addDays(reservationStartDate, selected.nights));
+      return;
+    }
+    if (!reservationEndDate || reservationEndDate <= reservationStartDate) {
+      setReservationEndDate(addDays(reservationStartDate, 1));
+    }
+  }
+
+  function toIsoOrEmpty(value: Dayjs | null) {
+    if (!value || !value.isValid()) return "";
+    return value.format("YYYY-MM-DD");
+  }
+
+  function findReservationOption(value: string) {
+    return reservationOptions.find((x) => x.value === value) ?? null;
   }
 
   function isFeatureSectionTitle(input?: string) {
@@ -503,27 +773,106 @@ export default function PropertyDetailClient({
     .join(" ")
     .trim();
   const normalizedDetails = normalizeText(allDetailsText);
+  const normalizedCategory = normalizeText(property.category);
+  const inferredCategory = (() => {
+    if (
+      normalizedCategory.includes("terrain") ||
+      normalizedCategory.includes("land")
+    ) {
+      return "terrain" as const;
+    }
+    if (normalizedCategory.includes("local") || normalizedCategory.includes("shop")) {
+      return "local" as const;
+    }
+    if (normalizedCategory.includes("bureau") || normalizedCategory.includes("office")) {
+      return "bureau" as const;
+    }
+
+    const titleNorm = normalizeText(property.title);
+    if (titleNorm.includes("terrain") || titleNorm.includes("land")) return "terrain" as const;
+    if (titleNorm.includes("local") || titleNorm.includes("shop")) return "local" as const;
+    if (titleNorm.includes("bureau") || titleNorm.includes("office")) return "bureau" as const;
+    return "default" as const;
+  })();
+
   const hasParkingSousSol = /parking\s+sous[-\s]?sol/.test(normalizedDetails);
   const hasResidence = normalizedDetails.includes("residence");
   const hasVueSurMer = /vue\s+(sur\s+)?mer/.test(normalizedDetails);
-  const keyCharacteristics = [
-    { icon: <Ruler size={15} />, label: t.keyFeatureSurface, value: `${property.area} m2` },
-    {
-      icon: <CarFront size={15} />,
-      label: t.keyFeatureParking,
-      value: hasParkingSousSol ? t.keyFeatureYes : t.keyFeatureNotSpecified,
-    },
-    {
-      icon: <Building2 size={15} />,
-      label: t.keyFeatureResidence,
-      value: hasResidence ? t.keyFeatureYes : t.keyFeatureNotSpecified,
-    },
-    {
-      icon: <MapPin size={15} />,
-      label: t.keyFeatureSeaView,
-      value: hasVueSurMer ? t.keyFeatureYes : t.keyFeatureNotSpecified,
-    },
-  ];
+  const hasViabilise = /\b(viabilis|raccord|eau|gaz|electricit|reseau)\b/.test(normalizedDetails);
+  const hasFacadeAcces = /\b(facade|angle|coin|acces|route|axe)\b/.test(normalizedDetails);
+  const hasVitrine = /\b(vitrine|showroom|devanture|commercial)\b/.test(normalizedDetails);
+  const hasSanitaire = /\b(sanitaire|wc|toilette|lavabo|salle d.?eau)\b/.test(normalizedDetails);
+  const hasAscenseur = /\b(ascenseur|elevator)\b/.test(normalizedDetails);
+  const hasOpenSpace = /\b(open\s*space|plateau|espace ouvert|bureau ouvert)\b/.test(normalizedDetails);
+
+  const transactionValue = (() => {
+    const n = normalizeText(property.locationType || property.type);
+    if (n.includes("vente") || n.includes("sale") || n.includes("vendre")) {
+      return isArabic ? "بيع" : "Vente";
+    }
+    if (
+      n.includes("location") ||
+      n.includes("rent") ||
+      n.includes("par_mois") ||
+      n.includes("six_mois") ||
+      n.includes("douze_mois") ||
+      n.includes("par_nuit") ||
+      n.includes("court_sejour")
+    ) {
+      return isArabic ? "كراء" : "Location";
+    }
+    return property.type || t.keyFeatureNotSpecified;
+  })();
+
+  const surfaceValue = property.area > 0 ? `${property.area} m2` : t.keyFeatureNotSpecified;
+  const transactionLabel = isArabic ? "نوع المعاملة" : "Transaction";
+  const boolValue = (value: boolean) => (value ? t.keyFeatureYes : t.keyFeatureNotSpecified);
+
+  const keyCharacteristics = (() => {
+    if (inferredCategory === "terrain") {
+      return [
+        { icon: <Ruler size={15} />, label: t.keyFeatureSurface, value: surfaceValue },
+        { icon: <ListChecks size={15} />, label: transactionLabel, value: transactionValue },
+        { icon: <CheckCircle2 size={15} />, label: isArabic ? "مهيأ" : "Viabilise", value: boolValue(hasViabilise) },
+        { icon: <MapPin size={15} />, label: isArabic ? "واجهة / مدخل" : "Facade / acces", value: boolValue(hasFacadeAcces) },
+      ];
+    }
+    if (inferredCategory === "local") {
+      return [
+        { icon: <Ruler size={15} />, label: t.keyFeatureSurface, value: surfaceValue },
+        { icon: <ListChecks size={15} />, label: transactionLabel, value: transactionValue },
+        { icon: <Building2 size={15} />, label: isArabic ? "واجهة تجارية" : "Vitrine commerciale", value: boolValue(hasVitrine) },
+        { icon: <CheckCircle2 size={15} />, label: isArabic ? "مرافق صحية" : "Sanitaire", value: boolValue(hasSanitaire) },
+      ];
+    }
+    if (inferredCategory === "bureau") {
+      return [
+        { icon: <Ruler size={15} />, label: t.keyFeatureSurface, value: surfaceValue },
+        { icon: <ListChecks size={15} />, label: transactionLabel, value: transactionValue },
+        { icon: <Building2 size={15} />, label: isArabic ? "مصعد" : "Ascenseur", value: boolValue(hasAscenseur) },
+        { icon: <CheckCircle2 size={15} />, label: isArabic ? "فضاء مفتوح" : "Open space", value: boolValue(hasOpenSpace) },
+      ];
+    }
+
+    return [
+      { icon: <Ruler size={15} />, label: t.keyFeatureSurface, value: surfaceValue },
+      {
+        icon: <CarFront size={15} />,
+        label: t.keyFeatureParking,
+        value: hasParkingSousSol ? t.keyFeatureYes : t.keyFeatureNotSpecified,
+      },
+      {
+        icon: <Building2 size={15} />,
+        label: t.keyFeatureResidence,
+        value: hasResidence ? t.keyFeatureYes : t.keyFeatureNotSpecified,
+      },
+      {
+        icon: <MapPin size={15} />,
+        label: t.keyFeatureSeaView,
+        value: hasVueSurMer ? t.keyFeatureYes : t.keyFeatureNotSpecified,
+      },
+    ];
+  })();
 
   return (
     <main
@@ -559,7 +908,7 @@ export default function PropertyDetailClient({
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.05 }}
-            className="mt-6"
+            className="mt-6 rounded-2xl bg-white/78 p-5 backdrop-blur ring-1 ring-black/5 md:p-6"
           >
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-2 rounded-full bg-[rgb(var(--gold))]/20 px-3 py-1 text-xs font-semibold text-[rgb(var(--navy))] ring-1 ring-[rgb(var(--gold))]/25">
@@ -579,7 +928,7 @@ export default function PropertyDetailClient({
               {property.location}
             </p>
 
-            <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
+            <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-t border-black/8 pt-4">
               <p className="text-2xl font-bold text-[rgb(var(--navy))]">{sidebarDetails.priceLabel}</p>
               <div className="flex items-center gap-2">
                 <button
@@ -804,7 +1153,7 @@ export default function PropertyDetailClient({
                     <Link
                       key={item.ref}
                       href={`/biens/${encodeURIComponent(item.ref)}`}
-                      className="min-w-0 basis-[78%] shrink-0 snap-start overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:basis-[52%] lg:basis-[38%] xl:basis-[32%]"
+                      className="min-w-0 basis-[78%] shrink-0 snap-start overflow-hidden rounded-2xl border border-black/10 bg-white transition hover:-translate-y-0.5 sm:basis-[52%] lg:basis-[38%] xl:basis-[32%]"
                     >
                       <div className="aspect-[4/3] w-full bg-slate-100">
                         {item.imageUrl ? (
@@ -820,6 +1169,9 @@ export default function PropertyDetailClient({
                         )}
                       </div>
                       <div className="space-y-2 p-3">
+                        <div className="inline-flex items-center gap-1 rounded-full bg-[rgb(var(--gold))]/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[rgb(var(--navy))] ring-1 ring-[rgb(var(--gold))]/30">
+                          {item.type || t.undefinedLabel}
+                        </div>
                         <div className="line-clamp-1 text-sm font-semibold text-[rgb(var(--navy))]">{item.title}</div>
                         <div className="line-clamp-1 text-xs text-slate-600">{item.location || t.undefinedLabel}</div>
                         <div className="rounded-lg bg-[rgb(var(--navy))]/6 px-2 py-1 text-xs font-semibold text-[rgb(var(--navy))]">
@@ -912,17 +1264,33 @@ export default function PropertyDetailClient({
               )}
             </div>
 
-            <Link
-              href={`/visite?ref=${encodeURIComponent(property.ref)}`}
-              className="group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[rgb(var(--navy))] to-slate-900 px-4 py-3
-                         font-semibold text-white shadow-sm ring-1 ring-black/10 transition hover:translate-y-[-1px] hover:opacity-95"
-            >
-              <CalendarDays size={16} className="text-[rgb(var(--gold))]" />
-              {t.book}
-              <span className="rounded-full bg-white/12 px-2 py-0.5 text-[10px] uppercase tracking-wide text-white/85">
-                24h
-              </span>
-            </Link>
+            {isReservationMode ? (
+              <button
+                type="button"
+                onClick={openReservationModal}
+                disabled={isBackofficeBlocked}
+                className="group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[rgb(var(--navy))] to-slate-900 px-4 py-3
+                           font-semibold text-white shadow-sm ring-1 ring-black/10 transition hover:translate-y-[-1px] hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <CalendarDays size={16} className="text-[rgb(var(--gold))]" />
+                {reservationButtonLabel}
+                <span className="rounded-full bg-white/12 px-2 py-0.5 text-[10px] uppercase tracking-wide text-white/85">
+                  Date
+                </span>
+              </button>
+            ) : (
+              <Link
+                href={`/visite?ref=${encodeURIComponent(property.ref)}`}
+                className="group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[rgb(var(--navy))] to-slate-900 px-4 py-3
+                           font-semibold text-white shadow-sm ring-1 ring-black/10 transition hover:translate-y-[-1px] hover:opacity-95"
+              >
+                <CalendarDays size={16} className="text-[rgb(var(--gold))]" />
+                {t.book}
+                <span className="rounded-full bg-white/12 px-2 py-0.5 text-[10px] uppercase tracking-wide text-white/85">
+                  24h
+                </span>
+              </Link>
+            )}
             <button
               type="button"
               onClick={toggleFavorite}
@@ -943,6 +1311,191 @@ export default function PropertyDetailClient({
         </motion.aside>
       </div>
 
+      {isReservationMode && reservationOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-3 md:items-center"
+          onClick={() => setReservationOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg overflow-hidden rounded-3xl bg-white ring-1 ring-black/10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b border-black/10 bg-[rgb(var(--navy))]/95 px-5 py-4 text-white md:px-6">
+              <h3 className="text-lg font-semibold">{reservationModalTitle}</h3>
+              <p className="mt-1 line-clamp-1 text-sm text-white/75">{property.title}</p>
+            </div>
+
+            <div className="space-y-4 p-5 md:p-6">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-black/55">
+                  {reservationOptionLabel}
+                </label>
+                <div className="mt-1">
+                  <AppDropdown
+                    value={reservationOption}
+                    onValueChange={handleReservationOptionChange}
+                    options={reservationOptions.map((option) => ({
+                      value: option.value,
+                      label: (
+                        <span className="inline-flex items-center gap-2">
+                          <span>{option.label}</span>
+                          {option.nights != null ? (
+                            <span className="text-[11px] text-black/50">
+                              ({option.nights} {isArabic ? "ليلة" : "nuit(s)"})
+                            </span>
+                          ) : null}
+                        </span>
+                      ),
+                      searchText: `${option.label} ${option.nights ?? ""}`,
+                    }))}
+                    placeholder={reservationOptionLabel}
+                  />
+                </div>
+                {fixedReservationNights != null ? (
+                  <p className="mt-1 text-[11px] text-black/55">
+                    {isArabic
+                      ? `الخيار المحدد يضبط تاريخ الخروج تلقائياً (${fixedReservationNights} ليلة).`
+                      : `Cette option ajuste automatiquement la date de sortie (${fixedReservationNights} nuit(s)).`}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-black/10 bg-[rgb(var(--navy))]/4 p-2">
+                  <label className="block text-[11px] font-semibold uppercase tracking-wide text-black/55">
+                    {reservationStartDateLabel}
+                  </label>
+                  <div className="mt-1">
+                    <LocalizationProvider dateAdapter={AdapterDayjs}>
+                      <DatePicker
+                        value={reservationStartDay}
+                        minDate={dayjs(todayIso)}
+                        format="DD/MM/YYYY"
+                        onChange={(value) => {
+                          const next = toIsoOrEmpty(value);
+                          setReservationStartDate(next);
+                          if (!next) return;
+                          if (fixedReservationNights != null && fixedReservationNights > 0) {
+                            setReservationEndDate(addDays(next, fixedReservationNights));
+                            return;
+                          }
+                          if (!reservationEndDate || reservationEndDate <= next) {
+                            setReservationEndDate(addDays(next, 1));
+                          }
+                        }}
+                        slotProps={{
+                          textField: {
+                            fullWidth: true,
+                            size: "small",
+                            error: Boolean(reservationStartError),
+                            helperText: reservationStartError || " ",
+                            sx: {
+                              "& .MuiOutlinedInput-root": {
+                                borderRadius: "0.65rem",
+                                backgroundColor: "#fff",
+                              },
+                              "& .MuiFormHelperText-root": {
+                                marginLeft: "2px",
+                                marginRight: "2px",
+                              },
+                            },
+                          },
+                          popper: {
+                            sx: { zIndex: 60 },
+                          },
+                        }}
+                      />
+                    </LocalizationProvider>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-black/10 bg-[rgb(var(--navy))]/4 p-2">
+                  <label className="block text-[11px] font-semibold uppercase tracking-wide text-black/55">
+                    {reservationEndDateLabel}
+                  </label>
+                  <div className="mt-1">
+                    <LocalizationProvider dateAdapter={AdapterDayjs}>
+                      <DatePicker
+                        value={reservationEndDay}
+                        minDate={
+                          reservationStartDay && reservationStartDay.isValid()
+                            ? reservationStartDay.add(
+                                fixedReservationNights != null && fixedReservationNights > 0
+                                  ? fixedReservationNights
+                                  : 1,
+                                "day"
+                              )
+                            : dayjs(todayIso).add(1, "day")
+                        }
+                        format="DD/MM/YYYY"
+                        onChange={(value) => setReservationEndDate(toIsoOrEmpty(value))}
+                        disabled={fixedReservationNights != null && fixedReservationNights > 0}
+                        slotProps={{
+                          textField: {
+                            fullWidth: true,
+                            size: "small",
+                            error: Boolean(reservationEndError),
+                            helperText: reservationEndError || " ",
+                            sx: {
+                              "& .MuiOutlinedInput-root": {
+                                borderRadius: "0.65rem",
+                                backgroundColor: "#fff",
+                              },
+                              "& .MuiFormHelperText-root": {
+                                marginLeft: "2px",
+                                marginRight: "2px",
+                              },
+                            },
+                          },
+                          popper: {
+                            sx: { zIndex: 60 },
+                          },
+                        }}
+                      />
+                    </LocalizationProvider>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[rgb(var(--gold))]/35 bg-[rgb(var(--gold))]/15 px-3 py-2 text-sm">
+                <span className="font-semibold text-[rgb(var(--navy))]">{reservationNightsLabel}: </span>
+                <span className="font-semibold text-[rgb(var(--navy))]">{reservationNights}</span>
+              </div>
+
+              {reservationSubmitError ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                  {reservationSubmitError}
+                </div>
+              ) : null}
+              {reservationSubmitSuccess ? (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
+                  {reservationSubmitSuccess}
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setReservationOpen(false)}
+                disabled={reservationSubmitting}
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-black/10 bg-white px-4 text-sm font-semibold text-[rgb(var(--navy))] transition hover:bg-black/5"
+              >
+                {reservationCancelLabel}
+              </button>
+              <button
+                type="button"
+                onClick={submitReservation}
+                disabled={!isReservationRangeValid || reservationSubmitting || isBackofficeBlocked}
+                className="inline-flex h-11 items-center justify-center rounded-xl bg-gradient-to-r from-[rgb(var(--navy))] to-slate-900 px-4 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-60"
+              >
+                {reservationSubmitting ? reservationSavingLabel : reservationConfirmLabel}
+              </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-black/10 bg-white/95 px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 backdrop-blur md:hidden">
         <div className="mx-auto max-w-6xl">
           <div className="relative grid grid-cols-3 gap-2">
@@ -955,13 +1508,25 @@ export default function PropertyDetailClient({
               {t.call}
               <ChevronDown size={12} className={`transition ${showContactMenu ? "rotate-180" : ""}`} />
             </button>
-            <Link
-              href={`/visite?ref=${encodeURIComponent(property.ref)}`}
-              className="inline-flex h-11 items-center justify-center gap-1 rounded-xl border border-black/10 bg-white px-2 text-xs font-semibold text-[rgb(var(--navy))]"
-            >
-              <CalendarDays size={14} />
-              {t.book}
-            </Link>
+            {isReservationMode ? (
+              <button
+                type="button"
+                onClick={openReservationModal}
+                disabled={isBackofficeBlocked}
+                className="inline-flex h-11 items-center justify-center gap-1 rounded-xl border border-black/10 bg-white px-2 text-xs font-semibold text-[rgb(var(--navy))]"
+              >
+                <CalendarDays size={14} />
+                {reservationButtonLabel}
+              </button>
+            ) : (
+              <Link
+                href={`/visite?ref=${encodeURIComponent(property.ref)}`}
+                className="inline-flex h-11 items-center justify-center gap-1 rounded-xl border border-black/10 bg-white px-2 text-xs font-semibold text-[rgb(var(--navy))]"
+              >
+                <CalendarDays size={14} />
+                {t.book}
+              </Link>
+            )}
             <button
               type="button"
               onClick={toggleFavorite}

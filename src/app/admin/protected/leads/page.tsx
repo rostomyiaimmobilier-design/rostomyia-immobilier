@@ -1,5 +1,14 @@
 import Link from "next/link";
-import { ArrowRight, Building2, CalendarCheck2, Home, ListChecks, Sparkles, UserRoundPlus } from "lucide-react";
+import {
+  ArrowRight,
+  Building2,
+  CalendarCheck2,
+  Home,
+  Hotel,
+  ListChecks,
+  Sparkles,
+  UserRoundPlus,
+} from "lucide-react";
 
 export default function LeadsHome() {
   return (
@@ -20,7 +29,7 @@ export default function LeadsHome() {
             Centralisez les depots proprietaires, les depots agences et les demandes de visite dans un seul flux de travail.
           </p>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-2xl border border-black/10 bg-white/85 p-3 text-sm text-black/70">
               <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[rgb(var(--navy))]/80">
                 <Home size={13} />
@@ -42,11 +51,18 @@ export default function LeadsHome() {
               </div>
               <div className="mt-1 text-xs text-black/55">Tri des demandes clients et planification rapide.</div>
             </div>
+            <div className="rounded-2xl border border-black/10 bg-white/85 p-3 text-sm text-black/70">
+              <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[rgb(var(--navy))]/80">
+                <Hotel size={13} />
+                Reservations
+              </div>
+              <div className="mt-1 text-xs text-black/55">Demandes court sejour, check-in/check-out et suivi statut.</div>
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <Link
           href="/admin/protected/leads/owners"
           className="group relative overflow-hidden rounded-3xl border border-black/10 bg-white/82 p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
@@ -97,6 +113,22 @@ export default function LeadsHome() {
           </div>
           <h2 className="mt-4 text-xl font-bold text-[rgb(var(--navy))]">Viewing Requests</h2>
           <p className="mt-1 text-sm text-black/60">Demandes de visite clients et planification.</p>
+          <span className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-[rgb(var(--navy))]">
+            Ouvrir
+            <ArrowRight size={14} className="transition group-hover:translate-x-1" />
+          </span>
+        </Link>
+
+        <Link
+          href="/admin/protected/leads/reservations"
+          className="group relative overflow-hidden rounded-3xl border border-black/10 bg-white/82 p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+        >
+          <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-[rgb(var(--gold))]/20 blur-2xl" />
+          <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-[rgb(var(--navy))]/10 text-[rgb(var(--navy))]">
+            <Hotel size={18} />
+          </div>
+          <h2 className="mt-4 text-xl font-bold text-[rgb(var(--navy))]">Reservations</h2>
+          <p className="mt-1 text-sm text-black/60">Reservations court sejour creees depuis la page bien.</p>
           <span className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-[rgb(var(--navy))]">
             Ouvrir
             <ArrowRight size={14} className="transition group-hover:translate-x-1" />
