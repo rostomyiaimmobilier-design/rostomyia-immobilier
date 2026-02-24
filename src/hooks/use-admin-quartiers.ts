@@ -82,9 +82,10 @@ async function readJsonSafely<T>(res: Response): Promise<T | null> {
   }
 }
 
-export function useAdminQuartiers() {
+export function useAdminQuartiers(options?: { enabled?: boolean }) {
+  const enabled = options?.enabled ?? true;
   const [quartiers, setQuartiers] = useState<AdminQuartierItem[]>(fallbackQuartiers());
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [saving, setSaving] = useState(false);
   const [managed, setManaged] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
@@ -212,8 +213,16 @@ export function useAdminQuartiers() {
   }, []);
 
   useEffect(() => {
+    if (!enabled) {
+      setLoading(false);
+      setError(null);
+      setManaged(false);
+      setWarning(null);
+      setQuartiers(fallbackQuartiers());
+      return;
+    }
     void refreshQuartiers();
-  }, [refreshQuartiers]);
+  }, [enabled, refreshQuartiers]);
 
   return {
     quartiers,

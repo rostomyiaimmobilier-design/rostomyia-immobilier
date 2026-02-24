@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { upsertPropertySemanticIndex } from "@/lib/semantic-search";
 import { createClient } from "@/lib/supabase/server";
 
 function isMissingValidationColumn(message: string | undefined) {
@@ -11,6 +12,11 @@ function isMissingValidationColumn(message: string | undefined) {
   const touchesValidationFields =
     m.includes("validation_note") || m.includes("validated_at") || m.includes("validated_by");
   return missingColumn && touchesValidationFields;
+}
+
+function isMissingAnyColumnError(message: string | undefined) {
+  const m = (message || "").toLowerCase();
+  return m.includes("column") && m.includes("does not exist");
 }
 
 function isMissingOwnerLeadIdColumn(message: string | undefined) {
@@ -31,6 +37,36 @@ function isMissingOwnerLeadEmailColumn(message: string | undefined) {
 function isMissingOwnerLeadWhatsappColumn(message: string | undefined) {
   const m = (message || "").toLowerCase();
   return m.includes("whatsapp") && (m.includes("does not exist") || m.includes("column"));
+}
+
+function isMissingLocationTypeColumn(message: string | undefined) {
+  const m = (message || "").toLowerCase();
+  return m.includes("location_type") && (m.includes("does not exist") || m.includes("column"));
+}
+
+function isMissingAmenitiesColumn(message: string | undefined) {
+  const m = (message || "").toLowerCase();
+  return m.includes("amenities") && (m.includes("does not exist") || m.includes("column"));
+}
+
+function isMissingUploadedByTeamColumn(message: string | undefined) {
+  const m = (message || "").toLowerCase();
+  return m.includes("uploaded_byteam") && (m.includes("does not exist") || m.includes("column"));
+}
+
+function isMissingSortColumn(message: string | undefined) {
+  const m = (message || "").toLowerCase();
+  return m.includes("sort") && (m.includes("does not exist") || m.includes("column"));
+}
+
+function isMissingIsCoverColumn(message: string | undefined) {
+  const m = (message || "").toLowerCase();
+  return m.includes("is_cover") && (m.includes("does not exist") || m.includes("column"));
+}
+
+function isMissingPropertyImagesTable(message: string | undefined) {
+  const m = String(message ?? "").toLowerCase();
+  return m.includes("property_images") && (m.includes("does not exist") || m.includes("relation"));
 }
 
 function isMissingAgencyVisitNotificationsTable(message: string | undefined) {
@@ -66,10 +102,183 @@ type OwnerLeadContact = {
   whatsapp: string | null;
 };
 
+type OwnerLeadForPublish = {
+  id: string;
+  title: string | null;
+  property_type: string | null;
+  transaction_type: string | null;
+  location_type: string | null;
+  address: string | null;
+  district: string | null;
+  commune: string | null;
+  city: string | null;
+  price: number | null;
+  surface: number | null;
+  rooms: number | null;
+  baths: number | null;
+  phone: string | null;
+  photo_links?: string | null;
+  message: string | null;
+  amenities?: string[] | null;
+};
+
 function toOptionalString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+}
+
+function normalizeText(value: string | null | undefined) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function toOptionalDigits(value: string | null | undefined) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  return digits || null;
+}
+
+function buildLocationFromLead(lead: OwnerLeadForPublish) {
+  const parts = [lead.address, lead.district, lead.commune, lead.city]
+    .map((item) => toOptionalString(item))
+    .filter((item): item is string => Boolean(item));
+  return parts.length ? parts.join(" - ") : null;
+}
+
+function normalizeTransactionType(value: string | null | undefined) {
+  const raw = normalizeText(value);
+  if (!raw) return "vente";
+  if (raw === "vente" || raw === "sale") return "vente";
+  if (raw === "par_mois" || raw === "par mois" || raw === "location" || raw === "rent") return "par_mois";
+  if (raw === "six_mois" || raw === "six mois" || raw === "6 mois") return "six_mois";
+  if (raw === "douze_mois" || raw === "douze mois" || raw === "12 mois") return "douze_mois";
+  if (raw === "par_nuit" || raw === "par nuit") return "par_nuit";
+  if (raw === "court_sejour" || raw === "court sejour") return "court_sejour";
+  return raw;
+}
+
+function normalizeCategory(value: string | null | undefined) {
+  const raw = normalizeText(value);
+  if (!raw) return null;
+  if (raw.includes("appartement")) return "appartement";
+  if (raw.includes("villa")) return "villa";
+  if (raw.includes("terrain")) return "terrain";
+  if (raw.includes("local")) return "local";
+  if (raw.includes("bureau")) return "bureau";
+  return null;
+}
+
+function fallbackTitle(lead: OwnerLeadForPublish) {
+  const category = normalizeCategory(lead.property_type);
+  const categoryLabel =
+    category === "appartement"
+      ? "Appartement"
+      : category === "villa"
+        ? "Villa"
+        : category === "terrain"
+          ? "Terrain"
+          : category === "local"
+            ? "Local"
+            : category === "bureau"
+              ? "Bureau"
+              : "Bien immobilier";
+  const place = toOptionalString(lead.district) ?? toOptionalString(lead.commune) ?? "Oran";
+  return `${categoryLabel} - ${place}`;
+}
+
+function isDuplicateRefError(message: string | undefined) {
+  const m = (message || "").toLowerCase();
+  return m.includes("duplicate key") && m.includes("ref");
+}
+
+function makePropertyRef() {
+  const ts = Date.now().toString().slice(-6);
+  const rand = Math.floor(100 + Math.random() * 900).toString();
+  return `OR-${ts}${rand}`;
+}
+
+function isMissingIdColumn(message: string | undefined) {
+  const m = (message || "").toLowerCase();
+  return m.includes("id") && m.includes("does not exist") && m.includes("owner_leads");
+}
+
+function parsePhotoLinks(raw: string | null | undefined) {
+  return String(raw ?? "")
+    .split(/[\n,\s]+/g)
+    .map((x) => x.trim())
+    .filter((x) => /^https?:\/\//i.test(x));
+}
+
+function extractPropertyImagePathFromUrl(url: string | null | undefined) {
+  const input = String(url ?? "").trim();
+  if (!input) return null;
+  const withoutQuery = input.split("?")[0];
+  const markers = [
+    "/storage/v1/object/public/property-images/",
+    "/storage/v1/render/image/public/property-images/",
+  ];
+  for (const marker of markers) {
+    const idx = withoutQuery.indexOf(marker);
+    if (idx < 0) continue;
+    const path = withoutQuery.slice(idx + marker.length).replace(/^\/+/, "").trim();
+    if (path) return path;
+  }
+  return null;
+}
+
+function collectLeadImagePaths(lead: OwnerLeadForPublish) {
+  const urls = [...parsePhotoLinks(lead.photo_links), ...parsePhotoLinks(lead.message)];
+  return Array.from(
+    new Set(
+      urls
+        .map((url) => extractPropertyImagePathFromUrl(url))
+        .filter((path): path is string => Boolean(path))
+    )
+  );
+}
+
+function sanitizeLeadDescriptionForProperty(value: string | null | undefined) {
+  const lines = String(value ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd());
+
+  const cleaned = lines
+    .filter((line) => !/https?:\/\/\S+/i.test(line))
+    .map((line) => line.replace(/\s{2,}/g, " ").trimEnd())
+    .filter((line) => {
+      const normalized = line
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/^\*\s*/, "")
+        .trim();
+      if (!line.trim()) return false;
+      if (normalized.startsWith("photos:") || normalized.startsWith("photos :")) return false;
+      if (normalized.startsWith("liens photos/videos") || normalized.startsWith("liens photos videos")) return false;
+      if (normalized.startsWith("liens photos") || normalized.startsWith("liens videos")) return false;
+      return true;
+    });
+
+  const output = cleaned.join("\n").trim();
+  return output || null;
+}
+
+function descriptionLikelyContainsMediaLinks(value: string | null | undefined) {
+  const raw = String(value ?? "");
+  if (!raw.trim()) return false;
+  if (/https?:\/\/\S+/i.test(raw)) return true;
+  const normalized = normalizeText(raw);
+  return (
+    normalized.includes("photos:") ||
+    normalized.includes("photos :") ||
+    normalized.includes("liens photos/videos") ||
+    normalized.includes("liens photos videos") ||
+    normalized.includes("liens photos") ||
+    normalized.includes("liens videos")
+  );
 }
 
 function normalizePhoneDigits(value: string | null | undefined) {
@@ -112,6 +321,33 @@ function isScheduledStatus(value: string) {
 
 function shouldTriggerAgencyVisitNotification(previousStatus: string, nextStatus: string) {
   return !isScheduledStatus(previousStatus) && isScheduledStatus(nextStatus);
+}
+
+function normalizeRole(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function isAdminRole(value: unknown) {
+  const role = normalizeRole(value);
+  return role === "admin" || role === "super_admin" || role === "superadmin";
+}
+
+function isAdminActor(user: {
+  user_metadata?: Record<string, unknown> | null;
+  app_metadata?: Record<string, unknown> | null;
+}) {
+  const userMeta = (user.user_metadata ?? {}) as Record<string, unknown>;
+  const appMeta = (user.app_metadata ?? {}) as Record<string, unknown>;
+
+  if (isAdminRole(userMeta.account_type) || isAdminRole(appMeta.account_type)) return true;
+  if (isAdminRole(userMeta.role) || isAdminRole(appMeta.role)) return true;
+  if (String(userMeta.is_admin ?? "").toLowerCase() === "true") return true;
+  if (String(appMeta.is_admin ?? "").toLowerCase() === "true") return true;
+
+  const appRoles = appMeta.roles;
+  if (Array.isArray(appRoles) && appRoles.some((role) => isAdminRole(role))) return true;
+
+  return false;
 }
 
 async function dispatchAgencyWhatsappNotification(input: {
@@ -270,6 +506,278 @@ async function loadOwnerLeadContact(
   };
 }
 
+async function loadOwnerLeadForPublish(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ownerLeadId: string
+): Promise<OwnerLeadForPublish | null> {
+  const rich = await supabase
+    .from("owner_leads")
+    .select(
+      "id, title, property_type, transaction_type, location_type, address, district, commune, city, price, surface, rooms, baths, phone, photo_links, message, amenities"
+    )
+    .eq("id", ownerLeadId)
+    .maybeSingle();
+
+  if (!rich.error) {
+    return (rich.data as OwnerLeadForPublish | null) ?? null;
+  }
+
+  if (!(isMissingAnyColumnError(rich.error.message) || isMissingIdColumn(rich.error.message))) {
+    throw new Error(rich.error.message);
+  }
+
+  const fallback = await supabase
+    .from("owner_leads")
+    .select(
+      "id, title, property_type, district, city, price, surface, rooms, phone, photo_links, message"
+    )
+    .eq("id", ownerLeadId)
+    .maybeSingle();
+
+  if (fallback.error) throw new Error(fallback.error.message);
+  if (!fallback.data) return null;
+
+  const row = fallback.data as {
+    id: string;
+    title?: string | null;
+    property_type?: string | null;
+    district?: string | null;
+    city?: string | null;
+    price?: number | null;
+    surface?: number | null;
+    rooms?: number | null;
+    phone?: string | null;
+    photo_links?: string | null;
+    message?: string | null;
+  };
+
+  return {
+    id: row.id,
+    title: row.title ?? null,
+    property_type: row.property_type ?? null,
+    transaction_type: null,
+    location_type: null,
+    address: null,
+    district: row.district ?? null,
+    commune: null,
+    city: row.city ?? null,
+    price: row.price ?? null,
+    surface: row.surface ?? null,
+    rooms: row.rooms ?? null,
+    baths: null,
+    phone: row.phone ?? null,
+    photo_links: row.photo_links ?? null,
+    message: row.message ?? null,
+    amenities: null,
+  };
+}
+
+async function findPropertyByOwnerLeadId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ownerLeadId: string
+): Promise<{ id: string; ref: string } | null> {
+  const result = await supabase
+    .from("properties")
+    .select("id, ref")
+    .eq("owner_lead_id", ownerLeadId)
+    .maybeSingle();
+
+  if (!result.error) {
+    return (result.data as { id: string; ref: string } | null) ?? null;
+  }
+
+  if (isMissingOwnerLeadIdColumn(result.error.message)) return null;
+  throw new Error(result.error.message);
+}
+
+async function createPropertyFromOwnerLead(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  lead: OwnerLeadForPublish,
+  ownerLeadId: string
+): Promise<{ id: string; ref: string }> {
+  const tx = normalizeTransactionType(lead.transaction_type ?? lead.location_type);
+  const type = tx === "vente" ? "Vente" : "Location";
+  const category = normalizeCategory(lead.property_type);
+  const title = toOptionalString(lead.title) ?? fallbackTitle(lead);
+  const location = buildLocationFromLead(lead);
+  const ownerPhone = toOptionalDigits(lead.phone);
+  const amenities = Array.isArray(lead.amenities)
+    ? Array.from(
+        new Set(
+          lead.amenities
+            .map((item) => toOptionalString(item))
+            .filter((item): item is string => Boolean(item))
+        )
+      )
+    : null;
+
+  const payloadBase: Record<string, unknown> = {
+    title,
+    type,
+    location_type: tx,
+    category,
+    apartment_type: null,
+    price: lead.price != null ? String(lead.price) : null,
+    location,
+    owner_phone: ownerPhone,
+    beds: lead.rooms ?? null,
+    baths: lead.baths ?? null,
+    area: lead.surface ?? null,
+    description: sanitizeLeadDescriptionForProperty(lead.message),
+    amenities,
+    uploaded_byteam: false,
+    owner_lead_id: ownerLeadId,
+  };
+
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const payload = { ...payloadBase, ref: makePropertyRef() };
+
+    for (let dropAttempt = 0; dropAttempt < 10; dropAttempt += 1) {
+      const insert = await supabase
+        .from("properties")
+        .insert(payload)
+        .select("id, ref")
+        .single();
+
+      if (!insert.error && insert.data) {
+        return insert.data as { id: string; ref: string };
+      }
+
+      const message = insert.error?.message;
+      if (isDuplicateRefError(message)) break;
+
+      let changed = false;
+      if (isMissingLocationTypeColumn(message) && "location_type" in payload) {
+        delete payload.location_type;
+        changed = true;
+      }
+      if (isMissingAmenitiesColumn(message) && "amenities" in payload) {
+        delete payload.amenities;
+        changed = true;
+      }
+      if (isMissingUploadedByTeamColumn(message) && "uploaded_byteam" in payload) {
+        delete payload.uploaded_byteam;
+        changed = true;
+      }
+      if (isMissingOwnerLeadIdColumn(message) && "owner_lead_id" in payload) {
+        delete payload.owner_lead_id;
+        changed = true;
+      }
+      if (isMissingOwnerPhoneColumn(message) && "owner_phone" in payload) {
+        delete payload.owner_phone;
+        changed = true;
+      }
+
+      if (!changed) {
+        throw new Error(message || "Failed to create property from lead.");
+      }
+    }
+  }
+
+  throw new Error("Unable to generate unique property reference.");
+}
+
+async function updatePropertyDescriptionFromLeadIfNeeded(
+  propertyId: string,
+  lead: OwnerLeadForPublish
+) {
+  const admin = supabaseAdmin();
+  const { data, error } = await admin
+    .from("properties")
+    .select("id, description")
+    .eq("id", propertyId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) return;
+
+  const currentDescription = toOptionalString(
+    (data as { description?: string | null }).description ?? null
+  );
+  const nextDescription = sanitizeLeadDescriptionForProperty(lead.message);
+  if (!nextDescription) return;
+
+  // Only auto-repair when description is missing or clearly includes media-link artifacts.
+  if (currentDescription && !descriptionLikelyContainsMediaLinks(currentDescription)) return;
+
+  const { error: updateError } = await admin
+    .from("properties")
+    .update({ description: nextDescription })
+    .eq("id", propertyId);
+
+  if (updateError) throw new Error(updateError.message);
+}
+
+async function attachPropertyImagesFromLead(propertyId: string, lead: OwnerLeadForPublish) {
+  const imagePaths = collectLeadImagePaths(lead);
+  if (!imagePaths.length) return;
+
+  const admin = supabaseAdmin();
+  const existing = await admin
+    .from("property_images")
+    .select("id, path, sort")
+    .eq("property_id", propertyId);
+
+  if (existing.error) {
+    if (isMissingPropertyImagesTable(existing.error.message)) return;
+    throw new Error(existing.error.message);
+  }
+
+  const existingRows = (existing.data ??
+    []) as Array<{ id?: string; path?: string | null; sort?: number | null }>;
+  const existingPathSet = new Set(
+    existingRows
+      .map((row) => toOptionalString(row.path ?? null))
+      .filter((value): value is string => Boolean(value))
+  );
+
+  const missingPaths = imagePaths.filter((path) => !existingPathSet.has(path));
+  if (!missingPaths.length) return;
+
+  const maxSort = existingRows.reduce((max, row) => {
+    const parsed = Number(row.sort);
+    return Number.isFinite(parsed) ? Math.max(max, parsed) : max;
+  }, -1);
+  const hasAnyExistingImage = existingRows.length > 0;
+
+  let rows: Array<Record<string, unknown>> = missingPaths.map((path, index) => ({
+    property_id: propertyId,
+    path,
+    sort: maxSort + index + 1,
+    is_cover: !hasAnyExistingImage && index === 0,
+  }));
+
+  for (let dropAttempt = 0; dropAttempt < 4; dropAttempt += 1) {
+    const insert = await admin.from("property_images").insert(rows);
+    if (!insert.error) return;
+
+    const message = insert.error.message;
+    if (isMissingPropertyImagesTable(message)) return;
+
+    let changed = false;
+    if (isMissingSortColumn(message)) {
+      rows = rows.map((row) => {
+        const copy = { ...row };
+        delete copy.sort;
+        return copy;
+      });
+      changed = true;
+    }
+    if (isMissingIsCoverColumn(message)) {
+      rows = rows.map((row) => {
+        const copy = { ...row };
+        delete copy.is_cover;
+        return copy;
+      });
+      changed = true;
+    }
+
+    if (!changed) throw new Error(message);
+  }
+
+  throw new Error("Failed to attach property images from owner lead.");
+}
+
 async function notifyAgencyAfterVisitValidation(
   supabase: Awaited<ReturnType<typeof createClient>>,
   request: ViewingRequestForNotification,
@@ -423,6 +931,111 @@ export async function updateOwnerLeadStatus(id: string, status: string, validati
     const ref = `OR-${ts}${rand}`;
     redirect(`/admin/protected/new?ownerLeadId=${encodeURIComponent(id)}&ref=${encodeURIComponent(ref)}`);
   }
+}
+
+export async function validateOwnerLeadAndPublish(id: string, validationNote?: string) {
+  const leadId = id.trim();
+  if (!leadId) throw new Error("Missing owner lead id.");
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError) throw new Error(userError.message);
+
+  const leadForPublish = await loadOwnerLeadForPublish(supabase, leadId);
+  if (!leadForPublish) throw new Error("Owner lead not found.");
+
+  const existingProperty = await findPropertyByOwnerLeadId(supabase, leadId);
+  let createdProperty: { id: string; ref: string } | null = existingProperty;
+  if (!createdProperty) {
+    createdProperty = await createPropertyFromOwnerLead(supabase, leadForPublish, leadId);
+  }
+
+  if (createdProperty) {
+    await updatePropertyDescriptionFromLeadIfNeeded(createdProperty.id, leadForPublish);
+    await attachPropertyImagesFromLead(createdProperty.id, leadForPublish);
+  }
+
+  if (!existingProperty && createdProperty) {
+    await Promise.race([
+      upsertPropertySemanticIndex({
+        id: createdProperty.id,
+        ref: createdProperty.ref,
+        title: toOptionalString(leadForPublish.title) ?? fallbackTitle(leadForPublish),
+        type: normalizeTransactionType(leadForPublish.transaction_type ?? leadForPublish.location_type) === "vente" ? "Vente" : "Location",
+        locationType: normalizeTransactionType(leadForPublish.transaction_type ?? leadForPublish.location_type),
+        category: normalizeCategory(leadForPublish.property_type),
+        location: buildLocationFromLead(leadForPublish),
+        description: sanitizeLeadDescriptionForProperty(leadForPublish.message),
+        price: leadForPublish.price != null ? String(leadForPublish.price) : null,
+        beds: leadForPublish.rooms ?? null,
+        baths: leadForPublish.baths ?? null,
+        area: leadForPublish.surface ?? null,
+        amenities: Array.isArray(leadForPublish.amenities) ? leadForPublish.amenities : null,
+      }).catch(() => false),
+      new Promise((resolve) => setTimeout(resolve, 2_000)),
+    ]);
+  }
+
+  const note = (validationNote || "").trim();
+  const updatePayload = {
+    status: "validated",
+    validation_note: note || null,
+    validated_at: new Date().toISOString(),
+    validated_by: user?.id ?? null,
+  };
+
+  let { error } = await supabase
+    .from("owner_leads")
+    .update(updatePayload)
+    .eq("id", leadId);
+
+  if (error && isMissingValidationColumn(error.message)) {
+    const fallback = await supabase
+      .from("owner_leads")
+      .update({ status: "validated" })
+      .eq("id", leadId);
+    error = fallback.error;
+  }
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/admin/protected/leads/owners");
+  revalidatePath("/admin/leads/owners");
+  revalidatePath("/admin/protected/leads/depot-tiers");
+  revalidatePath("/admin/leads/depot-tiers");
+  revalidatePath("/admin/protected");
+  revalidatePath("/admin");
+  revalidatePath("/biens");
+  revalidatePath("/agency/dashboard");
+
+  redirect("/biens");
+}
+
+export async function deleteOwnerLead(id: string) {
+  const leadId = id.trim();
+  if (!leadId) throw new Error("Missing owner lead id.");
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError) throw new Error(userError.message);
+  if (!user || !isAdminActor(user)) throw new Error("Unauthorized.");
+
+  const admin = supabaseAdmin();
+  const { error } = await admin.from("owner_leads").delete().eq("id", leadId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/admin/protected/leads/owners");
+  revalidatePath("/admin/leads/owners");
+  revalidatePath("/admin/protected/leads/depot-tiers");
+  revalidatePath("/admin/leads/depot-tiers");
+  revalidatePath("/agency/dashboard");
 }
 
 export async function updateViewingRequestStatus(id: string, status: string) {

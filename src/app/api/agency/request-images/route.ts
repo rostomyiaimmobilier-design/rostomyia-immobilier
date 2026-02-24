@@ -23,14 +23,32 @@ function isAgencyAllowed(metadata: Record<string, unknown> | null | undefined) {
   return accountType === "agency" && status === "active";
 }
 
-export async function POST(req: Request) {
+async function resolveUserFromRequest(req: Request) {
   const supabase = await createClient();
   const {
-    data: { user },
+    data: { user: sessionUser },
   } = await supabase.auth.getUser();
 
+  if (sessionUser) return sessionUser;
+
+  const authHeader = req.headers.get("authorization") || req.headers.get("Authorization") || "";
+  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!bearerMatch) return null;
+
+  const token = bearerMatch[1]?.trim();
+  if (!token) return null;
+
+  const admin = supabaseAdmin();
+  const { data, error } = await admin.auth.getUser(token);
+  if (error || !data?.user) return null;
+  return data.user;
+}
+
+export async function POST(req: Request) {
+  const user = await resolveUserFromRequest(req);
+
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized: session missing or expired" }, { status: 401 });
   }
 
   if (!isAgencyAllowed(user.user_metadata as Record<string, unknown> | undefined)) {

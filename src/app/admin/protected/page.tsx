@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import {
   ArrowRight,
   Bath,
+  Bell,
   BedDouble,
   Building2,
   CalendarClock,
@@ -390,6 +391,7 @@ export default async function AdminPage({
             <QuickAction href="/admin/protected/leads/owners" icon={<FileCheck2 size={15} />} label="Leads proprietaires" />
             <QuickAction href="/admin/protected/leads/depot-tiers" icon={<ListChecks size={15} />} label="Depot tiers" />
             <QuickAction href="/admin/protected/leads/reservations" icon={<Hotel size={15} />} label="Reservations" />
+            <QuickAction href="/admin/protected/notifications" icon={<Bell size={15} />} label="Notifications" />
             <QuickAction href="/admin/protected/agencies" icon={<Users size={15} />} label="Agences" />
             <QuickAction href="/admin/protected/users" icon={<UserRound size={15} />} label="Users & roles" />
             <AdminQuartiersDashboardAction />

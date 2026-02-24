@@ -142,6 +142,12 @@ type AgencyRequestImageUploadResult = {
   urls: string[];
 };
 
+type QuartiersByCommuneResponse = {
+  items?: Array<{ id: string; name: string; commune: string | null }>;
+  warning?: string;
+  error?: string;
+};
+
 function isLocationTransaction(transactionType: TransactionType) {
   return transactionType !== "Vente";
 }
@@ -197,6 +203,15 @@ function parseOptionalNumber(raw: string) {
 
 function digitsOnly(raw: string) {
   return (raw || "").replace(/\D/g, "");
+}
+
+function normalizeLookupKey(raw: string | null | undefined) {
+  return String(raw ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+    .trim();
 }
 
 function isMissingColumnError(message: string | undefined) {
@@ -380,20 +395,92 @@ export default function NewPropertyForm({
     addQuartier,
     updateQuartier,
     removeQuartier,
-  } = useAdminQuartiers();
+  } = useAdminQuartiers({ enabled: !isRequestMode });
   const { autoTitle, type, apartmentType, commune, residenceName, amenities, floor, area } = form;
-  const quartierOptions = useMemo(() => {
-    const byCommune = form.commune
-      ? quartiers.filter((item) => {
-          const itemCommune = String(item.commune ?? "").trim().toLowerCase();
-          const selectedCommune = form.commune.trim().toLowerCase();
-          return !itemCommune || itemCommune === selectedCommune;
-        })
-      : quartiers;
+  const [dbQuartiersByCommune, setDbQuartiersByCommune] = useState<
+    Array<{ id: string; name: string; commune: string | null }>
+  >([]);
+  const [dbQuartiersLoading, setDbQuartiersLoading] = useState(false);
+  const [dbQuartiersWarning, setDbQuartiersWarning] = useState<string | null>(null);
+  const [dbQuartiersError, setDbQuartiersError] = useState<string | null>(null);
+  const hasCommuneSelected = Boolean(form.commune.trim());
+  const allowCrossCommuneFallback = isRequestMode && !quartiersManaged;
 
-    const baseOptions = byCommune.map((item) => ({
+  useEffect(() => {
+    const communeValue = form.commune.trim();
+    if (!communeValue) {
+      setDbQuartiersByCommune([]);
+      setDbQuartiersWarning(null);
+      setDbQuartiersError(null);
+      setDbQuartiersLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+
+    async function loadQuartiersByCommune() {
+      setDbQuartiersLoading(true);
+      setDbQuartiersError(null);
+      try {
+        const res = await fetch(`/api/quartiers?commune=${encodeURIComponent(communeValue)}`, {
+          method: "GET",
+          credentials: "include",
+          signal: controller.signal,
+        });
+        const payload = (await res.json().catch(() => null)) as QuartiersByCommuneResponse | null;
+        if (!res.ok) {
+          throw new Error(payload?.error || "Impossible de charger les quartiers de cette commune.");
+        }
+        if (!active) return;
+        const nextItems = Array.isArray(payload?.items)
+          ? payload.items
+              .map((item) => ({
+                id: String(item.id),
+                name: String(item.name),
+                commune: item.commune ?? null,
+              }))
+              .filter((item) => item.name.trim().length > 0)
+          : [];
+        setDbQuartiersByCommune(nextItems);
+        setDbQuartiersWarning(payload?.warning ?? null);
+      } catch (err: unknown) {
+        if (!active || controller.signal.aborted) return;
+        const message =
+          err instanceof Error ? err.message : "Impossible de charger les quartiers de cette commune.";
+        setDbQuartiersError(message);
+        setDbQuartiersByCommune([]);
+      } finally {
+        if (active) setDbQuartiersLoading(false);
+      }
+    }
+
+    void loadQuartiersByCommune();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [form.commune]);
+
+  const quartierOptions = useMemo(() => {
+    const selectedCommune = normalizeLookupKey(form.commune);
+    const fallbackByCommune = hasCommuneSelected
+      ? quartiers.filter((item) => {
+          const itemCommune = normalizeLookupKey(item.commune);
+          if (!itemCommune) return allowCrossCommuneFallback;
+          return itemCommune === selectedCommune;
+        })
+      : [];
+
+    const sourceItems =
+      hasCommuneSelected && dbQuartiersByCommune.length > 0
+        ? dbQuartiersByCommune
+        : fallbackByCommune;
+
+    const baseOptions = sourceItems.map((item) => ({
       value: item.name,
-      label: form.commune ? item.name : `${item.name}${item.commune ? ` - ${item.commune}` : ""}`,
+      label: item.name,
     }));
 
     if (form.quartier && !baseOptions.some((option) => option.value === form.quartier)) {
@@ -404,17 +491,34 @@ export default function NewPropertyForm({
     }
 
     return [
-      { value: "", label: quartiersLoading ? "Chargement..." : "Selectionner un quartier" },
+      {
+        value: "",
+        label: !hasCommuneSelected
+          ? "Selectionner d'abord une commune"
+          : quartiersLoading
+            ? "Chargement..."
+            : "Selectionner un quartier",
+      },
       ...baseOptions,
     ];
-  }, [form.commune, form.quartier, quartiers, quartiersLoading]);
+  }, [
+    allowCrossCommuneFallback,
+    dbQuartiersByCommune,
+    form.commune,
+    form.quartier,
+    hasCommuneSelected,
+    quartiers,
+    quartiersLoading,
+  ]);
+  const hasQuartierForSelectedCommune = quartierOptions.length > 1;
   const quartierErrorLabel = useMemo(() => {
+    if (dbQuartiersError) return dbQuartiersError;
     if (!quartiersError) return null;
     if (isRequestMode && /(forbidden|unauthorized|permission denied)/i.test(quartiersError)) {
       return null;
     }
     return quartiersError;
-  }, [isRequestMode, quartiersError]);
+  }, [dbQuartiersError, isRequestMode, quartiersError]);
 
   function generateRef() {
     const ts = Date.now().toString().slice(-6);
@@ -451,6 +555,10 @@ export default function NewPropertyForm({
 
   async function uploadAgencyRequestImages(ref: string): Promise<AgencyRequestImageUploadResult> {
     if (!files.length) return { paths: [], urls: [] };
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const accessToken = session?.access_token?.trim() ?? "";
 
     const formData = new FormData();
     formData.append("ref", ref);
@@ -460,6 +568,7 @@ export default function NewPropertyForm({
       method: "POST",
       body: formData,
       credentials: "include",
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
     });
 
     const payload = await res.json().catch(() => null);
@@ -822,7 +931,13 @@ export default function NewPropertyForm({
         <Field label="Commune (Oran)" required>
           <AppDropdown
             value={form.commune}
-            onValueChange={(value) => setForm((s) => ({ ...s, commune: value }))}
+            onValueChange={(value) =>
+              setForm((s) => ({
+                ...s,
+                commune: value,
+                quartier: "",
+              }))
+            }
             options={[
               { value: "", label: "Selectionner une commune" },
               ...ORAN_COMMUNES.map((commune) => ({ value: commune, label: commune })),
@@ -854,11 +969,19 @@ export default function NewPropertyForm({
             value={form.quartier}
             onValueChange={(value) => setForm((s) => ({ ...s, quartier: value }))}
             options={quartierOptions}
-            disabled={quartiersLoading && quartierOptions.length <= 1}
+            disabled={!hasCommuneSelected || dbQuartiersLoading || (quartiersLoading && quartierOptions.length <= 1)}
             searchable={isRequestMode}
             searchPlaceholder="Rechercher un quartier..."
             noResultsLabel="Aucun quartier trouve"
           />
+          {dbQuartiersWarning ? (
+            <p className="text-xs font-medium text-slate-600">{dbQuartiersWarning}</p>
+          ) : null}
+          {hasCommuneSelected && !quartiersLoading && !hasQuartierForSelectedCommune ? (
+            <p className="text-xs font-medium text-amber-700">
+              Aucun quartier configure pour cette commune.
+            </p>
+          ) : null}
           {quartierErrorLabel ? (
             <p className="text-xs font-medium text-amber-700">{quartierErrorLabel}</p>
           ) : null}

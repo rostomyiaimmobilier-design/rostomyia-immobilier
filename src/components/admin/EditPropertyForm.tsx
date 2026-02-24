@@ -132,6 +132,12 @@ type FormState = {
   amenities: AmenityKey[];
 };
 
+type QuartiersByCommuneResponse = {
+  items?: Array<{ id: string; name: string; commune: string | null }>;
+  warning?: string;
+  error?: string;
+};
+
 function normalizeText(value: string) {
   return (value || "")
     .toLowerCase()
@@ -465,6 +471,12 @@ export default function EditPropertyForm({ property }: { property: EditProperty 
     updateQuartier,
     removeQuartier,
   } = useAdminQuartiers();
+  const [dbQuartiersByCommune, setDbQuartiersByCommune] = useState<
+    Array<{ id: string; name: string; commune: string | null }>
+  >([]);
+  const [dbQuartiersLoading, setDbQuartiersLoading] = useState(false);
+  const [dbQuartiersWarning, setDbQuartiersWarning] = useState<string | null>(null);
+  const [dbQuartiersError, setDbQuartiersError] = useState<string | null>(null);
 
   const [form, setForm] = useState<FormState>({
     title: property.title ?? "",
@@ -485,16 +497,77 @@ export default function EditPropertyForm({ property }: { property: EditProperty 
         ? initialAmenities
         : parseAmenitiesFromDescription(property.description),
   });
+  const hasCommuneSelected = Boolean(form.commune.trim());
+
+  useEffect(() => {
+    const communeValue = form.commune.trim();
+    if (!communeValue) {
+      setDbQuartiersByCommune([]);
+      setDbQuartiersWarning(null);
+      setDbQuartiersError(null);
+      setDbQuartiersLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+
+    async function loadQuartiersByCommune() {
+      setDbQuartiersLoading(true);
+      setDbQuartiersError(null);
+      try {
+        const res = await fetch(`/api/quartiers?commune=${encodeURIComponent(communeValue)}`, {
+          method: "GET",
+          credentials: "include",
+          signal: controller.signal,
+        });
+        const payload = (await res.json().catch(() => null)) as QuartiersByCommuneResponse | null;
+        if (!res.ok) {
+          throw new Error(payload?.error || "Impossible de charger les quartiers de cette commune.");
+        }
+        if (!active) return;
+        const nextItems = Array.isArray(payload?.items)
+          ? payload.items
+              .map((item) => ({
+                id: String(item.id),
+                name: String(item.name),
+                commune: item.commune ?? null,
+              }))
+              .filter((item) => item.name.trim().length > 0)
+          : [];
+        setDbQuartiersByCommune(nextItems);
+        setDbQuartiersWarning(payload?.warning ?? null);
+      } catch (err: unknown) {
+        if (!active || controller.signal.aborted) return;
+        const message =
+          err instanceof Error ? err.message : "Impossible de charger les quartiers de cette commune.";
+        setDbQuartiersError(message);
+        setDbQuartiersByCommune([]);
+      } finally {
+        if (active) setDbQuartiersLoading(false);
+      }
+    }
+
+    void loadQuartiersByCommune();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [form.commune]);
+
   const quartierOptions = useMemo(() => {
-    const byCommune = form.commune
+    const fallbackByCommune = form.commune
       ? quartiers.filter((item) => {
-          const itemCommune = String(item.commune ?? "").trim().toLowerCase();
-          const selectedCommune = form.commune.trim().toLowerCase();
+          const itemCommune = normalizeText(String(item.commune ?? ""));
+          const selectedCommune = normalizeText(form.commune);
           return !itemCommune || itemCommune === selectedCommune;
         })
       : quartiers;
 
-    const baseOptions = byCommune.map((item) => ({
+    const sourceItems = hasCommuneSelected && dbQuartiersByCommune.length > 0 ? dbQuartiersByCommune : fallbackByCommune;
+
+    const baseOptions = sourceItems.map((item) => ({
       value: item.name,
       label: form.commune ? item.name : `${item.name}${item.commune ? ` - ${item.commune}` : ""}`,
     }));
@@ -507,10 +580,19 @@ export default function EditPropertyForm({ property }: { property: EditProperty 
     }
 
     return [
-      { value: "", label: quartiersLoading ? "Chargement..." : "Selectionner un quartier" },
+      {
+        value: "",
+        label: !hasCommuneSelected
+          ? "Selectionner d'abord une commune"
+          : quartiersLoading
+            ? "Chargement..."
+            : "Selectionner un quartier",
+      },
       ...baseOptions,
     ];
-  }, [form.commune, form.quartier, quartiers, quartiersLoading]);
+  }, [dbQuartiersByCommune, form.commune, form.quartier, hasCommuneSelected, quartiers, quartiersLoading]);
+  const hasQuartierForSelectedCommune = quartierOptions.length > 1;
+  const quartierErrorLabel = dbQuartiersError || quartiersError;
 
   function toggleAmenity(key: AmenityKey) {
     setForm((s) => ({
@@ -841,7 +923,7 @@ export default function EditPropertyForm({ property }: { property: EditProperty 
         <Field label="Commune (Oran)">
           <AppDropdown
             value={form.commune}
-            onValueChange={(value) => setForm((s) => ({ ...s, commune: value }))}
+            onValueChange={(value) => setForm((s) => ({ ...s, commune: value, quartier: "" }))}
             options={[
               { value: "", label: "Selectionner une commune" },
               ...ORAN_COMMUNES.map((commune) => ({ value: commune, label: commune })),
@@ -871,10 +953,18 @@ export default function EditPropertyForm({ property }: { property: EditProperty 
             value={form.quartier}
             onValueChange={(value) => setForm((s) => ({ ...s, quartier: value }))}
             options={quartierOptions}
-            disabled={quartiersLoading && quartierOptions.length <= 1}
+            disabled={!hasCommuneSelected || dbQuartiersLoading || (quartiersLoading && quartierOptions.length <= 1)}
           />
-          {quartiersError ? (
-            <p className="text-xs font-medium text-amber-700">{quartiersError}</p>
+          {dbQuartiersWarning ? (
+            <p className="text-xs font-medium text-slate-600">{dbQuartiersWarning}</p>
+          ) : null}
+          {hasCommuneSelected && !quartiersLoading && !hasQuartierForSelectedCommune ? (
+            <p className="text-xs font-medium text-amber-700">
+              Aucun quartier configure pour cette commune.
+            </p>
+          ) : null}
+          {quartierErrorLabel ? (
+            <p className="text-xs font-medium text-amber-700">{quartierErrorLabel}</p>
           ) : null}
         </div>
 

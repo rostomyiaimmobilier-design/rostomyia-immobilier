@@ -12,8 +12,26 @@ type QuartierRow = {
   is_active: boolean | null;
 };
 
+type OwnerLeadDistrictRow = {
+  commune: string | null;
+  district: string | null;
+};
+
+type PropertyLocationRow = {
+  location: string | null;
+};
+
 function normalizeName(value: string) {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function normalizeLookupKey(value: string | null | undefined) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+    .trim();
 }
 
 function parseError(err: unknown, fallback: string) {
@@ -58,6 +76,92 @@ function formatRows(rows: QuartierRow[]) {
     name: item.name,
     commune: item.commune,
   }));
+}
+
+function splitLocationTokens(value: string | null | undefined) {
+  return String(value ?? "")
+    .split(/[-,|/]/g)
+    .map((token) => normalizeName(token))
+    .filter(Boolean);
+}
+
+function pickQuartierFromLocation(location: string | null | undefined, commune: string) {
+  const tokens = splitLocationTokens(location);
+  if (!tokens.length) return "";
+  const communeNorm = normalizeLookupKey(commune);
+  const tokenNorms = tokens.map((token) => normalizeLookupKey(token));
+  const communeIndex = tokenNorms.findIndex((token) => token === communeNorm);
+  if (communeIndex < 0) return "";
+
+  const after = tokens[communeIndex + 1] ?? "";
+  if (after && normalizeLookupKey(after) !== communeNorm) return after;
+  const before = tokens[communeIndex - 1] ?? "";
+  if (before && normalizeLookupKey(before) !== communeNorm) return before;
+  return "";
+}
+
+async function deriveQuartiersForCommuneFromDb(
+  admin: ReturnType<typeof supabaseAdmin>,
+  commune: string
+) {
+  const communeNorm = normalizeLookupKey(commune);
+  const derived = new Map<string, { id: string; name: string; commune: string }>();
+
+  try {
+    const ownerLeadsResult = await admin
+      .from("owner_leads")
+      .select("commune, district")
+      .not("district", "is", null)
+      .limit(1200);
+
+    if (!ownerLeadsResult.error) {
+      const rows = (ownerLeadsResult.data ?? []) as OwnerLeadDistrictRow[];
+      rows.forEach((row) => {
+        const rowCommuneNorm = normalizeLookupKey(row.commune);
+        if (!rowCommuneNorm || rowCommuneNorm !== communeNorm) return;
+        const district = normalizeName(String(row.district ?? ""));
+        if (!district || normalizeLookupKey(district) === communeNorm) return;
+        const key = normalizeLookupKey(district);
+        if (!key || derived.has(key)) return;
+        derived.set(key, {
+          id: `derived-owner-${key}`,
+          name: district,
+          commune: normalizeName(commune),
+        });
+      });
+    }
+  } catch {
+    // Non-blocking source.
+  }
+
+  try {
+    const propertiesResult = await admin
+      .from("properties")
+      .select("location")
+      .not("location", "is", null)
+      .limit(2000);
+
+    if (!propertiesResult.error) {
+      const rows = (propertiesResult.data ?? []) as PropertyLocationRow[];
+      rows.forEach((row) => {
+        const quartier = pickQuartierFromLocation(row.location, commune);
+        if (!quartier) return;
+        const quartierNorm = normalizeLookupKey(quartier);
+        if (!quartierNorm || quartierNorm === communeNorm || derived.has(quartierNorm)) return;
+        derived.set(quartierNorm, {
+          id: `derived-prop-${quartierNorm}`,
+          name: quartier,
+          commune: normalizeName(commune),
+        });
+      });
+    }
+  } catch {
+    // Non-blocking source.
+  }
+
+  return Array.from(derived.values()).sort((a, b) =>
+    a.name.localeCompare(b.name, "fr", { sensitivity: "base" })
+  );
 }
 
 async function ensureAdminOrError() {
@@ -127,13 +231,55 @@ async function seedDefaultsIfEmpty(admin: ReturnType<typeof supabaseAdmin>) {
   return { rows: (refreshed.data ?? []) as QuartierRow[], missingTable: false, error: null as string | null };
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const guard = await ensureAdminOrError();
   if (guard.error) return guard.error;
 
   try {
+    const requestUrl = new URL(req.url);
+    const communeFilterRaw = normalizeName(requestUrl.searchParams.get("commune") || "");
+    const communeFilterNorm = normalizeLookupKey(communeFilterRaw);
     const admin = supabaseAdmin();
     const result = await seedDefaultsIfEmpty(admin);
+
+    if (communeFilterNorm) {
+      if (result.missingTable) {
+        const derivedItems = await deriveQuartiersForCommuneFromDb(admin, communeFilterRaw);
+        return NextResponse.json({
+          items: derivedItems,
+          managed: false,
+          warning:
+            derivedItems.length > 0
+              ? "Quartiers derives depuis les donnees existantes (table app_quartiers absente)."
+              : "Aucun quartier disponible pour cette commune.",
+        });
+      }
+
+      if (result.error) {
+        return NextResponse.json({ error: result.error }, { status: 400 });
+      }
+
+      const scopedRows = formatRows(result.rows ?? []).filter(
+        (item) => normalizeLookupKey(item.commune) === communeFilterNorm
+      );
+
+      if (scopedRows.length > 0) {
+        return NextResponse.json({
+          items: scopedRows,
+          managed: true,
+        });
+      }
+
+      const derivedItems = await deriveQuartiersForCommuneFromDb(admin, communeFilterRaw);
+      return NextResponse.json({
+        items: derivedItems,
+        managed: false,
+        warning:
+          derivedItems.length > 0
+            ? "Quartiers derives depuis owner_leads/properties pour cette commune."
+            : "Aucun quartier configure pour cette commune.",
+      });
+    }
 
     if (result.missingTable) {
       return NextResponse.json({

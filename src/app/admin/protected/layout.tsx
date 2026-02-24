@@ -1,8 +1,16 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2, LayoutDashboard, ListChecks, PlusCircle, UserRound, Users } from "lucide-react";
+import { Bell, Building2, LayoutDashboard, ListChecks, PlusCircle, UserRound, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { hasAdminAccess } from "@/lib/admin-auth";
+import AdminNotificationsMenu, {
+  type AdminNotificationListItem,
+} from "@/components/admin/AdminNotificationsMenu";
+
+function isMissingAdminNotificationsTable(message: string | undefined) {
+  const m = (message || "").toLowerCase();
+  return m.includes("admin_notifications") && (m.includes("does not exist") || m.includes("relation"));
+}
 
 export default async function AdminProtectedLayout({
   children,
@@ -18,6 +26,48 @@ export default async function AdminProtectedLayout({
 
   const isAdmin = await hasAdminAccess(supabase, user);
   if (!isAdmin) redirect("/admin/login?error=forbidden");
+
+  let notifications: AdminNotificationListItem[] = [];
+  let unreadCount = 0;
+  let notificationsTableMissing = false;
+  let notificationsLoadError: string | null = null;
+
+  const latestNotificationsResult = await supabase
+    .from("admin_notifications")
+    .select("id, title, body, href, icon_key, is_read, created_at")
+    .order("created_at", { ascending: false })
+    .limit(12);
+
+  if (latestNotificationsResult.error) {
+    notificationsTableMissing = isMissingAdminNotificationsTable(latestNotificationsResult.error.message);
+    if (!notificationsTableMissing) {
+      notificationsLoadError = latestNotificationsResult.error.message || "unknown_error";
+    }
+  } else {
+    notifications = ((latestNotificationsResult.data ?? []) as Array<{
+      id: number;
+      title: string | null;
+      body: string | null;
+      href: string | null;
+      icon_key: string | null;
+      is_read: boolean | null;
+      created_at: string | null;
+    }>).map((row) => ({
+      id: row.id,
+      title: String(row.title ?? "").trim() || "Notification",
+      body: row.body,
+      href: row.href,
+      iconKey: row.icon_key,
+      isRead: Boolean(row.is_read),
+      createdAt: String(row.created_at ?? ""),
+    }));
+
+    const unreadResult = await supabase
+      .from("admin_notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("is_read", false);
+    unreadCount = unreadResult.count ?? 0;
+  }
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[rgb(var(--brand-bg))]">
@@ -71,6 +121,13 @@ export default async function AdminProtectedLayout({
               Users
             </Link>
             <Link
+              href="/admin/protected/notifications"
+              className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-medium text-[rgb(var(--navy))] hover:bg-black/5"
+            >
+              <Bell size={15} />
+              Notifications
+            </Link>
+            <Link
               href="/admin/new"
               className="inline-flex items-center gap-2 rounded-xl bg-[rgb(var(--navy))] px-3 py-2 text-sm font-semibold text-white hover:opacity-95"
             >
@@ -79,11 +136,19 @@ export default async function AdminProtectedLayout({
             </Link>
           </nav>
 
-          <form action="/admin/logout" method="post">
-            <button className="rounded-xl border border-black/10 bg-white/90 px-3 py-2 text-sm font-medium text-black/75 hover:bg-white">
-              Logout
-            </button>
-          </form>
+          <div className="flex items-center gap-2">
+            <AdminNotificationsMenu
+              notifications={notifications}
+              unreadCount={unreadCount}
+              tableMissing={notificationsTableMissing}
+              loadError={notificationsLoadError}
+            />
+            <form action="/admin/logout" method="post">
+              <button className="rounded-xl border border-black/10 bg-white/90 px-3 py-2 text-sm font-medium text-black/75 hover:bg-white">
+                Logout
+              </button>
+            </form>
+          </div>
         </div>
       </header>
 
