@@ -101,6 +101,17 @@ type Props = {
     locationType?: string | null;
     imageUrl: string | null;
   }>;
+  reservationAvailability?: {
+    isReserved: boolean;
+    reservedUntil: string | null;
+    nextAvailableCheckIn: string | null;
+    blockedRanges?: Array<{
+      checkInDate: string;
+      checkOutDate: string;
+      status: string | null;
+      holdExpiresAt: string | null;
+    }>;
+  };
 };
 
 type FavoriteStorageItem = {
@@ -115,6 +126,13 @@ type ReservationOption = {
   value: string;
   label: string;
   nights: number | null;
+};
+
+type ReservationBlockedRange = {
+  check_in_date: string;
+  check_out_date: string;
+  status: string | null;
+  hold_expires_at: string | null;
 };
 
 const RESERVATION_BY_DATES_VALUE = "by_dates";
@@ -186,18 +204,37 @@ function readFavoriteRows(value: string | null): FavoriteStorageItem[] {
 }
 
 function addDays(isoDate: string, days: number) {
-  const base = new Date(`${isoDate}T00:00:00`);
-  if (!Number.isFinite(base.getTime())) return isoDate;
-  base.setDate(base.getDate() + days);
-  return base.toISOString().slice(0, 10);
+  const base = dayjs(`${isoDate}T00:00:00`);
+  if (!base.isValid()) return isoDate;
+  return base.add(days, "day").format("YYYY-MM-DD");
 }
 
 function daysBetween(startIso: string, endIso: string) {
-  const start = new Date(`${startIso}T00:00:00`);
-  const end = new Date(`${endIso}T00:00:00`);
-  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return 0;
-  const diffMs = end.getTime() - start.getTime();
-  return Math.max(0, Math.round(diffMs / 86400000));
+  const start = dayjs(`${startIso}T00:00:00`);
+  const end = dayjs(`${endIso}T00:00:00`);
+  if (!start.isValid() || !end.isValid()) return 0;
+  return Math.max(0, end.diff(start, "day"));
+}
+
+function maxIsoDate(a: string, b: string) {
+  return a >= b ? a : b;
+}
+
+function isDateInBlockedRange(dateIso: string, range: ReservationBlockedRange) {
+  // check_out_date is exclusive for booking overlap rules.
+  return dateIso >= range.check_in_date && dateIso < range.check_out_date;
+}
+
+function findBlockedOverlap(
+  startIso: string,
+  endIso: string,
+  ranges: ReservationBlockedRange[]
+) {
+  return (
+    ranges.find(
+      (x) => startIso < x.check_out_date && endIso > x.check_in_date
+    ) ?? null
+  );
 }
 
 export default function PropertyDetailClient({
@@ -209,6 +246,7 @@ export default function PropertyDetailClient({
   phone,
   sections,
   relatedProperties,
+  reservationAvailability,
 }: Props) {
   const isArabic = dir === "rtl";
 
@@ -433,7 +471,22 @@ export default function PropertyDetailClient({
   const [reservationOpen, setReservationOpen] = useState(false);
   const [favoritesStorageKey, setFavoritesStorageKey] = useState<string>(DEFAULT_FAVORITES_STORAGE_KEY);
   const [isFavorite, setIsFavorite] = useState(false);
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = dayjs().format("YYYY-MM-DD");
+  const [reservationBlockedUntil, setReservationBlockedUntil] = useState<string | null>(
+    reservationAvailability?.reservedUntil ?? null
+  );
+  const [reservationBlockedRanges, setReservationBlockedRanges] = useState<ReservationBlockedRange[]>(
+    Array.isArray(reservationAvailability?.blockedRanges)
+      ? reservationAvailability.blockedRanges
+          .filter((x) => Boolean(x?.checkInDate) && Boolean(x?.checkOutDate))
+          .map((x) => ({
+            check_in_date: x.checkInDate,
+            check_out_date: x.checkOutDate,
+            status: x.status ?? null,
+            hold_expires_at: x.holdExpiresAt ?? null,
+          }))
+      : []
+  );
   const [reservationStartDate, setReservationStartDate] = useState(todayIso);
   const [reservationEndDate, setReservationEndDate] = useState(addDays(todayIso, 1));
   const [reservationOption, setReservationOption] = useState("");
@@ -479,31 +532,71 @@ export default function PropertyDetailClient({
   const reservationBlockedActionLabel = isArabic
     ? "Ce compte ne peut pas creer de reservations client."
     : "Ce compte ne peut pas creer de reservations client.";
+  const reservationBlockedUntilLabel = isArabic
+    ? "العقار محجوز حالياً حتى"
+    : "Ce bien est reserve actuellement jusqu'au";
+  const reservationNextAvailableLabel = isArabic
+    ? "يمكن الحجز ابتداءً من"
+    : "Reservation possible a partir du";
+  const reservationStartMinIso =
+    reservationBlockedUntil && reservationBlockedUntil >= todayIso
+      ? addDays(reservationBlockedUntil, 1)
+      : todayIso;
+  const isPropertyReservedNow = Boolean(
+    reservationBlockedUntil && reservationBlockedUntil >= todayIso
+  );
+  const rangeConflict = findBlockedOverlap(
+    reservationStartDate,
+    reservationEndDate,
+    reservationBlockedRanges
+  );
   const reservationNights = daysBetween(reservationStartDate, reservationEndDate);
   const reservationStartDay = reservationStartDate ? dayjs(reservationStartDate) : null;
   const reservationEndDay = reservationEndDate ? dayjs(reservationEndDate) : null;
   const reservationStartError = !reservationStartDate
     ? (isArabic ? "يرجى اختيار تاريخ الدخول" : "Choisissez la date d'entree")
-    : reservationStartDate < todayIso
-      ? (isArabic ? "لا يمكن اختيار تاريخ سابق" : "La date d'entree ne peut pas etre passee")
+    : reservationStartDate < reservationStartMinIso
+      ? (
+          isPropertyReservedNow
+            ? `${reservationNextAvailableLabel} ${reservationStartMinIso}`
+            : (isArabic ? "لا يمكن اختيار تاريخ سابق" : "La date d'entree ne peut pas etre passee")
+        )
       : "";
   const reservationEndError = !reservationEndDate
     ? (isArabic ? "يرجى اختيار تاريخ الخروج" : "Choisissez la date de sortie")
     : reservationEndDate <= reservationStartDate
       ? (isArabic ? "يجب أن يكون تاريخ الخروج بعد تاريخ الدخول" : "La date de sortie doit etre apres la date d'entree")
+      : rangeConflict
+        ? (isArabic
+          ? `الفترة غير متاحة: ${rangeConflict.check_in_date} -> ${rangeConflict.check_out_date}`
+          : `Periode indisponible: ${rangeConflict.check_in_date} -> ${rangeConflict.check_out_date}`)
       : "";
   const isReservationRangeValid =
     Boolean(reservationStartDate) &&
     Boolean(reservationEndDate) &&
-    reservationStartDate >= todayIso &&
+    reservationStartDate >= reservationStartMinIso &&
     reservationEndDate > reservationStartDate &&
-    reservationNights > 0;
+    reservationNights > 0 &&
+    !rangeConflict;
   const selectedReservationOption =
     reservationOptions.find((x) => x.value === reservationOption) ?? null;
   const fixedReservationNights =
     selectedReservationOption && selectedReservationOption.nights != null
       ? selectedReservationOption.nights
       : null;
+  const shouldDisableStartDate = (value: Dayjs | null) => {
+    if (!value || !value.isValid()) return false;
+    const iso = value.format("YYYY-MM-DD");
+    if (iso < reservationStartMinIso) return true;
+    return reservationBlockedRanges.some((range) => isDateInBlockedRange(iso, range));
+  };
+  const shouldDisableEndDate = (value: Dayjs | null) => {
+    if (!value || !value.isValid()) return false;
+    const iso = value.format("YYYY-MM-DD");
+    if (!reservationStartDate) return iso <= reservationStartMinIso;
+    if (iso <= reservationStartDate) return true;
+    return Boolean(findBlockedOverlap(reservationStartDate, iso, reservationBlockedRanges));
+  };
 
   useEffect(() => {
     let selectedKey = DEFAULT_FAVORITES_STORAGE_KEY;
@@ -572,6 +665,60 @@ export default function PropertyDetailClient({
   }, [isReservationMode, reservationOption, reservationOptions]);
 
   useEffect(() => {
+    if (!isReservationMode || !property.ref) return;
+    let cancelled = false;
+
+    async function hydrateReservationAvailability() {
+      try {
+        const response = await fetch(
+          `/api/reservations?property_ref=${encodeURIComponent(property.ref)}`,
+          { method: "GET" }
+        );
+        if (!response.ok) return;
+        const payload = (await response.json().catch(() => null)) as
+          | {
+              is_reserved?: boolean;
+              reserved_until?: string | null;
+              next_available_check_in?: string | null;
+              blocked_ranges?: ReservationBlockedRange[] | null;
+            }
+          | null;
+        if (cancelled) return;
+        const isReserved = payload?.is_reserved === true;
+        const reservedUntil = String(payload?.reserved_until ?? "").trim() || null;
+        if (isReserved && reservedUntil) {
+          setReservationBlockedUntil((prev) => {
+            if (!prev) return reservedUntil;
+            return maxIsoDate(prev, reservedUntil);
+          });
+        } else {
+          setReservationBlockedUntil(null);
+        }
+        const blockedRanges = Array.isArray(payload?.blocked_ranges)
+          ? payload.blocked_ranges.filter(
+              (x) => Boolean(x?.check_in_date) && Boolean(x?.check_out_date)
+            )
+          : [];
+        setReservationBlockedRanges(blockedRanges);
+      } catch {
+        // Keep reservation UI usable even if availability endpoint fails.
+      }
+    }
+
+    hydrateReservationAvailability();
+    return () => {
+      cancelled = true;
+    };
+  }, [isReservationMode, property.ref]);
+
+  useEffect(() => {
+    if (!isReservationMode) return;
+    if (!reservationStartDate || reservationStartDate < reservationStartMinIso) {
+      setReservationStartDate(reservationStartMinIso);
+    }
+  }, [isReservationMode, reservationStartDate, reservationStartMinIso]);
+
+  useEffect(() => {
     if (!isReservationMode) return;
     const selected = findReservationOption(reservationOption);
     if (!selected || selected.nights == null || !reservationStartDate) return;
@@ -623,9 +770,15 @@ export default function PropertyDetailClient({
       setReservationSubmitSuccess(null);
       return;
     }
-    if (!reservationStartDate) setReservationStartDate(todayIso);
-    if (!reservationEndDate || reservationEndDate <= reservationStartDate) {
-      setReservationEndDate(addDays(reservationStartDate || todayIso, 1));
+    if (!reservationStartDate || reservationStartDate < reservationStartMinIso) {
+      setReservationStartDate(reservationStartMinIso);
+    }
+    const effectiveStart =
+      reservationStartDate && reservationStartDate >= reservationStartMinIso
+        ? reservationStartDate
+        : reservationStartMinIso;
+    if (!reservationEndDate || reservationEndDate <= effectiveStart) {
+      setReservationEndDate(addDays(effectiveStart, 1));
     }
     if (!reservationOption) {
       setReservationOption(RESERVATION_BY_DATES_VALUE);
@@ -661,6 +814,7 @@ export default function PropertyDetailClient({
     setReservationSubmitError(null);
     setReservationSubmitSuccess(null);
     setReservationSubmitting(true);
+    let successMessage = reservationSavedLabel;
 
     try {
       const response = await fetch("/api/reservations", {
@@ -678,8 +832,80 @@ export default function PropertyDetailClient({
       });
 
       if (!response.ok) {
-        const payload = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(payload.error || reservationFallbackErrorLabel);
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          is_reserved?: boolean;
+          reserved_until?: string;
+          next_available_check_in?: string;
+          conflicting_check_in?: string;
+          conflicting_check_out?: string;
+          blocked_ranges?: ReservationBlockedRange[];
+        };
+        const isReserved = payload.is_reserved === true;
+        const reservedUntil = String(payload.reserved_until ?? "").trim();
+        if (isReserved && reservedUntil) {
+          setReservationBlockedUntil((prev) => (prev ? maxIsoDate(prev, reservedUntil) : reservedUntil));
+        } else if (!isReserved) {
+          setReservationBlockedUntil(null);
+        }
+        if (Array.isArray(payload.blocked_ranges)) {
+          setReservationBlockedRanges(
+            payload.blocked_ranges.filter(
+              (x) => Boolean(x?.check_in_date) && Boolean(x?.check_out_date)
+            )
+          );
+        }
+        const nextAvailable = String(payload.next_available_check_in ?? "").trim();
+        if (nextAvailable) {
+          setReservationStartDate(nextAvailable);
+          const selected = reservationOptions.find((x) => x.value === reservationOption);
+          const nights = selected?.nights != null && selected.nights > 0 ? selected.nights : 1;
+          setReservationEndDate(addDays(nextAvailable, nights));
+        }
+        const conflictIn = String(payload.conflicting_check_in ?? "").trim();
+        const conflictOut = String(payload.conflicting_check_out ?? "").trim();
+        const conflictReason =
+          conflictIn && conflictOut
+            ? isArabic
+              ? `الفترة محجوزة: ${conflictIn} -> ${conflictOut}`
+              : `Periode deja reservee: ${conflictIn} -> ${conflictOut}`
+            : null;
+        throw new Error(conflictReason || payload.error || reservationFallbackErrorLabel);
+      }
+
+      const payload = (await response.json().catch(() => ({}))) as {
+        is_reserved?: boolean;
+        reserved_until?: string;
+        next_available_check_in?: string;
+        blocked_ranges?: ReservationBlockedRange[];
+        hold_expires_at?: string;
+      };
+      const isReserved = payload.is_reserved === true;
+      const reservedUntil = String(payload.reserved_until ?? "").trim();
+      if (isReserved && reservedUntil) {
+        setReservationBlockedUntil((prev) => (prev ? maxIsoDate(prev, reservedUntil) : reservedUntil));
+      } else if (!isReserved) {
+        setReservationBlockedUntil(null);
+      }
+      if (Array.isArray(payload.blocked_ranges)) {
+        setReservationBlockedRanges(
+          payload.blocked_ranges.filter(
+            (x) => Boolean(x?.check_in_date) && Boolean(x?.check_out_date)
+          )
+        );
+      }
+      const nextAvailable = String(payload.next_available_check_in ?? "").trim();
+      if (nextAvailable) {
+        setReservationStartDate(nextAvailable);
+        const selected = reservationOptions.find((x) => x.value === reservationOption);
+        const nights = selected?.nights != null && selected.nights > 0 ? selected.nights : 1;
+        setReservationEndDate(addDays(nextAvailable, nights));
+      }
+      const holdExpiresAt = String(payload.hold_expires_at ?? "").trim();
+      if (holdExpiresAt) {
+        successMessage = isArabic
+          ? `تم تسجيل الطلب مؤقتاً حتى ${holdExpiresAt}.`
+          : `Reservation en attente jusqu'au ${holdExpiresAt}.`;
       }
     } catch (error) {
       const reason = error instanceof Error ? error.message : reservationFallbackErrorLabel;
@@ -699,7 +925,7 @@ export default function PropertyDetailClient({
       finalLink = waLink;
     }
 
-    setReservationSubmitSuccess(reservationSavedLabel);
+    setReservationSubmitSuccess(successMessage);
     setReservationSubmitting(false);
     window.open(finalLink, "_blank", "noopener,noreferrer");
     setReservationOpen(false);
@@ -919,6 +1145,14 @@ export default function PropertyDetailClient({
                 <BadgeCheck size={14} className="text-[rgb(var(--gold))]" />
                 {t.ref}: {property.ref}
               </span>
+              {isPropertyReservedNow && reservationBlockedUntil ? (
+                <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-300/70">
+                  <CalendarDays size={14} />
+                  {isArabic
+                    ? `محجوز حتى ${reservationBlockedUntil}`
+                    : `Reserve jusqu'au ${reservationBlockedUntil}`}
+                </span>
+              ) : null}
             </div>
 
             <h1 className="mt-3 text-3xl font-bold tracking-tight text-[rgb(var(--navy))]">{property.title}</h1>
@@ -1358,6 +1592,24 @@ export default function PropertyDetailClient({
                       : `Cette option ajuste automatiquement la date de sortie (${fixedReservationNights} nuit(s)).`}
                   </p>
                 ) : null}
+                {isPropertyReservedNow && reservationBlockedUntil ? (
+                  <p className="mt-1 text-[11px] font-medium text-amber-700">
+                    {reservationBlockedUntilLabel} {reservationBlockedUntil}. {reservationNextAvailableLabel}{" "}
+                    {reservationStartMinIso}.
+                  </p>
+                ) : null}
+                {reservationBlockedRanges.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {reservationBlockedRanges.slice(0, 8).map((range) => (
+                      <span
+                        key={`${range.check_in_date}-${range.check_out_date}-${range.status ?? "na"}`}
+                        className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-700"
+                      >
+                        {range.check_in_date} - {range.check_out_date}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1369,7 +1621,8 @@ export default function PropertyDetailClient({
                     <LocalizationProvider dateAdapter={AdapterDayjs}>
                       <DatePicker
                         value={reservationStartDay}
-                        minDate={dayjs(todayIso)}
+                        minDate={dayjs(reservationStartMinIso)}
+                        shouldDisableDate={shouldDisableStartDate}
                         format="DD/MM/YYYY"
                         onChange={(value) => {
                           const next = toIsoOrEmpty(value);
@@ -1428,6 +1681,7 @@ export default function PropertyDetailClient({
                             : dayjs(todayIso).add(1, "day")
                         }
                         format="DD/MM/YYYY"
+                        shouldDisableDate={shouldDisableEndDate}
                         onChange={(value) => setReservationEndDate(toIsoOrEmpty(value))}
                         disabled={fixedReservationNights != null && fixedReservationNights > 0}
                         slotProps={{

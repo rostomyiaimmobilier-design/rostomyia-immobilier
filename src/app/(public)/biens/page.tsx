@@ -44,6 +44,13 @@ type AppQuartierRow = {
   is_active: boolean | null;
 };
 
+type ReservationAvailabilityCacheRow = {
+  property_ref: string | null;
+  is_reserved_now: boolean | null;
+  reserved_until: string | null;
+  next_available_check_in: string | null;
+};
+
 function isMissingLocationTypeColumn(message: string | undefined) {
   const m = (message || "").toLowerCase();
   return m.includes("location_type") && (m.includes("does not exist") || m.includes("column"));
@@ -200,6 +207,41 @@ export default async function BiensPage() {
   }
 
   const propsList = (data ?? []) as PropertyRow[];
+  const refs = Array.from(new Set(propsList.map((x) => String(x.ref ?? "").trim()).filter(Boolean)));
+  const availabilityByRef = new Map<
+    string,
+    { isReservedNow: boolean; reservedUntil: string | null; nextAvailableCheckIn: string | null }
+  >();
+
+  if (refs.length > 0) {
+    const availabilityResult = await supabase
+      .from("property_reservation_availability_cache")
+      .select("property_ref, is_reserved_now, reserved_until, next_available_check_in")
+      .in("property_ref", refs);
+
+    if (!availabilityResult.error) {
+      ((availabilityResult.data ?? []) as ReservationAvailabilityCacheRow[]).forEach((row) => {
+        const ref = normalizeName(row.property_ref);
+        if (!ref) return;
+        availabilityByRef.set(ref, {
+          isReservedNow: Boolean(row.is_reserved_now),
+          reservedUntil: normalizeName(row.reserved_until) || null,
+          nextAvailableCheckIn: normalizeName(row.next_available_check_in) || null,
+        });
+      });
+    } else if (
+      !isMissingTableError(availabilityResult.error?.message, "property_reservation_availability_cache")
+    ) {
+      return (
+        <main className="mx-auto max-w-6xl p-10">
+          <h1 className="text-2xl font-bold text-slate-900">Erreur</h1>
+          <pre className="mt-4 overflow-auto rounded-xl bg-slate-900 p-4 text-white">
+            {availabilityResult.error.message}
+          </pre>
+        </main>
+      );
+    }
+  }
 
   const communesResult = await supabase
     .from("app_communes")
@@ -282,6 +324,7 @@ export default async function BiensPage() {
       return sa - sb;
     });
 
+    const reservationAvailability = availabilityByRef.get(p.ref) ?? null;
     return {
       id: p.id,
       ref: p.ref,
@@ -298,6 +341,9 @@ export default async function BiensPage() {
 
       // ✅ add createdAt so client can sort accurately
       createdAt: p.created_at,
+      isReservedNow: reservationAvailability?.isReservedNow ?? false,
+      reservedUntil: reservationAvailability?.reservedUntil ?? null,
+      nextAvailableCheckIn: reservationAvailability?.nextAvailableCheckIn ?? null,
 
       images: sorted.map((img) => propertyImageUrl(img.path, { width: 1200, quality: 76, format: "webp" })),
 
@@ -333,7 +379,9 @@ export default async function BiensPage() {
           "@type": "Offer",
           price: Number(String(item.price).replace(/[^\d]/g, "")) || undefined,
           priceCurrency: "DZD",
-          availability: "https://schema.org/InStock",
+          availability: item.isReservedNow
+            ? "https://schema.org/OutOfStock"
+            : "https://schema.org/InStock",
         },
       },
     })),

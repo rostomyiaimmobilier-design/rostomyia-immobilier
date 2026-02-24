@@ -19,6 +19,11 @@ function isMissingAnyColumnError(message: string | undefined) {
   return m.includes("column") && m.includes("does not exist");
 }
 
+function isMissingSpecificColumn(message: string | undefined, column: string) {
+  const m = (message || "").toLowerCase();
+  return m.includes(column.toLowerCase()) && m.includes("column") && m.includes("does not exist");
+}
+
 function isMissingOwnerLeadIdColumn(message: string | undefined) {
   const m = (message || "").toLowerCase();
   return m.includes("owner_lead_id") && (m.includes("does not exist") || m.includes("column"));
@@ -1096,6 +1101,7 @@ export async function updateViewingRequestStatus(id: string, status: string) {
 }
 
 const SHORT_STAY_RESERVATION_STATUS = [
+  "hold",
   "new",
   "contacted",
   "confirmed",
@@ -1109,10 +1115,23 @@ function isAllowedShortStayReservationStatus(value: string) {
   );
 }
 
+function cancellationCutoffHours() {
+  const raw = Number(process.env.RESERVATION_CANCELLATION_MIN_HOURS ?? 48);
+  if (!Number.isFinite(raw)) return 48;
+  return Math.max(0, Math.round(raw));
+}
+
+function hoursUntilDateStart(isoDate: string, now: Date) {
+  const date = new Date(`${isoDate}T00:00:00`);
+  if (!Number.isFinite(date.getTime())) return Number.POSITIVE_INFINITY;
+  return (date.getTime() - now.getTime()) / 3_600_000;
+}
+
 export async function updateShortStayReservationStatus(
   id: string,
   status: string,
-  adminNote?: string
+  adminNote?: string,
+  forceCancel = false
 ) {
   const supabase = await createClient();
   const normalizedStatus = status.trim().toLowerCase() || "new";
@@ -1120,20 +1139,89 @@ export async function updateShortStayReservationStatus(
     throw new Error("Invalid reservation status");
   }
 
+  const { data: current, error: loadError } = await supabase
+    .from("short_stay_reservations")
+    .select("id, status, check_in_date")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (loadError) throw new Error(loadError.message);
+  if (!current) throw new Error("Reservation not found");
+
+  const checkInDate = String((current as { check_in_date?: string | null }).check_in_date ?? "")
+    .trim();
+
+  if (normalizedStatus === "cancelled" && checkInDate) {
+    const cutoffHours = cancellationCutoffHours();
+    if (cutoffHours > 0 && !forceCancel) {
+      const hoursLeft = hoursUntilDateStart(checkInDate, new Date());
+      if (Number.isFinite(hoursLeft) && hoursLeft < cutoffHours) {
+        throw new Error(
+          `Cancellation blocked by policy (${cutoffHours}h before check-in). Use force cancel to proceed.`
+        );
+      }
+    }
+  }
+
   const note = (adminNote || "").trim();
-  const payload = {
+  const nowIso = new Date().toISOString();
+  const payload: Record<string, unknown> = {
     status: normalizedStatus,
     admin_note: note || null,
-    updated_at: new Date().toISOString(),
+    updated_at: nowIso,
+    confirmed_at: normalizedStatus === "confirmed" ? nowIso : null,
+    cancelled_at: normalizedStatus === "cancelled" ? nowIso : null,
+    closed_at: normalizedStatus === "closed" ? nowIso : null,
+    cancellation_reason:
+      normalizedStatus === "cancelled" ? (note || "cancelled_by_admin") : null,
+    hold_expires_at:
+      normalizedStatus === "hold"
+        ? new Date(Date.now() + 15 * 60_000).toISOString()
+        : null,
   };
 
-  const { error } = await supabase
-    .from("short_stay_reservations")
-    .update(payload)
-    .eq("id", id);
+  for (let dropAttempt = 0; dropAttempt < 8; dropAttempt += 1) {
+    const { error } = await supabase
+      .from("short_stay_reservations")
+      .update(payload)
+      .eq("id", id);
 
-  if (error) throw new Error(error.message);
+    if (!error) break;
+    const message = error.message;
+    let changed = false;
+
+    if (isMissingSpecificColumn(message, "confirmed_at") && "confirmed_at" in payload) {
+      delete payload.confirmed_at;
+      changed = true;
+    }
+    if (isMissingSpecificColumn(message, "cancelled_at") && "cancelled_at" in payload) {
+      delete payload.cancelled_at;
+      changed = true;
+    }
+    if (isMissingSpecificColumn(message, "closed_at") && "closed_at" in payload) {
+      delete payload.closed_at;
+      changed = true;
+    }
+    if (isMissingSpecificColumn(message, "cancellation_reason") && "cancellation_reason" in payload) {
+      delete payload.cancellation_reason;
+      changed = true;
+    }
+    if (isMissingSpecificColumn(message, "hold_expires_at") && "hold_expires_at" in payload) {
+      delete payload.hold_expires_at;
+      changed = true;
+    }
+
+    if (!changed) throw new Error(message);
+  }
+
+  try {
+    const admin = supabaseAdmin();
+    await admin.rpc("maintain_short_stay_reservations", { p_now: nowIso });
+  } catch {
+    // Maintenance routine is optional when the RPC is missing.
+  }
 
   revalidatePath("/admin/protected/leads/reservations");
   revalidatePath("/admin/leads/reservations");
+  revalidatePath("/biens");
 }

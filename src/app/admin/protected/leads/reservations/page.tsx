@@ -3,8 +3,12 @@ import {
   ArrowLeft,
   CalendarDays,
   Clock3,
+  Hash,
   Hotel,
+  Mail,
+  MapPin,
   MessageSquare,
+  NotebookPen,
   Phone,
   UserCircle2,
 } from "lucide-react";
@@ -12,7 +16,7 @@ import { createClient } from "@/lib/supabase/server";
 import { updateShortStayReservationStatus } from "../actions";
 import AppDropdown from "@/components/ui/app-dropdown";
 
-const STATUS = ["new", "contacted", "confirmed", "cancelled", "closed"] as const;
+const STATUS = ["hold", "new", "contacted", "confirmed", "cancelled", "closed"] as const;
 
 type ReservationRow = {
   id: string;
@@ -33,6 +37,7 @@ type ReservationRow = {
   customer_email: string | null;
   message: string | null;
   admin_note: string | null;
+  hold_expires_at: string | null;
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -55,8 +60,31 @@ function fmt(value: string | null | undefined) {
   return v || "-";
 }
 
+function fmtDateTime(value: string | null | undefined) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "-";
+  const date = new Date(raw);
+  if (!Number.isFinite(date.getTime())) return raw;
+  return date.toLocaleString("fr-FR");
+}
+
+function fmtDate(value: string | null | undefined) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "-";
+  const date = new Date(raw);
+  if (!Number.isFinite(date.getTime())) return raw;
+  return date.toLocaleDateString("fr-FR");
+}
+
+function shortReservationId(value: string | null | undefined) {
+  const id = String(value ?? "").trim();
+  if (!id) return "-";
+  return id.slice(0, 8).toUpperCase();
+}
+
 function statusLabel(status: string | null | undefined) {
   const s = String(status ?? "new").trim().toLowerCase();
+  if (s === "hold") return "en attente";
   if (s === "contacted") return "contacte";
   if (s === "confirmed") return "confirme";
   if (s === "cancelled") return "annule";
@@ -66,6 +94,7 @@ function statusLabel(status: string | null | undefined) {
 
 function statusPill(status: string | null | undefined) {
   const s = String(status ?? "new").trim().toLowerCase();
+  if (s === "hold") return "border-violet-200 bg-violet-50 text-violet-700";
   if (s === "confirmed") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (s === "contacted") return "border-blue-200 bg-blue-50 text-blue-700";
   if (s === "cancelled") return "border-rose-200 bg-rose-50 text-rose-700";
@@ -73,9 +102,61 @@ function statusPill(status: string | null | undefined) {
   return "border-amber-200 bg-amber-50 text-amber-700";
 }
 
+function statusSummary(status: string | null | undefined) {
+  const s = String(status ?? "new").trim().toLowerCase();
+  if (s === "hold") return "Reservation en attente de confirmation. Verifier expiration hold puis confirmer ou annuler.";
+  if (s === "new") return "Nouveau lead reservation. Priorite: contacter rapidement le client.";
+  if (s === "contacted") return "Client contacte. Mettre a jour selon retour client.";
+  if (s === "confirmed") return "Reservation confirmee. Surveiller date de sortie pour cloture.";
+  if (s === "cancelled") return "Reservation annulee. Conserver un motif dans la note interne.";
+  if (s === "closed") return "Reservation terminee et archivee.";
+  return "Verifier les details de reservation puis mettre a jour le statut.";
+}
+
+function holdSummary(status: string | null | undefined, holdExpiresAt: string | null | undefined) {
+  if (String(status ?? "").toLowerCase() !== "hold") return "Aucun hold actif";
+  const expiryRaw = String(holdExpiresAt ?? "").trim();
+  if (!expiryRaw) return "Hold actif sans expiration";
+  const expiry = new Date(expiryRaw);
+  if (!Number.isFinite(expiry.getTime())) return `Hold jusqu'au ${expiryRaw}`;
+  const diffMinutes = Math.round((expiry.getTime() - Date.now()) / 60000);
+  if (diffMinutes > 0) return `Hold actif (${diffMinutes} min restantes)`;
+  return "Hold expire (maintenance requise)";
+}
+
 function isMissingReservationsTable(message: string | undefined) {
   const m = String(message ?? "").toLowerCase();
   return m.includes("short_stay_reservations") && (m.includes("does not exist") || m.includes("relation"));
+}
+
+function digitsOnly(value: string | null | undefined) {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+function buildStatusTemplate(row: ReservationRow, nextStatus: string) {
+  return [
+    "Rostomyia Immobilier - mise a jour reservation",
+    `Statut: ${nextStatus}`,
+    `REF Bien: ${row.property_ref}`,
+    `Bien: ${fmt(row.property_title)}`,
+    `Sejour: ${row.check_in_date} -> ${row.check_out_date}`,
+    `Nuits: ${row.nights}`,
+  ].join("\n");
+}
+
+function buildWhatsappTemplateLink(row: ReservationRow, nextStatus: string) {
+  const digits = digitsOnly(row.customer_phone);
+  if (!digits) return null;
+  const text = buildStatusTemplate(row, nextStatus);
+  return `https://wa.me/${encodeURIComponent(digits)}?text=${encodeURIComponent(text)}`;
+}
+
+function buildMailtoTemplateLink(row: ReservationRow, nextStatus: string) {
+  const email = fmt(row.customer_email);
+  if (email === "-") return null;
+  const subject = `Reservation ${row.property_ref} - ${nextStatus}`;
+  const body = buildStatusTemplate(row, nextStatus);
+  return `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 export default async function ShortStayReservationsPage({
@@ -91,7 +172,7 @@ export default async function ShortStayReservationsPage({
   const { data, error } = await supabase
     .from("short_stay_reservations")
     .select(
-      "id, created_at, updated_at, status, lang, property_ref, property_title, property_location, property_price, reservation_option_label, check_in_date, check_out_date, nights, customer_name, customer_phone, customer_email, message, admin_note"
+      "id, created_at, updated_at, status, lang, property_ref, property_title, property_location, property_price, reservation_option_label, check_in_date, check_out_date, nights, customer_name, customer_phone, customer_email, message, admin_note, hold_expires_at"
     )
     .order("created_at", { ascending: false })
     .limit(500);
@@ -197,112 +278,263 @@ export default async function ShortStayReservationsPage({
       </section>
 
       <section className="space-y-4">
-        {filteredRows.map((row) => (
-          <article key={row.id} className="rounded-3xl border border-black/10 bg-white/82 p-5 shadow-sm backdrop-blur md:p-6">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-2.5 py-1 text-xs text-black/65">
-                  <Clock3 size={12} />
-                  {new Date(row.created_at).toLocaleString("fr-FR")}
-                  {row.lang ? ` | ${row.lang.toUpperCase()}` : ""}
-                </div>
-                <h2 className="mt-2 inline-flex items-center gap-2 text-lg font-bold text-[rgb(var(--navy))]">
-                  <Hotel size={18} />
-                  {fmt(row.property_title)}
-                </h2>
-                <div className="mt-1 text-sm text-black/70">{fmt(row.property_location)}</div>
-              </div>
+        {filteredRows.map((row) => {
+          const confirmWa = buildWhatsappTemplateLink(row, "confirmed");
+          const cancelWa = buildWhatsappTemplateLink(row, "cancelled");
+          const closeWa = buildWhatsappTemplateLink(row, "closed");
+          const confirmMail = buildMailtoTemplateLink(row, "confirmed");
+          const cancelMail = buildMailtoTemplateLink(row, "cancelled");
+          const closeMail = buildMailtoTemplateLink(row, "closed");
+          const holdDate =
+            row.status === "hold" && row.hold_expires_at
+              ? fmtDateTime(row.hold_expires_at)
+              : null;
+          const reservationCode = shortReservationId(row.id);
+          const statusText = statusSummary(row.status);
+          const holdText = holdSummary(row.status, row.hold_expires_at);
+          const phoneDigits = digitsOnly(row.customer_phone);
+          const phoneHref = phoneDigits ? `tel:${phoneDigits}` : null;
+          const whatsappHref = phoneDigits ? `https://wa.me/${encodeURIComponent(phoneDigits)}` : null;
+          const customerEmail = fmt(row.customer_email);
+          const emailHref = customerEmail !== "-" ? `mailto:${encodeURIComponent(customerEmail)}` : null;
+          return (
+            <article
+              key={row.id}
+              className="relative overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-5 shadow-sm ring-1 ring-white/65 backdrop-blur md:p-6"
+            >
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-[radial-gradient(65%_120%_at_50%_-20%,rgba(15,23,42,0.09),transparent)]" />
 
-              <span
-                className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${statusPill(
-                  row.status
-                )}`}
-              >
-                {statusLabel(row.status)}
-              </span>
-            </div>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <div className="rounded-2xl border border-black/10 bg-white p-3 text-sm">
-                <div className="text-xs uppercase tracking-wide text-black/50">Bien</div>
-                <div className="mt-1 font-semibold text-slate-900">REF: {row.property_ref}</div>
-                <div className="text-black/65">{fmt(row.property_price)}</div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <a
-                    href={`/biens/${encodeURIComponent(row.property_ref)}`}
-                    className="inline-flex items-center gap-1 rounded-lg border border-black/10 bg-white px-2.5 py-1.5 text-xs font-medium text-[rgb(var(--navy))] hover:bg-black/5"
-                  >
-                    Voir bien
-                  </a>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-black/10 bg-white p-3 text-sm">
-                <div className="text-xs uppercase tracking-wide text-black/50">Sejour</div>
-                <div className="mt-1 text-slate-900">
-                  {row.check_in_date} - {row.check_out_date}
-                </div>
-                <div className="text-xs text-black/60">
-                  {row.nights} nuit(s)
-                  {row.reservation_option_label ? ` | ${row.reservation_option_label}` : ""}
-                </div>
-              </div>
-
-              <form
-                className="rounded-2xl border border-black/10 bg-white p-3"
-                action={async (formData) => {
-                  "use server";
-                  const status = String(formData.get("status") || "new");
-                  const adminNote = String(formData.get("admin_note") || "");
-                  await updateShortStayReservationStatus(row.id, status, adminNote);
-                }}
-              >
-                <div className="text-xs uppercase tracking-wide text-black/50">Mise a jour</div>
-                <AppDropdown
-                  name="status"
-                  defaultValue={row.status ?? "new"}
-                  className="mt-2"
-                  triggerClassName="h-10"
-                  options={STATUS.map((s) => ({ value: s, label: s }))}
-                />
-                <textarea
-                  name="admin_note"
-                  defaultValue={row.admin_note ?? ""}
-                  placeholder="Note interne"
-                  className="mt-2 min-h-[80px] w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-xs text-black/75 outline-none focus:border-[rgb(var(--navy))]/30"
-                />
-                <button className="mt-2 h-10 w-full rounded-xl bg-[rgb(var(--navy))] px-3 text-xs font-semibold text-white hover:opacity-95">
-                  Enregistrer
-                </button>
-              </form>
-            </div>
-
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <div className="rounded-2xl border border-black/10 bg-white p-3 text-sm text-black/70">
-                <div className="inline-flex items-center gap-1 text-xs uppercase tracking-wide text-black/50">
-                  <UserCircle2 size={13} />
-                  Client
-                </div>
-                <div className="mt-1 font-medium text-slate-900">{fmt(row.customer_name)}</div>
-                <div className="mt-1 inline-flex items-center gap-1 text-xs text-black/70">
-                  <Phone size={12} />
-                  {fmt(row.customer_phone)}
-                </div>
-                <div className="mt-1 text-xs text-black/60">{fmt(row.customer_email)}</div>
-              </div>
-
-              {row.message ? (
-                <div className="rounded-2xl border border-black/10 bg-white p-3 text-sm text-black/70">
-                  <div className="inline-flex items-center gap-1 text-xs uppercase tracking-wide text-black/50">
-                    <MessageSquare size={13} />
-                    Message
+              <div className="relative flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-medium text-black/65">
+                      <Clock3 size={12} />
+                      {fmtDateTime(row.created_at)}
+                    </span>
+                    <span className="inline-flex rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-medium text-black/65">
+                      MAJ: {fmtDateTime(row.updated_at)}
+                    </span>
+                    {row.lang ? (
+                      <span className="inline-flex rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-[rgb(var(--navy))]">
+                        {row.lang.toUpperCase()}
+                      </span>
+                    ) : null}
                   </div>
-                  <div className="mt-1 whitespace-pre-wrap break-words">{row.message}</div>
+
+                  <h2 className="inline-flex items-center gap-2 text-xl font-extrabold tracking-tight text-[rgb(var(--navy))]">
+                    <Hotel size={18} />
+                    {fmt(row.property_title)}
+                  </h2>
+                  <p className="inline-flex items-center gap-1.5 text-sm text-black/70">
+                    <MapPin size={14} />
+                    {fmt(row.property_location)}
+                  </p>
                 </div>
-              ) : null}
-            </div>
-          </article>
-        ))}
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-[rgb(var(--navy))]">
+                    REF: {row.property_ref}
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-black/70">
+                    <Hash size={12} />
+                    RES: {reservationCode}
+                  </span>
+                  <span
+                    className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${statusPill(
+                      row.status
+                    )}`}
+                  >
+                    {statusLabel(row.status)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="relative mt-4 grid gap-2 rounded-2xl border border-black/10 bg-gradient-to-r from-slate-50 to-white p-3 sm:grid-cols-2 xl:grid-cols-4">
+                <OverviewItem label="Periode" value={`${fmtDate(row.check_in_date)} - ${fmtDate(row.check_out_date)}`} />
+                <OverviewItem label="Nuits / Option" value={`${row.nights} nuit(s)${row.reservation_option_label ? ` | ${row.reservation_option_label}` : ""}`} />
+                <OverviewItem label="Etat hold" value={holdText} />
+                <OverviewItem label="Guide statut" value={statusText} />
+              </div>
+
+              <div className="relative mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.12fr)_minmax(320px,0.88fr)]">
+                <div className="space-y-3">
+                  <div className="rounded-2xl border border-black/10 bg-white p-4">
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded-xl bg-slate-50 p-3 text-sm">
+                        <div className="text-[11px] uppercase tracking-wide text-black/50">Prix</div>
+                        <div className="mt-1 font-semibold text-slate-900">{fmt(row.property_price)}</div>
+                      </div>
+                      <div className="rounded-xl bg-slate-50 p-3 text-sm">
+                        <div className="text-[11px] uppercase tracking-wide text-black/50">Sejour</div>
+                        <div className="mt-1 font-semibold text-slate-900">
+                          {row.check_in_date}
+                          {" -> "}
+                          {row.check_out_date}
+                        </div>
+                        <div className="mt-0.5 text-xs text-black/60">
+                          Du {fmtDate(row.check_in_date)} au {fmtDate(row.check_out_date)}
+                        </div>
+                      </div>
+                      <div className="rounded-xl bg-slate-50 p-3 text-sm">
+                        <div className="text-[11px] uppercase tracking-wide text-black/50">Detail reservation</div>
+                        <div className="mt-1 font-semibold text-slate-900">{row.nights} nuit(s)</div>
+                        <div className="mt-0.5 text-xs text-black/60">
+                          {row.reservation_option_label ? row.reservation_option_label : "Option non renseignee"}
+                        </div>
+                      </div>
+                      <div className="rounded-xl bg-slate-50 p-3 text-sm">
+                        <div className="text-[11px] uppercase tracking-wide text-black/50">Actions bien</div>
+                        <a
+                          href={`/biens/${encodeURIComponent(row.property_ref)}`}
+                          className="mt-1 inline-flex items-center gap-1 rounded-lg border border-black/10 bg-white px-2.5 py-1.5 text-xs font-medium text-[rgb(var(--navy))] hover:bg-black/5"
+                        >
+                          Voir bien
+                        </a>
+                        {holdDate ? (
+                          <div className="mt-1 text-xs font-medium text-violet-700">Hold jusqu&apos;au {holdDate}</div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-black/10 bg-white p-4 text-sm text-black/75">
+                    <div className="inline-flex items-center gap-1.5 text-xs uppercase tracking-wide text-black/50">
+                      <UserCircle2 size={13} />
+                      Client et communication
+                    </div>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                      <div className="font-medium text-slate-900">{fmt(row.customer_name)}</div>
+                      <div className="inline-flex items-center gap-1 text-xs"><Phone size={12} /> {fmt(row.customer_phone)}</div>
+                      <div className="inline-flex items-center gap-1 text-xs"><Mail size={12} /> {fmt(row.customer_email)}</div>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {phoneHref ? (
+                        <a
+                          href={phoneHref}
+                          className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-[11px] font-semibold text-sky-700"
+                        >
+                          <Phone size={12} />
+                          Appeler
+                        </a>
+                      ) : null}
+                      {whatsappHref ? (
+                        <a
+                          href={whatsappHref}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700"
+                        >
+                          <Phone size={12} />
+                          WhatsApp direct
+                        </a>
+                      ) : null}
+                      {emailHref ? (
+                        <a
+                          href={emailHref}
+                          className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-700"
+                        >
+                          <Mail size={12} />
+                          Envoyer email
+                        </a>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-2">
+                        <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Templates confirmation</div>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {confirmWa ? <a href={confirmWa} target="_blank" rel="noreferrer" className="inline-flex rounded-md border border-emerald-300 bg-white px-2 py-1 text-[11px] font-semibold text-emerald-700">WA</a> : null}
+                          {confirmMail ? <a href={confirmMail} className="inline-flex rounded-md border border-emerald-300 bg-white px-2 py-1 text-[11px] font-semibold text-emerald-700">Email</a> : null}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-2">
+                        <div className="text-[11px] font-semibold uppercase tracking-wide text-rose-700">Templates annulation/closure</div>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {cancelWa ? <a href={cancelWa} target="_blank" rel="noreferrer" className="inline-flex rounded-md border border-rose-300 bg-white px-2 py-1 text-[11px] font-semibold text-rose-700">WA annule</a> : null}
+                          {cancelMail ? <a href={cancelMail} className="inline-flex rounded-md border border-rose-300 bg-white px-2 py-1 text-[11px] font-semibold text-rose-700">Email annule</a> : null}
+                          {closeWa ? <a href={closeWa} target="_blank" rel="noreferrer" className="inline-flex rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700">WA clos</a> : null}
+                          {closeMail ? <a href={closeMail} className="inline-flex rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700">Email clos</a> : null}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {row.admin_note ? (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-black/75">
+                      <div className="inline-flex items-center gap-1 text-xs uppercase tracking-wide text-amber-700">
+                        <NotebookPen size={13} />
+                        Note interne actuelle
+                      </div>
+                      <div className="mt-2 whitespace-pre-wrap break-words rounded-xl bg-white/70 p-3">
+                        {row.admin_note}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {row.message ? (
+                    <div className="rounded-2xl border border-black/10 bg-white p-4 text-sm text-black/75">
+                      <div className="inline-flex items-center gap-1 text-xs uppercase tracking-wide text-black/50">
+                        <MessageSquare size={13} />
+                        Message client
+                      </div>
+                      <div className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-slate-50 p-3">
+                        {row.message}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <form
+                  className="rounded-2xl border border-black/10 bg-gradient-to-b from-white to-slate-50 p-4"
+                  action={async (formData) => {
+                    "use server";
+                    const quickStatus = String(formData.get("quick_status") || "");
+                    const status = quickStatus || String(formData.get("status") || "new");
+                    const adminNote = String(formData.get("admin_note") || "");
+                    const forceCancel = String(formData.get("force_cancel") || "") === "1";
+                    await updateShortStayReservationStatus(row.id, status, adminNote, forceCancel);
+                  }}
+                >
+                  <div className="text-xs uppercase tracking-[0.12em] text-black/50">Pilotage reservation</div>
+                  <div className="mt-2 rounded-xl border border-black/10 bg-white/80 p-2 text-xs text-black/70">
+                    <div className="font-semibold text-[rgb(var(--navy))]">Resume execution</div>
+                    <div className="mt-1">Creation: {fmtDateTime(row.created_at)}</div>
+                    <div>Derniere MAJ: {fmtDateTime(row.updated_at)}</div>
+                    <div>Code reservation: {reservationCode}</div>
+                    <div>{holdText}</div>
+                  </div>
+                  <div className="mt-2 grid grid-cols-3 gap-1.5">
+                    <button type="submit" name="quick_status" value="confirmed" className="h-9 rounded-lg bg-emerald-600 px-2 text-[11px] font-semibold text-white hover:opacity-95">Confirmer</button>
+                    <button type="submit" name="quick_status" value="cancelled" className="h-9 rounded-lg bg-rose-600 px-2 text-[11px] font-semibold text-white hover:opacity-95">Annuler</button>
+                    <button type="submit" name="quick_status" value="closed" className="h-9 rounded-lg bg-slate-700 px-2 text-[11px] font-semibold text-white hover:opacity-95">Clore</button>
+                  </div>
+
+                  <div className="mt-3 text-[11px] font-medium text-black/55">Changer le statut manuellement</div>
+                  <AppDropdown
+                    name="status"
+                    defaultValue={row.status ?? "new"}
+                    className="mt-1"
+                    triggerClassName="h-10"
+                    options={STATUS.map((s) => ({ value: s, label: s }))}
+                  />
+                  <label className="mt-2 inline-flex items-center gap-2 text-[11px] text-black/70">
+                    <input type="checkbox" name="force_cancel" value="1" className="rounded border-black/20" />
+                    Forcer annulation (ignore cutoff)
+                  </label>
+                  <textarea
+                    name="admin_note"
+                    defaultValue={row.admin_note ?? ""}
+                    placeholder="Note interne (motif, relance, details client)"
+                    className="mt-2 min-h-[110px] w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-xs text-black/75 outline-none focus:border-[rgb(var(--navy))]/30"
+                  />
+                  <button className="mt-2 h-10 w-full rounded-xl bg-[rgb(var(--navy))] px-3 text-xs font-semibold text-white hover:opacity-95">
+                    Enregistrer les modifications
+                  </button>
+                </form>
+              </div>
+            </article>
+          );
+        })}
 
         {filteredRows.length === 0 && (
           <div className="rounded-2xl border border-black/10 bg-white/75 p-6 text-sm text-black/60">
@@ -330,6 +562,15 @@ function StatCard({
         {label}
       </div>
       <div className="mt-2 text-2xl font-extrabold text-[rgb(var(--navy))]">{value}</div>
+    </div>
+  );
+}
+
+function OverviewItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-black/10 bg-white/80 p-2.5">
+      <div className="text-[10px] uppercase tracking-[0.12em] text-black/45">{label}</div>
+      <div className="mt-1 text-xs font-semibold leading-5 text-slate-800">{value}</div>
     </div>
   );
 }

@@ -113,6 +113,12 @@ export default function PropertyCard({
     () => formatPublishedAgo(property.createdAt, nowTs),
     [property.createdAt, nowTs]
   );
+  const isReservedNow = Boolean(property.isReservedNow);
+  const availabilityLabel = isReservedNow
+    ? property.reservedUntil
+      ? `Reserve jusqu'au ${property.reservedUntil}`
+      : "Reserve"
+    : "Disponible";
 
   return (
     <Link
@@ -174,8 +180,12 @@ export default function PropertyCard({
                 Parking
               </span>
             ) : null}
-            <span className="hidden rounded-full bg-emerald-500/90 px-3 py-1 text-xs font-semibold text-white shadow-sm sm:inline-flex">
-              Disponible
+            <span
+              className={`hidden rounded-full px-3 py-1 text-xs font-semibold text-white shadow-sm sm:inline-flex ${
+                isReservedNow ? "bg-rose-500/90" : "bg-emerald-500/90"
+              }`}
+            >
+              {availabilityLabel}
             </span>
           </div>
 

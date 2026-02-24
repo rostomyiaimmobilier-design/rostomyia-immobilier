@@ -242,6 +242,9 @@ export type PropertyItem = {
   baths: number;
   area: number;
   createdAt?: string;
+  isReservedNow?: boolean;
+  reservedUntil?: string | null;
+  nextAvailableCheckIn?: string | null;
   images: string[];
   amenities?: AmenityKey[];
 };
