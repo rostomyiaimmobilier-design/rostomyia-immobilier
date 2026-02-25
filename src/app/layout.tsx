@@ -11,7 +11,7 @@ import {
 import { cookies } from "next/headers";
 import "./globals.css";
 
-import { LanguageProvider } from "@/components/LanguageProvider";
+import LanguageProvider from "@/components/LanguageProvider";
 import { LANG_COOKIE_KEY, LEGACY_LANG_COOKIE_KEY, langToDir, normalizeLang } from "@/lib/i18n";
 
 

@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { hasAdminAccess } from "@/lib/admin-auth";
+import { hasAdminWriteAccess } from "@/lib/admin-auth";
+import { notifyAdminEvent } from "@/lib/admin-notifications";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getPublicSupabaseEnv } from "@/lib/supabase/env";
@@ -11,7 +12,7 @@ import { getPublicSupabaseEnv } from "@/lib/supabase/env";
 const USERS_PATH = "/admin/protected/users";
 const AGENCIES_PATH = "/admin/protected/agencies";
 
-type UserRole = "super_admin" | "admin" | "user" | "agency";
+type UserRole = "super_admin" | "admin" | "admin_read_only" | "user" | "agency";
 
 type AuthUserLike = {
   id: string;
@@ -58,6 +59,15 @@ function normalizeText(value: unknown) {
   return String(value ?? "").trim();
 }
 
+async function notifyAdminSafely(input: Parameters<typeof notifyAdminEvent>[0]) {
+  try {
+    await notifyAdminEvent(input);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "unknown_notification_error";
+    console.error("[users.actions] admin notification failed:", reason);
+  }
+}
+
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
@@ -65,6 +75,7 @@ function isValidEmail(email: string) {
 function normalizeRole(value: unknown): UserRole {
   const role = String(value ?? "").trim().toLowerCase();
   if (role === "super_admin") return "super_admin";
+  if (role === "admin_read_only") return "admin_read_only";
   if (role === "admin") return "admin";
   if (role === "agency") return "agency";
   return "user";
@@ -73,11 +84,6 @@ function normalizeRole(value: unknown): UserRole {
 function readRole(user: AuthUserLike): UserRole {
   const userMeta = (user.user_metadata ?? {}) as Record<string, unknown>;
   const appMeta = (user.app_metadata ?? {}) as Record<string, unknown>;
-
-  const accountType = String(userMeta.account_type ?? "").trim().toLowerCase();
-  if (accountType === "agency") return "agency";
-  if (accountType === "super_admin") return "super_admin";
-  if (accountType === "admin") return "admin";
 
   const roleCandidates = [
     userMeta.role,
@@ -89,16 +95,23 @@ function readRole(user: AuthUserLike): UserRole {
     const role = String(candidate ?? "").trim().toLowerCase();
     if (role === "agency") return "agency";
     if (role === "super_admin") return "super_admin";
+    if (role === "admin_read_only") return "admin_read_only";
     if (role === "admin") return "admin";
     if (role === "user") return "user";
   }
+
+  const accountType = String(userMeta.account_type ?? "").trim().toLowerCase();
+  if (accountType === "agency") return "agency";
+  if (accountType === "super_admin") return "super_admin";
+  if (accountType === "admin_read_only") return "admin_read_only";
+  if (accountType === "admin") return "admin";
 
   if (isTruthy(userMeta.is_admin) || isTruthy(appMeta.is_admin)) return "admin";
   return "user";
 }
 
 function isPrivilegedRole(role: UserRole) {
-  return role === "admin" || role === "super_admin";
+  return role === "admin" || role === "admin_read_only" || role === "super_admin";
 }
 
 function isCurrentlySuspended(user: Pick<AuthUserLike, "banned_until">) {
@@ -116,8 +129,8 @@ async function ensureAdmin() {
   } = await supabase.auth.getUser();
 
   if (!user) throw new Error("Unauthorized");
-  const isAdmin = await hasAdminAccess(supabase, user);
-  if (!isAdmin) throw new Error("Forbidden");
+  const canWrite = await hasAdminWriteAccess(supabase, user);
+  if (!canWrite) throw new Error("Permission refusee: admin en lecture seule.");
 
   return user;
 }
@@ -173,7 +186,8 @@ function buildNextMetadata(
   role: UserRole
 ) {
   const isSuperAdmin = role === "super_admin";
-  const isAdmin = role === "admin" || isSuperAdmin;
+  const isReadOnlyAdmin = role === "admin_read_only";
+  const isAdmin = role === "admin" || isReadOnlyAdmin || isSuperAdmin;
   const isAgency = role === "agency";
 
   const nextUserMeta: Record<string, unknown> = {
@@ -267,6 +281,21 @@ export async function createManagedUser(formData: FormData) {
       email: created.email ?? email,
       isAdmin,
     });
+    await notifyAdminSafely({
+      eventType: "managed_user_created",
+      title: "Nouvel utilisateur cree",
+      body: `${created.email ?? email} | role: ${role}`,
+      href: USERS_PATH,
+      iconKey: "check-circle",
+      entityTable: "auth.users",
+      entityId: created.id,
+      metadata: {
+        user_id: created.id,
+        email: created.email ?? email,
+        role,
+      },
+      dedupeSeconds: 8,
+    });
 
     let successMessage = "Utilisateur cree. Confirmation email requise avant connexion.";
     if (role === "user") {
@@ -317,6 +346,21 @@ export async function updateManagedUserRole(formData: FormData) {
       userId,
       email: target.email ?? null,
       isAdmin,
+    });
+    await notifyAdminSafely({
+      eventType: "managed_user_role_updated",
+      title: "Role utilisateur mis a jour",
+      body: `${target.email ?? userId} | role: ${role}`,
+      href: USERS_PATH,
+      iconKey: "list-checks",
+      entityTable: "auth.users",
+      entityId: userId,
+      metadata: {
+        user_id: userId,
+        email: target.email ?? null,
+        role,
+      },
+      dedupeSeconds: 8,
     });
 
     revalidatePath(USERS_PATH);
@@ -372,6 +416,21 @@ export async function suspendManagedUser(formData: FormData) {
       ban_duration: "876000h",
     });
     if (suspendError) throw new Error(suspendError.message);
+    await notifyAdminSafely({
+      eventType: "managed_user_suspended",
+      title: "Compte utilisateur suspendu",
+      body: `${target.email ?? userId}`,
+      href: USERS_PATH,
+      iconKey: "alert-circle",
+      entityTable: "auth.users",
+      entityId: userId,
+      metadata: {
+        user_id: userId,
+        email: target.email ?? null,
+        action: "suspend",
+      },
+      dedupeSeconds: 8,
+    });
 
     revalidatePath(USERS_PATH);
     revalidatePath("/admin/protected");
@@ -402,6 +461,21 @@ export async function unsuspendManagedUser(formData: FormData) {
       ban_duration: "none",
     });
     if (unsuspendError) throw new Error(unsuspendError.message);
+    await notifyAdminSafely({
+      eventType: "managed_user_unsuspended",
+      title: "Compte utilisateur reactive",
+      body: `${target.email ?? userId}`,
+      href: USERS_PATH,
+      iconKey: "check-circle",
+      entityTable: "auth.users",
+      entityId: userId,
+      metadata: {
+        user_id: userId,
+        email: target.email ?? null,
+        action: "unsuspend",
+      },
+      dedupeSeconds: 8,
+    });
 
     revalidatePath(USERS_PATH);
     revalidatePath("/admin/protected");

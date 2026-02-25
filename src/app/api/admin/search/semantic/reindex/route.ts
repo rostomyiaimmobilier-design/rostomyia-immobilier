@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { hasAdminAccess } from "@/lib/admin-auth";
+import { hasAdminWriteAccess } from "@/lib/admin-auth";
 import { isCronSecretValid } from "@/lib/cron-auth";
 import { upsertPropertySemanticIndex } from "@/lib/semantic-search";
 
@@ -33,8 +33,8 @@ export async function POST(request: Request) {
   }
 
   if (user) {
-    const isAdmin = await hasAdminAccess(supabase, user);
-    if (!isAdmin && !hasSecretAccess) {
+    const canWrite = await hasAdminWriteAccess(supabase, user);
+    if (!canWrite && !hasSecretAccess) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
   }

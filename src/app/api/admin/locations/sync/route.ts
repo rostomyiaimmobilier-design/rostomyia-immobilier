@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { communes as dzCommunes, dairas as dzDairas, wilayas as dzWilayas } from "algeria-locations";
-import { hasAdminAccess } from "@/lib/admin-auth";
+import { hasAdminWriteAccess } from "@/lib/admin-auth";
 import { DEFAULT_ORAN_QUARTIERS } from "@/lib/oran-locations";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -75,8 +75,8 @@ async function ensureAdminOrError() {
     return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
 
-  const isAdmin = await hasAdminAccess(supabase, user);
-  if (!isAdmin) {
+  const canWrite = await hasAdminWriteAccess(supabase, user);
+  if (!canWrite) {
     return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
   }
 

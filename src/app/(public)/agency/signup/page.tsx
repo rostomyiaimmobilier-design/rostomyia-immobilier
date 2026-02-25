@@ -1,12 +1,37 @@
 ﻿"use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, CheckCircle2, KeyRound, MapPin, Sparkles, UserPlus, UserRound } from "lucide-react";
+import {
+  Building2,
+  CalendarDays,
+  CheckCircle2,
+  ChevronDown,
+  Globe2,
+  ImagePlus,
+  KeyRound,
+  LockKeyhole,
+  Mail,
+  MapPin,
+  Phone,
+  Sparkles,
+  Trash2,
+  UserPlus,
+  UserRound,
+  X,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useLang } from "@/components/LanguageProvider";
+import { ORAN_COMMUNES } from "@/lib/oran-locations";
 import { toUiErrorMessage } from "@/lib/ui-errors";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type AgencySignupForm = {
   agencyName: string;
@@ -16,13 +41,26 @@ type AgencySignupForm = {
   city: string;
   address: string;
   website: string;
-  serviceAreas: string;
+  serviceAreas: string[];
   yearsExperience: string;
   email: string;
   password: string;
   confirmPassword: string;
   acceptTerms: boolean;
 };
+
+type UploadedAgencyLogo = {
+  path: string;
+  url: string;
+};
+
+type SignupUserLike = {
+  identities?: Array<unknown> | null;
+  user_metadata?: Record<string, unknown> | null;
+} | null;
+
+const MAX_LOGO_MB = 6;
+const MAX_LOGO_BYTES = MAX_LOGO_MB * 1024 * 1024;
 
 const INITIAL_FORM: AgencySignupForm = {
   agencyName: "",
@@ -32,7 +70,7 @@ const INITIAL_FORM: AgencySignupForm = {
   city: "",
   address: "",
   website: "",
-  serviceAreas: "",
+  serviceAreas: [],
   yearsExperience: "",
   email: "",
   password: "",
@@ -52,13 +90,25 @@ const copy = {
     sectionAccount: "Acces compte",
     agencyName: "Nom de l'agence *",
     managerName: "Nom du responsable *",
+    logoLabel: "Logo agence",
+    logoHint: "PNG/JPG/WEBP - max 6 MB",
+    logoPick: "Choisir le logo",
+    logoReplace: "Remplacer",
+    logoRemove: "Retirer",
+    logoTooLargeError: "Logo trop volumineux (max 6 MB).",
+    logoInvalidTypeError: "Format de logo invalide. Utilisez une image.",
+    logoUploadError: "Upload du logo impossible pour le moment.",
     phone: "Telephone principal *",
     whatsapp: "WhatsApp",
     city: "Ville *",
     address: "Adresse *",
     website: "Site web",
     serviceAreas: "Zones de couverture",
-    serviceAreasPlaceholder: "Oran, Bir El Djir, Es Senia",
+    serviceAreasPlaceholder: "Selectionner une ou plusieurs communes",
+    serviceAreasSelected: "Zones selectionnees",
+    serviceAreasEmpty: "Aucune zone selectionnee",
+    serviceAreasSearch: "Rechercher une commune...",
+    serviceAreasNoResults: "Aucun resultat",
     yearsExperience: "Annees d'experience",
     email: "Email de connexion *",
     password: "Mot de passe *",
@@ -101,13 +151,25 @@ const copy = {
     sectionAccount: "بيانات الدخول",
     agencyName: "اسم الوكالة *",
     managerName: "اسم المسؤول *",
+    logoLabel: "شعار الوكالة",
+    logoHint: "PNG/JPG/WEBP - الحد الاقصى 6 MB",
+    logoPick: "اختيار الشعار",
+    logoReplace: "استبدال",
+    logoRemove: "حذف",
+    logoTooLargeError: "حجم الشعار كبير جدا (الحد الاقصى 6 MB).",
+    logoInvalidTypeError: "صيغة الشعار غير صالحة. استخدم صورة.",
+    logoUploadError: "تعذر رفع الشعار حاليا.",
     phone: "الهاتف الرئيسي *",
     whatsapp: "واتساب",
     city: "المدينة *",
     address: "العنوان *",
     website: "الموقع الإلكتروني",
     serviceAreas: "مناطق التغطية",
-    serviceAreasPlaceholder: "وهران، بئر الجير، السانية",
+    serviceAreasPlaceholder: "اختر بلدية أو أكثر",
+    serviceAreasSelected: "المناطق المحددة",
+    serviceAreasEmpty: "لا توجد مناطق محددة",
+    serviceAreasSearch: "ابحث عن بلدية...",
+    serviceAreasNoResults: "لا توجد نتائج",
     yearsExperience: "سنوات الخبرة",
     email: "بريد تسجيل الدخول *",
     password: "كلمة المرور *",
@@ -149,11 +211,36 @@ function toOptionalInt(raw: string) {
   return Math.max(0, Math.trunc(n));
 }
 
-function normalizeServiceAreas(raw: string) {
-  return raw
-    .split(",")
-    .map((x) => x.trim())
-    .filter(Boolean);
+function normalizeServiceAreas(raw: string[]) {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of raw) {
+    const clean = String(item ?? "").trim();
+    if (!clean) continue;
+    const key = clean.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(clean);
+  }
+  return out;
+}
+
+type PremiumInputProps = InputHTMLAttributes<HTMLInputElement> & {
+  icon: ReactNode;
+};
+
+function PremiumInput({ icon, className = "", ...props }: PremiumInputProps) {
+  return (
+    <div className="group relative">
+      <span className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-black/40 transition group-focus-within:text-[rgb(var(--navy))]">
+        {icon}
+      </span>
+      <input
+        {...props}
+        className={`h-11 w-full rounded-2xl border border-[rgb(var(--navy))]/14 bg-[linear-gradient(180deg,#fff,rgba(248,250,252,0.95))] px-3.5 pl-10 text-[13px] font-medium text-black/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.86)] outline-none transition placeholder:text-black/35 focus:border-[rgb(var(--navy))]/45 focus:ring-4 focus:ring-[rgb(var(--gold))]/16 ${className}`}
+      />
+    </div>
+  );
 }
 
 export default function AgencySignupPage() {
@@ -166,9 +253,98 @@ export default function AgencySignupPage() {
   const [form, setForm] = useState<AgencySignupForm>(INITIAL_FORM);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+  const [serviceAreasSearch, setServiceAreasSearch] = useState("");
+
+  useEffect(() => {
+    return () => {
+      if (logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl);
+    };
+  }, [logoPreviewUrl]);
 
   function updateField<K extends keyof AgencySignupForm>(key: K, value: AgencySignupForm[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function toggleServiceArea(selected: string) {
+    setForm((prev) => {
+      const exists = prev.serviceAreas.some((item) => item.toLowerCase() === selected.toLowerCase());
+      if (exists) {
+        return {
+          ...prev,
+          serviceAreas: prev.serviceAreas.filter((item) => item.toLowerCase() !== selected.toLowerCase()),
+        };
+      }
+      return { ...prev, serviceAreas: [...prev.serviceAreas, selected] };
+    });
+  }
+
+  function removeServiceArea(value: string) {
+    setForm((prev) => ({
+      ...prev,
+      serviceAreas: prev.serviceAreas.filter((item) => item !== value),
+    }));
+  }
+
+  const filteredCommunes = useMemo(() => {
+    const q = serviceAreasSearch.trim().toLowerCase();
+    if (!q) return ORAN_COMMUNES;
+    return ORAN_COMMUNES.filter((commune) => commune.toLowerCase().includes(q));
+  }, [serviceAreasSearch]);
+
+  function clearLogoSelection() {
+    if (logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl);
+    setLogoFile(null);
+    setLogoPreviewUrl(null);
+  }
+
+  function handleLogoChange(file: File | null) {
+    if (!file) {
+      clearLogoSelection();
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setErrorMsg(t.logoInvalidTypeError);
+      return;
+    }
+
+    if (file.size > MAX_LOGO_BYTES) {
+      setErrorMsg(t.logoTooLargeError);
+      return;
+    }
+
+    if (logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl);
+    const objectUrl = URL.createObjectURL(file);
+    setLogoFile(file);
+    setLogoPreviewUrl(objectUrl);
+    setErrorMsg(null);
+  }
+
+  async function uploadAgencyLogo(): Promise<UploadedAgencyLogo | null> {
+    if (!logoFile) return null;
+
+    const body = new FormData();
+    body.append("file", logoFile);
+
+    const response = await fetch("/api/agency/signup-logo", {
+      method: "POST",
+      body,
+    });
+
+    const payload = (await response.json().catch(() => null)) as
+      | { error?: string; path?: string; url?: string }
+      | null;
+
+    if (!response.ok || !payload?.path || !payload?.url) {
+      throw new Error(payload?.error || t.logoUploadError);
+    }
+
+    return {
+      path: payload.path,
+      url: payload.url,
+    };
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -220,6 +396,17 @@ export default function AgencySignupPage() {
     const yearsExperience = toOptionalInt(form.yearsExperience);
     const serviceAreas = normalizeServiceAreas(form.serviceAreas);
     const serviceAreasText = serviceAreas.join(", ");
+    let uploadedLogo: UploadedAgencyLogo | null = null;
+
+    if (logoFile) {
+      try {
+        uploadedLogo = await uploadAgencyLogo();
+      } catch (err: unknown) {
+        setLoading(false);
+        setErrorMsg(err instanceof Error ? err.message : t.logoUploadError);
+        return;
+      }
+    }
 
     const normalizedEmail = form.email.trim().toLowerCase();
 
@@ -249,6 +436,10 @@ export default function AgencySignupPage() {
           agency_website: form.website.trim() || null,
           agency_service_areas: serviceAreasText || null,
           agency_years_experience: yearsExperience,
+          agency_logo_path: uploadedLogo?.path ?? null,
+          agency_logo_url: uploadedLogo?.url ?? null,
+          logo_url: uploadedLogo?.url ?? null,
+          avatar_url: uploadedLogo?.url ?? null,
           agency_terms_accepted_at: new Date().toISOString(),
           profile_completed_at: new Date().toISOString(),
         },
@@ -261,15 +452,26 @@ export default function AgencySignupPage() {
       return;
     }
 
+    const signedUpUser = (data.user ?? null) as SignupUserLike;
+    const accountType = String(signedUpUser?.user_metadata?.account_type ?? "")
+      .trim()
+      .toLowerCase();
+    const notAgencyAccount = accountType.length > 0 && accountType !== "agency";
+    if (notAgencyAccount) {
+      setLoading(false);
+      setErrorMsg(t.duplicateEmailError);
+      return;
+    }
+
     if (data.session) {
       setLoading(false);
-      router.push("/agency/signup/success");
+      router.push(`/agency/signup/success?email=${encodeURIComponent(normalizedEmail)}`);
       router.refresh();
       return;
     }
 
     setLoading(false);
-    router.push("/agency/signup/success");
+    router.push(`/agency/signup/success?email=${encodeURIComponent(normalizedEmail)}`);
     router.refresh();
   }
 
@@ -314,25 +516,78 @@ export default function AgencySignupPage() {
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="space-y-3 text-sm">
                     <span className="mb-2 block font-medium text-black/70">{t.agencyName}</span>
-                    <input
+                    <PremiumInput
+                      icon={<Building2 size={15} />}
                       type="text"
                       value={form.agencyName}
                       onChange={(e) => updateField("agencyName", e.target.value)}
                       required
-                      className="h-11 w-full rounded-2xl border border-black/10 bg-white px-3.5 outline-none focus:border-[rgb(var(--navy))]/35"
                     />
                   </label>
 
                   <label className="space-y-3 text-sm">
                     <span className="mb-2 block font-medium text-black/70">{t.managerName}</span>
-                    <input
+                    <PremiumInput
+                      icon={<UserRound size={15} />}
                       type="text"
                       value={form.managerName}
                       onChange={(e) => updateField("managerName", e.target.value)}
                       required
-                      className="h-11 w-full rounded-2xl border border-black/10 bg-white px-3.5 outline-none focus:border-[rgb(var(--navy))]/35"
                     />
                   </label>
+
+                  <div className="space-y-3 text-sm md:col-span-2">
+                    <span className="mb-2 block font-medium text-black/70">{t.logoLabel}</span>
+                    <div className="rounded-2xl border border-dashed border-black/15 bg-white/80 p-3.5">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="relative h-16 w-16 overflow-hidden rounded-xl border border-black/10 bg-slate-50">
+                          {logoPreviewUrl ? (
+                            <Image
+                              src={logoPreviewUrl}
+                              alt="Agency logo preview"
+                              fill
+                              sizes="64px"
+                              className="object-cover"
+                              unoptimized
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-black/35">
+                              <ImagePlus size={20} />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label
+                            htmlFor="agency-logo-input"
+                            className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl border border-black/10 bg-white px-3.5 text-sm font-medium text-[rgb(var(--navy))] transition hover:bg-black/5"
+                          >
+                            <ImagePlus size={14} />
+                            {logoFile ? t.logoReplace : t.logoPick}
+                          </label>
+                          {logoFile ? (
+                            <button
+                              type="button"
+                              onClick={clearLogoSelection}
+                              className="inline-flex h-10 items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3.5 text-sm font-medium text-red-700 transition hover:bg-red-100"
+                            >
+                              <Trash2 size={14} />
+                              {t.logoRemove}
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <p className="mt-2 text-xs text-black/50">{t.logoHint}</p>
+                      <input
+                        id="agency-logo-input"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleLogoChange(e.target.files?.[0] ?? null)}
+                      />
+                    </div>
+                  </div>
                 </div>
               </section>
 
@@ -344,77 +599,147 @@ export default function AgencySignupPage() {
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="space-y-3 text-sm">
                     <span className="mb-2 block font-medium text-black/70">{t.phone}</span>
-                    <input
+                    <PremiumInput
+                      icon={<Phone size={15} />}
                       type="tel"
                       value={form.phone}
                       onChange={(e) => updateField("phone", e.target.value)}
                       required
-                      className="h-11 w-full rounded-2xl border border-black/10 bg-white px-3.5 outline-none focus:border-[rgb(var(--navy))]/35"
                     />
                   </label>
 
                   <label className="space-y-3 text-sm">
                     <span className="mb-2 block font-medium text-black/70">{t.whatsapp}</span>
-                    <input
+                    <PremiumInput
+                      icon={<Phone size={15} />}
                       type="tel"
                       value={form.whatsapp}
                       onChange={(e) => updateField("whatsapp", e.target.value)}
-                      className="h-11 w-full rounded-2xl border border-black/10 bg-white px-3.5 outline-none focus:border-[rgb(var(--navy))]/35"
                     />
                   </label>
 
                   <label className="space-y-3 text-sm">
                     <span className="mb-2 block font-medium text-black/70">{t.city}</span>
-                    <input
+                    <PremiumInput
+                      icon={<MapPin size={15} />}
                       type="text"
                       value={form.city}
                       onChange={(e) => updateField("city", e.target.value)}
                       required
-                      className="h-11 w-full rounded-2xl border border-black/10 bg-white px-3.5 outline-none focus:border-[rgb(var(--navy))]/35"
                     />
                   </label>
 
                   <label className="space-y-3 text-sm">
                     <span className="mb-2 block font-medium text-black/70">{t.address}</span>
-                    <input
+                    <PremiumInput
+                      icon={<MapPin size={15} />}
                       type="text"
                       value={form.address}
                       onChange={(e) => updateField("address", e.target.value)}
                       required
-                      className="h-11 w-full rounded-2xl border border-black/10 bg-white px-3.5 outline-none focus:border-[rgb(var(--navy))]/35"
                     />
                   </label>
 
                   <label className="space-y-3 text-sm">
                     <span className="mb-2 block font-medium text-black/70">{t.website}</span>
-                    <input
+                    <PremiumInput
+                      icon={<Globe2 size={15} />}
                       type="text"
                       value={form.website}
                       onChange={(e) => updateField("website", e.target.value)}
-                      className="h-11 w-full rounded-2xl border border-black/10 bg-white px-3.5 outline-none focus:border-[rgb(var(--navy))]/35"
                     />
                   </label>
 
                   <label className="space-y-3 text-sm">
                     <span className="mb-2 block font-medium text-black/70">{t.yearsExperience}</span>
-                    <input
+                    <PremiumInput
+                      icon={<CalendarDays size={15} />}
                       type="number"
                       min={0}
                       value={form.yearsExperience}
                       onChange={(e) => updateField("yearsExperience", e.target.value)}
-                      className="h-11 w-full rounded-2xl border border-black/10 bg-white px-3.5 outline-none focus:border-[rgb(var(--navy))]/35"
+                      className="[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     />
                   </label>
 
                   <label className="space-y-3 text-sm md:col-span-2">
                     <span className="mb-2 block font-medium text-black/70">{t.serviceAreas}</span>
-                    <input
-                      type="text"
-                      value={form.serviceAreas}
-                      onChange={(e) => updateField("serviceAreas", e.target.value)}
-                      placeholder={t.serviceAreasPlaceholder}
-                      className="h-11 w-full rounded-2xl border border-black/10 bg-white px-3.5 outline-none focus:border-[rgb(var(--navy))]/35"
-                    />
+                    <div className="space-y-2">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            className="inline-flex h-11 w-full items-center justify-between rounded-2xl border border-[rgb(var(--navy))]/14 bg-[linear-gradient(180deg,#fff,rgba(248,250,252,0.95))] px-3.5 text-left text-sm font-medium text-[rgb(var(--navy))] shadow-[inset_0_1px_0_rgba(255,255,255,0.86)] outline-none transition hover:border-[rgb(var(--navy))]/35 focus-visible:border-[rgb(var(--navy))]/45 focus-visible:ring-4 focus-visible:ring-[rgb(var(--gold))]/16"
+                          >
+                            <span className="truncate">
+                              {form.serviceAreas.length > 0
+                                ? `${form.serviceAreas.length} ${isArabic ? "محددة" : "selectionnee(s)"}`
+                                : t.serviceAreasPlaceholder}
+                            </span>
+                            <ChevronDown size={16} className="text-black/50" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)] rounded-xl border border-black/10 bg-white p-1">
+                          <div className="px-1 pb-1">
+                            <input
+                              value={serviceAreasSearch}
+                              onChange={(event) => setServiceAreasSearch(event.target.value)}
+                              placeholder={t.serviceAreasSearch}
+                              className="h-9 w-full rounded-lg border border-[rgb(var(--navy))]/14 bg-[linear-gradient(180deg,#fff,rgba(248,250,252,0.95))] px-2.5 text-sm font-medium text-[rgb(var(--navy))] outline-none transition focus:border-[rgb(var(--navy))]/45 focus:ring-2 focus:ring-[rgb(var(--gold))]/16"
+                              onKeyDown={(event) => event.stopPropagation()}
+                            />
+                          </div>
+                          {filteredCommunes.length > 0 ? (
+                            filteredCommunes.map((commune) => {
+                              const checked = form.serviceAreas.some(
+                                (selected) => selected.toLowerCase() === commune.toLowerCase()
+                              );
+                              return (
+                                <DropdownMenuCheckboxItem
+                                  key={commune}
+                                  checked={checked}
+                                  onCheckedChange={() => toggleServiceArea(commune)}
+                                  onSelect={(event) => event.preventDefault()}
+                                  className="rounded-lg px-3 py-2 text-sm text-[rgb(var(--navy))] data-[highlighted]:bg-[rgb(var(--navy))]/7"
+                                >
+                                  {commune}
+                                </DropdownMenuCheckboxItem>
+                              );
+                            })
+                          ) : (
+                            <div className="px-3 py-2 text-sm text-black/50">{t.serviceAreasNoResults}</div>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+
+                      <div className="rounded-2xl border border-black/10 bg-white px-3 py-2.5">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-black/55">
+                          {t.serviceAreasSelected}
+                        </div>
+                        {form.serviceAreas.length > 0 ? (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {form.serviceAreas.map((area) => (
+                              <span
+                                key={area}
+                                className="inline-flex items-center gap-1.5 rounded-full border border-[rgb(var(--navy))]/15 bg-[rgb(var(--navy))]/6 px-2.5 py-1 text-xs font-semibold text-[rgb(var(--navy))]"
+                              >
+                                {area}
+                                <button
+                                  type="button"
+                                  onClick={() => removeServiceArea(area)}
+                                  className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-black/10 bg-white/80 text-black/55 hover:bg-white"
+                                  aria-label={`${t.logoRemove}: ${area}`}
+                                >
+                                  <X size={10} />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="mt-1 text-xs text-black/50">{t.serviceAreasEmpty}</div>
+                        )}
+                      </div>
+                    </div>
                   </label>
                 </div>
               </section>
@@ -427,34 +752,34 @@ export default function AgencySignupPage() {
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="space-y-3 text-sm md:col-span-2">
                     <span className="mb-2 block font-medium text-black/70">{t.email}</span>
-                    <input
+                    <PremiumInput
+                      icon={<Mail size={15} />}
                       type="email"
                       value={form.email}
                       onChange={(e) => updateField("email", e.target.value)}
                       required
-                      className="h-11 w-full rounded-2xl border border-black/10 bg-white px-3.5 outline-none focus:border-[rgb(var(--navy))]/35"
                     />
                   </label>
 
                   <label className="space-y-3 text-sm">
                     <span className="mb-2 block font-medium text-black/70">{t.password}</span>
-                    <input
+                    <PremiumInput
+                      icon={<LockKeyhole size={15} />}
                       type="password"
                       value={form.password}
                       onChange={(e) => updateField("password", e.target.value)}
                       required
-                      className="h-11 w-full rounded-2xl border border-black/10 bg-white px-3.5 outline-none focus:border-[rgb(var(--navy))]/35"
                     />
                   </label>
 
                   <label className="space-y-3 text-sm">
                     <span className="mb-2 block font-medium text-black/70">{t.confirmPassword}</span>
-                    <input
+                    <PremiumInput
+                      icon={<LockKeyhole size={15} />}
                       type="password"
                       value={form.confirmPassword}
                       onChange={(e) => updateField("confirmPassword", e.target.value)}
                       required
-                      className="h-11 w-full rounded-2xl border border-black/10 bg-white px-3.5 outline-none focus:border-[rgb(var(--navy))]/35"
                     />
                   </label>
                 </div>

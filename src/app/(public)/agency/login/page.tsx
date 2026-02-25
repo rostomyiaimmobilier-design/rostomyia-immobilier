@@ -1,9 +1,9 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, Building2, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowRight, Building2, LockKeyhole, Mail, ShieldCheck, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useLang } from "@/components/LanguageProvider";
 import { toUiErrorMessage } from "@/lib/ui-errors";
@@ -54,6 +54,48 @@ const copy = {
   },
 } as const;
 
+type PremiumInputProps = InputHTMLAttributes<HTMLInputElement> & {
+  icon: ReactNode;
+};
+
+function PremiumInput({ icon, className = "", ...props }: PremiumInputProps) {
+  return (
+    <div className="group relative">
+      <span className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-black/40 transition group-focus-within:text-[rgb(var(--navy))]">
+        {icon}
+      </span>
+      <input
+        {...props}
+        className={`h-12 w-full rounded-2xl border border-[rgb(var(--navy))]/14 bg-[linear-gradient(180deg,#fff,rgba(248,250,252,0.95))] px-3.5 pl-10 text-sm font-medium text-black/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.86)] outline-none transition placeholder:text-black/35 focus:border-[rgb(var(--navy))]/45 focus:ring-4 focus:ring-[rgb(var(--gold))]/16 ${className}`}
+      />
+    </div>
+  );
+}
+
+function detectAccountType(
+  user: { user_metadata?: Record<string, unknown> | null; app_metadata?: Record<string, unknown> | null } | null
+) {
+  const userMeta = (user?.user_metadata ?? {}) as Record<string, unknown>;
+  const appMeta = (user?.app_metadata ?? {}) as Record<string, unknown>;
+  const candidates = [
+    userMeta.account_type,
+    userMeta.role,
+    appMeta.account_type,
+    appMeta.role,
+    Array.isArray(appMeta.roles) ? appMeta.roles[0] : null,
+  ];
+  for (const candidate of candidates) {
+    const role = String(candidate ?? "").trim().toLowerCase();
+    if (role === "agency" || role === "admin" || role === "admin_read_only" || role === "super_admin") {
+      return role;
+    }
+  }
+  if (String(userMeta.agency_status ?? "").trim() || String(userMeta.agency_name ?? "").trim()) {
+    return "agency";
+  }
+  return "user";
+}
+
 export default function AgencyLoginPage() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
@@ -86,9 +128,11 @@ export default function AgencyLoginPage() {
       return;
     }
 
-    const meta = (data.user?.user_metadata as { account_type?: string; agency_status?: string } | undefined) ?? {};
-    const accountType = meta.account_type;
-    const status = (meta.agency_status ?? "pending").toLowerCase();
+    const meta = (data.user?.user_metadata as { agency_status?: string } | undefined) ?? {};
+    const accountType = detectAccountType(
+      (data.user ?? null) as { user_metadata?: Record<string, unknown> | null; app_metadata?: Record<string, unknown> | null } | null
+    );
+    const status = String(meta.agency_status ?? "pending").toLowerCase();
     if (accountType !== "agency") {
       await supabase.auth.signOut();
       setLoading(false);
@@ -96,10 +140,17 @@ export default function AgencyLoginPage() {
       return;
     }
 
-    if (status !== "active") {
+    if (status === "suspended") {
       await supabase.auth.signOut();
       setLoading(false);
-      setErrorMsg(status === "suspended" ? t.suspendedError : t.pendingError);
+      setErrorMsg(t.suspendedError);
+      return;
+    }
+
+    if (status !== "active") {
+      setLoading(false);
+      router.push("/agency/onboarding?status=pending");
+      router.refresh();
       return;
     }
 
@@ -138,23 +189,23 @@ export default function AgencyLoginPage() {
               <div className="space-y-4">
                 <label className="grid gap-1.5 text-sm">
                   <span className="block font-medium text-black/70">{t.email}</span>
-                  <input
+                  <PremiumInput
+                    icon={<Mail size={15} />}
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
-                    className="h-12 w-full rounded-2xl border border-black/10 bg-white px-3.5 outline-none transition focus:border-[rgb(var(--navy))]/35"
                   />
                 </label>
 
                 <label className="grid gap-1.5 text-sm">
                   <span className="block font-medium text-black/70">{t.password}</span>
-                  <input
+                  <PremiumInput
+                    icon={<LockKeyhole size={15} />}
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    className="h-12 w-full rounded-2xl border border-black/10 bg-white px-3.5 outline-none transition focus:border-[rgb(var(--navy))]/35"
                   />
                 </label>
               </div>

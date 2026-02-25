@@ -5,12 +5,17 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { propertyImageUrl } from "@/lib/property-image-url";
 import {
+  Archive,
   ArrowUpRight,
+  CheckCircle2,
   BellRing,
   Bookmark,
+  CalendarDays,
   CalendarClock,
   Clock3,
   Heart,
+  Hotel,
+  ImageIcon,
   LogOut,
   Mail,
   MapPin,
@@ -20,6 +25,7 @@ import {
   Sparkles,
   Trash2,
   UserRound,
+  XCircle,
 } from "lucide-react";
 
 type AccountUser = {
@@ -58,6 +64,21 @@ type FavoriteItem = {
   coverImage: string | null;
 };
 
+type ReservationHistoryItem = {
+  id: string;
+  status: string | null;
+  property_ref: string | null;
+  property_title: string | null;
+  property_location: string | null;
+  property_price: string | null;
+  check_in_date: string | null;
+  check_out_date: string | null;
+  nights: number | null;
+  reservation_option_label: string | null;
+  created_at: string | null;
+  coverImage: string | null;
+};
+
 type PhoneModalStep = "phone" | "otp";
 
 const SAVED_SEARCHES_KEY = "rostomyia_saved_searches";
@@ -82,6 +103,13 @@ function formatDate(value: string | null | undefined) {
   const ts = new Date(value);
   if (Number.isNaN(ts.getTime())) return "-";
   return ts.toLocaleString("fr-FR");
+}
+
+function formatDateOnly(value: string | null | undefined) {
+  if (!value) return "-";
+  const ts = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(ts.getTime())) return value;
+  return ts.toLocaleDateString("fr-FR");
 }
 
 function nonEmpty(value: unknown) {
@@ -109,6 +137,26 @@ function formatPriceWithCurrency(value: string | null) {
   const n = Number(digits);
   if (!Number.isFinite(n)) return `${trimmed} DZD`;
   return `${n.toLocaleString("fr-FR")} DZD`;
+}
+
+function reservationStatusLabel(status: string | null | undefined) {
+  const normalized = String(status ?? "new").trim().toLowerCase();
+  if (normalized === "hold") return "En attente";
+  if (normalized === "contacted") return "Contacte";
+  if (normalized === "confirmed") return "Confirme";
+  if (normalized === "cancelled") return "Annule";
+  if (normalized === "closed") return "Cloture";
+  return "Nouveau";
+}
+
+function reservationStatusClass(status: string | null | undefined) {
+  const normalized = String(status ?? "new").trim().toLowerCase();
+  if (normalized === "hold") return "border-violet-200 bg-violet-50 text-violet-700";
+  if (normalized === "contacted") return "border-sky-200 bg-sky-50 text-sky-700";
+  if (normalized === "confirmed") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (normalized === "cancelled") return "border-rose-200 bg-rose-50 text-rose-700";
+  if (normalized === "closed") return "border-slate-300 bg-slate-100 text-slate-700";
+  return "border-amber-200 bg-amber-50 text-amber-700";
 }
 
 function stableCoverImageUrl(value: unknown): string | null {
@@ -247,9 +295,44 @@ function normalizeFavorites(source: unknown[]): FavoriteItem[] {
   });
 }
 
+function normalizeReservationHistory(source: unknown[]): ReservationHistoryItem[] {
+  const rows: ReservationHistoryItem[] = [];
+  source.forEach((entry) => {
+    if (!entry || typeof entry !== "object") return;
+    const row = entry as Record<string, unknown>;
+    if (!nonEmpty(row.id)) return;
+    rows.push({
+      id: String(row.id),
+      status: nonEmpty(row.status) ? String(row.status) : null,
+      property_ref: nonEmpty(row.property_ref) ? String(row.property_ref) : null,
+      property_title: nonEmpty(row.property_title) ? String(row.property_title) : null,
+      property_location: nonEmpty(row.property_location) ? String(row.property_location) : null,
+      property_price: nonEmpty(row.property_price) ? String(row.property_price) : null,
+      check_in_date: nonEmpty(row.check_in_date) ? String(row.check_in_date) : null,
+      check_out_date: nonEmpty(row.check_out_date) ? String(row.check_out_date) : null,
+      nights: typeof row.nights === "number" ? row.nights : null,
+      reservation_option_label: nonEmpty(row.reservation_option_label)
+        ? String(row.reservation_option_label)
+        : null,
+      created_at: nonEmpty(row.created_at) ? String(row.created_at) : null,
+      coverImage: stableCoverImageUrl(
+        nonEmpty(row.cover_image)
+          ? String(row.cover_image)
+          : nonEmpty(row.coverImage)
+          ? String(row.coverImage)
+          : null
+      ),
+    });
+  });
+  return rows;
+}
+
 export default function AccountClient({ user }: { user: AccountUser }) {
   const [savedSearches, setSavedSearches] = useState<SavedSearchItem[]>([]);
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
+  const [reservationsHistory, setReservationsHistory] = useState<ReservationHistoryItem[]>([]);
+  const [reservationsLoading, setReservationsLoading] = useState(true);
+  const [reservationsError, setReservationsError] = useState<string | null>(null);
   const [favoritesStorageKey, setFavoritesStorageKey] = useState<string>(String(FAVORITES_KEYS[0]));
   const supabase = useMemo(() => createClient(), []);
   const profilePhone = useMemo(() => {
@@ -288,6 +371,99 @@ export default function AccountClient({ user }: { user: AccountUser }) {
     setFavoritesStorageKey(selectedKey);
     setFavorites(favoriteRows);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadReservationHistory() {
+      setReservationsLoading(true);
+      setReservationsError(null);
+      try {
+        const response = await fetch("/api/account/reservations", { method: "GET", cache: "no-store" });
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => ({}))) as { error?: string };
+          throw new Error(payload.error || "reservation_history_failed");
+        }
+        const payload = (await response.json()) as { reservations?: ReservationHistoryItem[] };
+        if (cancelled) return;
+        setReservationsHistory(
+          Array.isArray(payload.reservations) ? normalizeReservationHistory(payload.reservations) : []
+        );
+      } catch (error) {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : "Impossible de charger l'historique";
+        setReservationsError(message);
+      } finally {
+        if (!cancelled) setReservationsLoading(false);
+      }
+    }
+
+    loadReservationHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const missingRefs = reservationsHistory
+      .filter((item) => !item.coverImage && nonEmpty(item.property_ref))
+      .map((item) => String(item.property_ref));
+    if (missingRefs.length === 0) return;
+
+    let cancelled = false;
+    async function hydrateReservationCovers() {
+      const { data, error } = await supabase
+        .from("properties")
+        .select("ref, property_images(path, sort)")
+        .in("ref", missingRefs);
+
+      if (cancelled || error || !Array.isArray(data)) return;
+
+      const coverByRef = new Map<string, string>();
+      data.forEach((entry) => {
+        const row = entry as Record<string, unknown>;
+        if (!nonEmpty(row.ref)) return;
+
+        const imagesRaw = Array.isArray(row.property_images) ? row.property_images : [];
+        const sorted = imagesRaw
+          .map((img) => (img && typeof img === "object" ? (img as Record<string, unknown>) : null))
+          .filter(Boolean)
+          .sort((a, b) => {
+            const sa = typeof a?.sort === "number" ? a.sort : 0;
+            const sb = typeof b?.sort === "number" ? b.sort : 0;
+            return sa - sb;
+          });
+
+        const firstPath = sorted.find((img) => nonEmpty(img?.path))?.path ?? null;
+        if (!nonEmpty(firstPath)) return;
+
+        const cover = stableCoverImageUrl(
+          propertyImageUrl(String(firstPath), { width: 1200, quality: 76, format: "webp" })
+        );
+        if (!cover) return;
+        coverByRef.set(String(row.ref).toLowerCase(), cover);
+      });
+
+      if (coverByRef.size === 0) return;
+
+      setReservationsHistory((prev) => {
+        let changed = false;
+        const next = prev.map((item) => {
+          if (item.coverImage) return item;
+          if (!item.property_ref) return item;
+          const cover = coverByRef.get(String(item.property_ref).toLowerCase());
+          if (!cover) return item;
+          changed = true;
+          return { ...item, coverImage: cover };
+        });
+        return changed ? next : prev;
+      });
+    }
+
+    hydrateReservationCovers();
+    return () => {
+      cancelled = true;
+    };
+  }, [reservationsHistory, supabase]);
 
   useEffect(() => {
     setPhone(profilePhone);
@@ -597,6 +773,139 @@ export default function AccountClient({ user }: { user: AccountUser }) {
           </div>
         </section>
       </div>
+
+      <section className="mt-6 rounded-3xl border border-[rgb(var(--navy))]/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(248,250,253,0.9))] p-5 backdrop-blur">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="inline-flex items-center gap-2 text-sm font-semibold text-[rgb(var(--navy))]">
+              <Hotel size={16} />
+              Historique des reservations
+              <span className="rounded-full border border-[rgb(var(--navy))]/15 bg-[rgb(var(--navy))]/5 px-2 py-0.5 text-xs font-semibold text-[rgb(var(--navy))]">
+                {reservationsHistory.length}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-black/60">
+              Suivi de vos reservations court sejour avec statuts et periodes.
+            </p>
+          </div>
+        </div>
+
+        <div className="mb-4 h-px w-full bg-[linear-gradient(90deg,rgba(2,6,23,0.1),rgba(2,6,23,0.03))]" />
+
+        {reservationsLoading ? (
+          <div className="rounded-2xl border border-dashed border-black/15 bg-white/95 px-4 py-6 text-center">
+            <p className="text-sm text-black/60">Chargement de l&apos;historique...</p>
+          </div>
+        ) : reservationsError ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-700">
+            Impossible de charger l&apos;historique des reservations.
+          </div>
+        ) : reservationsHistory.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-black/15 bg-white/95 px-4 py-6 text-center">
+            <div className="mx-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/10 bg-black/[0.03] text-black/55">
+              <Hotel size={16} />
+            </div>
+            <p className="mt-2 text-sm text-black/60">Aucune reservation enregistree.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {reservationsHistory.map((item) => {
+              const normalizedStatus = String(item.status ?? "new").trim().toLowerCase();
+              const StatusIcon =
+                normalizedStatus === "confirmed"
+                  ? CheckCircle2
+                  : normalizedStatus === "cancelled"
+                  ? XCircle
+                  : normalizedStatus === "closed"
+                  ? Archive
+                  : Clock3;
+              const propertyRef = item.property_ref ? String(item.property_ref) : null;
+              return (
+                <article
+                  key={item.id}
+                  className="rounded-2xl border border-[rgb(var(--navy))]/12 bg-[linear-gradient(180deg,rgba(255,255,255,1),rgba(246,248,252,0.94))] p-4"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="relative h-24 w-32 shrink-0 overflow-hidden rounded-xl border border-[rgb(var(--navy))]/18 bg-slate-100 shadow-[0_10px_22px_-16px_rgba(15,23,42,0.7)]">
+                      <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-7 bg-gradient-to-b from-black/28 to-transparent" />
+                      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-8 bg-gradient-to-t from-black/36 to-transparent" />
+                      {item.coverImage ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={item.coverImage}
+                          alt={item.property_title || propertyRef || "Reservation"}
+                          className="h-full w-full object-cover transition duration-300 hover:scale-[1.03]"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-gradient-to-br from-slate-200 via-slate-100 to-white text-[11px] font-semibold text-black/55">
+                          <ImageIcon size={16} />
+                          {propertyRef || "RES"}
+                        </div>
+                      )}
+                      <span className="absolute left-1.5 top-1.5 z-[2] inline-flex items-center gap-1 rounded-md border border-white/35 bg-black/45 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                        <ImageIcon size={10} />
+                        Photo
+                      </span>
+                      <span className="absolute bottom-1.5 left-1.5 z-[2] max-w-[90%] truncate rounded-md border border-white/35 bg-black/45 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                        {propertyRef || "RES"}
+                      </span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-semibold ${reservationStatusClass(
+                            item.status
+                          )}`}
+                        >
+                          <StatusIcon size={12} />
+                          {reservationStatusLabel(item.status)}
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-black/[0.03] px-2 py-0.5 text-black/65">
+                          <CalendarClock size={12} />
+                          {formatDate(item.created_at)}
+                        </span>
+                      </div>
+                      <p className="truncate text-sm font-semibold text-[rgb(var(--navy))]">
+                        {item.property_title || propertyRef || "Bien sans titre"}
+                      </p>
+                      <div className="mt-1.5 space-y-1.5">
+                        <p className="inline-flex items-center gap-1.5 text-[13px] text-black/70">
+                          <MapPin size={12} />
+                          <span className="font-semibold tracking-[0.01em] text-[rgb(var(--navy))]">
+                            {item.property_location || "-"}
+                          </span>
+                        </p>
+                        <div className="space-y-1 text-[13px]">
+                          <p className="inline-flex items-center gap-1.5 font-medium text-[rgb(var(--navy))]">
+                            <CalendarDays size={12} />
+                            Sejour: {formatDateOnly(item.check_in_date)} - {formatDateOnly(item.check_out_date)}
+                            {typeof item.nights === "number" ? ` (${item.nights} nuit(s))` : ""}
+                          </p>
+                        </div>
+                      </div>
+                      {item.property_price ? (
+                        <p className="mt-2 inline-flex items-center rounded-full border border-[rgb(var(--gold))]/45 bg-[rgb(var(--gold))]/16 px-3 py-1 text-sm font-extrabold tracking-wide text-[rgb(var(--navy))] shadow-[0_8px_18px_-14px_rgba(180,145,72,0.9)]">
+                          {formatPriceWithCurrency(item.property_price) ?? item.property_price}
+                        </p>
+                      ) : null}
+                      {propertyRef ? (
+                        <Link
+                          href={`/biens/${encodeURIComponent(propertyRef)}`}
+                          className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-[linear-gradient(135deg,rgba(var(--navy),1),rgba(20,50,95,1))] px-3.5 py-1.5 text-xs font-semibold text-white shadow-[0_12px_22px_-16px_rgba(15,30,58,0.9)] transition hover:brightness-105"
+                        >
+                          Voir bien
+                          <ArrowUpRight size={12} />
+                        </Link>
+                      ) : null}
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <section className="mt-6 rounded-3xl border border-[rgb(var(--navy))]/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(248,250,253,0.9))] p-5 backdrop-blur">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">

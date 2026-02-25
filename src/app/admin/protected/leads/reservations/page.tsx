@@ -1,15 +1,25 @@
 import Link from "next/link";
 import {
   ArrowLeft,
+  Archive,
+  BadgeDollarSign,
   CalendarDays,
+  CalendarRange,
+  ChevronDown,
+  CheckCircle2,
   Clock3,
+  ExternalLink,
   Hash,
   Hotel,
+  Hourglass,
+  Info,
   Mail,
   MapPin,
   MessageSquare,
   NotebookPen,
   Phone,
+  ShieldCheck,
+  XCircle,
   UserCircle2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -102,6 +112,16 @@ function statusPill(status: string | null | undefined) {
   return "border-amber-200 bg-amber-50 text-amber-700";
 }
 
+function statusCardTone(status: string | null | undefined) {
+  const s = String(status ?? "new").trim().toLowerCase();
+  if (s === "hold") return "before:bg-violet-500";
+  if (s === "confirmed") return "before:bg-emerald-500";
+  if (s === "contacted") return "before:bg-blue-500";
+  if (s === "cancelled") return "before:bg-rose-500";
+  if (s === "closed") return "before:bg-slate-500";
+  return "before:bg-amber-500";
+}
+
 function statusSummary(status: string | null | undefined) {
   const s = String(status ?? "new").trim().toLowerCase();
   if (s === "hold") return "Reservation en attente de confirmation. Verifier expiration hold puis confirmer ou annuler.";
@@ -119,9 +139,7 @@ function holdSummary(status: string | null | undefined, holdExpiresAt: string | 
   if (!expiryRaw) return "Hold actif sans expiration";
   const expiry = new Date(expiryRaw);
   if (!Number.isFinite(expiry.getTime())) return `Hold jusqu'au ${expiryRaw}`;
-  const diffMinutes = Math.round((expiry.getTime() - Date.now()) / 60000);
-  if (diffMinutes > 0) return `Hold actif (${diffMinutes} min restantes)`;
-  return "Hold expire (maintenance requise)";
+  return `Hold actif jusqu'au ${fmtDateTime(expiryRaw)}`;
 }
 
 function isMissingReservationsTable(message: string | undefined) {
@@ -275,6 +293,48 @@ export default async function ShortStayReservationsPage({
           <StatCard label="Contactees" value={String(contacted)} icon={<Phone size={15} />} />
           <StatCard label="Confirmees" value={String(confirmed)} icon={<CalendarDays size={15} />} />
         </div>
+
+        <details className="relative mt-4 rounded-2xl border border-black/10 bg-white/80 p-3">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-xl px-2 py-1 text-sm font-semibold text-[rgb(var(--navy))] hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+            <span className="inline-flex items-center gap-2">
+              <Info size={14} />
+              Guide des statuts et actions
+            </span>
+            <span className="text-xs text-black/55">Cliquez pour afficher</span>
+          </summary>
+          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            <StatusLegendItem
+              status="hold"
+              description="Reservation temporairement bloquee (15 min)."
+              action="Verifier rapidement puis confirmer ou annuler."
+            />
+            <StatusLegendItem
+              status="new"
+              description="Nouvelle reservation entrante."
+              action="Contacter le client puis passer a contacted/confirmed."
+            />
+            <StatusLegendItem
+              status="contacted"
+              description="Client deja contacte."
+              action="Mettre a jour vers confirmed, cancelled ou hold."
+            />
+            <StatusLegendItem
+              status="confirmed"
+              description="Reservation validee."
+              action="Suivre le sejour puis clore apres check-out."
+            />
+            <StatusLegendItem
+              status="cancelled"
+              description="Reservation annulee."
+              action="Renseigner un motif dans note interne."
+            />
+            <StatusLegendItem
+              status="closed"
+              description="Reservation terminee et archivee."
+              action="Aucune action operationnelle restante."
+            />
+          </div>
+        </details>
       </section>
 
       <section className="space-y-4">
@@ -297,10 +357,15 @@ export default async function ShortStayReservationsPage({
           const whatsappHref = phoneDigits ? `https://wa.me/${encodeURIComponent(phoneDigits)}` : null;
           const customerEmail = fmt(row.customer_email);
           const emailHref = customerEmail !== "-" ? `mailto:${encodeURIComponent(customerEmail)}` : null;
+          const isPriorityStatus = ["new", "hold"].includes(String(row.status ?? "new").toLowerCase());
+          const normalizedRowStatus = String(row.status ?? "new").trim().toLowerCase();
+          const isActionLocked = ["confirmed", "cancelled", "closed"].includes(normalizedRowStatus);
           return (
             <article
               key={row.id}
-              className="relative overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-5 shadow-sm ring-1 ring-white/65 backdrop-blur md:p-6"
+              className={`relative overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-5 shadow-sm ring-1 ring-white/65 backdrop-blur before:absolute before:inset-y-0 before:left-0 before:w-1.5 before:content-[''] md:p-6 ${statusCardTone(
+                row.status
+              )}`}
             >
               <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-[radial-gradient(65%_120%_at_50%_-20%,rgba(15,23,42,0.09),transparent)]" />
 
@@ -350,22 +415,52 @@ export default async function ShortStayReservationsPage({
               </div>
 
               <div className="relative mt-4 grid gap-2 rounded-2xl border border-black/10 bg-gradient-to-r from-slate-50 to-white p-3 sm:grid-cols-2 xl:grid-cols-4">
-                <OverviewItem label="Periode" value={`${fmtDate(row.check_in_date)} - ${fmtDate(row.check_out_date)}`} />
-                <OverviewItem label="Nuits / Option" value={`${row.nights} nuit(s)${row.reservation_option_label ? ` | ${row.reservation_option_label}` : ""}`} />
-                <OverviewItem label="Etat hold" value={holdText} />
-                <OverviewItem label="Guide statut" value={statusText} />
+                <OverviewItem
+                  label="Periode"
+                  value={`${fmtDate(row.check_in_date)} - ${fmtDate(row.check_out_date)}`}
+                  icon={<CalendarRange size={13} />}
+                />
+                <OverviewItem
+                  label="Nuits / Option"
+                  value={`${row.nights} nuit(s)${row.reservation_option_label ? ` | ${row.reservation_option_label}` : ""}`}
+                  icon={<Hotel size={13} />}
+                />
+                <OverviewItem label="Etat hold" value={holdText} icon={<Hourglass size={13} />} />
+                <OverviewItem label="Guide statut" value={statusText} icon={<Info size={13} />} />
               </div>
 
-              <div className="relative mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.12fr)_minmax(320px,0.88fr)]">
+              <details
+                open={isPriorityStatus}
+                className="group relative mt-4 rounded-2xl border border-black/10 bg-white/55 p-2 open:bg-transparent"
+              >
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-[rgb(var(--navy))] hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+                  <span className="inline-flex items-center gap-2">
+                    <Info size={14} />
+                    Details complets reservation
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-xs text-black/60">
+                    <span className="group-open:hidden">Etendre</span>
+                    <span className="hidden group-open:inline">Reduire</span>
+                    <ChevronDown size={14} className="transition-transform duration-200 group-open:rotate-180" />
+                  </span>
+                </summary>
+
+                <div className="relative mt-3 grid gap-4 lg:grid-cols-[minmax(0,1.12fr)_minmax(320px,0.88fr)]">
                 <div className="space-y-3">
                   <div className="rounded-2xl border border-black/10 bg-white p-4">
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                       <div className="rounded-xl bg-slate-50 p-3 text-sm">
-                        <div className="text-[11px] uppercase tracking-wide text-black/50">Prix</div>
+                        <div className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wide text-black/50">
+                          <BadgeDollarSign size={12} />
+                          Prix
+                        </div>
                         <div className="mt-1 font-semibold text-slate-900">{fmt(row.property_price)}</div>
                       </div>
                       <div className="rounded-xl bg-slate-50 p-3 text-sm">
-                        <div className="text-[11px] uppercase tracking-wide text-black/50">Sejour</div>
+                        <div className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wide text-black/50">
+                          <CalendarDays size={12} />
+                          Sejour
+                        </div>
                         <div className="mt-1 font-semibold text-slate-900">
                           {row.check_in_date}
                           {" -> "}
@@ -376,18 +471,25 @@ export default async function ShortStayReservationsPage({
                         </div>
                       </div>
                       <div className="rounded-xl bg-slate-50 p-3 text-sm">
-                        <div className="text-[11px] uppercase tracking-wide text-black/50">Detail reservation</div>
+                        <div className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wide text-black/50">
+                          <Hash size={12} />
+                          Detail reservation
+                        </div>
                         <div className="mt-1 font-semibold text-slate-900">{row.nights} nuit(s)</div>
                         <div className="mt-0.5 text-xs text-black/60">
                           {row.reservation_option_label ? row.reservation_option_label : "Option non renseignee"}
                         </div>
                       </div>
                       <div className="rounded-xl bg-slate-50 p-3 text-sm">
-                        <div className="text-[11px] uppercase tracking-wide text-black/50">Actions bien</div>
+                        <div className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wide text-black/50">
+                          <ExternalLink size={12} />
+                          Actions bien
+                        </div>
                         <a
                           href={`/biens/${encodeURIComponent(row.property_ref)}`}
                           className="mt-1 inline-flex items-center gap-1 rounded-lg border border-black/10 bg-white px-2.5 py-1.5 text-xs font-medium text-[rgb(var(--navy))] hover:bg-black/5"
                         >
+                          <ExternalLink size={12} />
                           Voir bien
                         </a>
                         {holdDate ? (
@@ -471,7 +573,7 @@ export default async function ShortStayReservationsPage({
                     </div>
                   ) : null}
 
-                  {row.message ? (
+                  {!isActionLocked && row.message ? (
                     <div className="rounded-2xl border border-black/10 bg-white p-4 text-sm text-black/75">
                       <div className="inline-flex items-center gap-1 text-xs uppercase tracking-wide text-black/50">
                         <MessageSquare size={13} />
@@ -495,43 +597,74 @@ export default async function ShortStayReservationsPage({
                     await updateShortStayReservationStatus(row.id, status, adminNote, forceCancel);
                   }}
                 >
-                  <div className="text-xs uppercase tracking-[0.12em] text-black/50">Pilotage reservation</div>
+                  <div className="inline-flex items-center gap-1 text-xs uppercase tracking-[0.12em] text-black/50">
+                    <ShieldCheck size={12} />
+                    Pilotage reservation
+                  </div>
                   <div className="mt-2 rounded-xl border border-black/10 bg-white/80 p-2 text-xs text-black/70">
-                    <div className="font-semibold text-[rgb(var(--navy))]">Resume execution</div>
-                    <div className="mt-1">Creation: {fmtDateTime(row.created_at)}</div>
-                    <div>Derniere MAJ: {fmtDateTime(row.updated_at)}</div>
-                    <div>Code reservation: {reservationCode}</div>
-                    <div>{holdText}</div>
+                    <div className="inline-flex items-center gap-1 font-semibold text-[rgb(var(--navy))]">
+                      <Info size={12} />
+                      Resume execution
+                    </div>
+                    <div className="mt-2 space-y-1.5">
+                      <ExecutionLabel icon={<CalendarDays size={12} />} label="Date de creation" value={fmtDateTime(row.created_at)} />
+                      <ExecutionLabel icon={<Clock3 size={12} />} label="Derniere mise a jour" value={fmtDateTime(row.updated_at)} />
+                      <ExecutionLabel icon={<Hash size={12} />} label="Code reservation" value={reservationCode} />
+                      <ExecutionLabel icon={<Hourglass size={12} />} label="Etat du hold" value={holdText} />
+                    </div>
                   </div>
-                  <div className="mt-2 grid grid-cols-3 gap-1.5">
-                    <button type="submit" name="quick_status" value="confirmed" className="h-9 rounded-lg bg-emerald-600 px-2 text-[11px] font-semibold text-white hover:opacity-95">Confirmer</button>
-                    <button type="submit" name="quick_status" value="cancelled" className="h-9 rounded-lg bg-rose-600 px-2 text-[11px] font-semibold text-white hover:opacity-95">Annuler</button>
-                    <button type="submit" name="quick_status" value="closed" className="h-9 rounded-lg bg-slate-700 px-2 text-[11px] font-semibold text-white hover:opacity-95">Clore</button>
-                  </div>
+                  {isActionLocked && row.message ? (
+                    <div className="mt-2 rounded-xl border border-black/10 bg-white p-3 text-xs text-black/75">
+                      <div className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wide text-black/50">
+                        <MessageSquare size={12} />
+                        Message client
+                      </div>
+                      <div className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-2.5">
+                        {row.message}
+                      </div>
+                    </div>
+                  ) : null}
+                  {isActionLocked ? (
+                    <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-xs text-emerald-800">
+                      Actions masquees: reservation deja {statusLabel(row.status)}.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="mt-2 grid grid-cols-3 gap-1.5">
+                        <button type="submit" name="quick_status" value="confirmed" className="inline-flex h-9 items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2 text-[11px] font-semibold text-white hover:opacity-95"><CheckCircle2 size={12} />Confirmer</button>
+                        <button type="submit" name="quick_status" value="cancelled" className="inline-flex h-9 items-center justify-center gap-1 rounded-lg bg-rose-600 px-2 text-[11px] font-semibold text-white hover:opacity-95"><XCircle size={12} />Annuler</button>
+                        <button type="submit" name="quick_status" value="closed" className="inline-flex h-9 items-center justify-center gap-1 rounded-lg bg-slate-700 px-2 text-[11px] font-semibold text-white hover:opacity-95"><Archive size={12} />Clore</button>
+                      </div>
 
-                  <div className="mt-3 text-[11px] font-medium text-black/55">Changer le statut manuellement</div>
-                  <AppDropdown
-                    name="status"
-                    defaultValue={row.status ?? "new"}
-                    className="mt-1"
-                    triggerClassName="h-10"
-                    options={STATUS.map((s) => ({ value: s, label: s }))}
-                  />
-                  <label className="mt-2 inline-flex items-center gap-2 text-[11px] text-black/70">
-                    <input type="checkbox" name="force_cancel" value="1" className="rounded border-black/20" />
-                    Forcer annulation (ignore cutoff)
-                  </label>
-                  <textarea
-                    name="admin_note"
-                    defaultValue={row.admin_note ?? ""}
-                    placeholder="Note interne (motif, relance, details client)"
-                    className="mt-2 min-h-[110px] w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-xs text-black/75 outline-none focus:border-[rgb(var(--navy))]/30"
-                  />
-                  <button className="mt-2 h-10 w-full rounded-xl bg-[rgb(var(--navy))] px-3 text-xs font-semibold text-white hover:opacity-95">
-                    Enregistrer les modifications
-                  </button>
+                      <div className="mt-3 inline-flex items-center gap-1 text-[11px] font-medium text-black/55">
+                        <NotebookPen size={12} />
+                        Changer le statut manuellement
+                      </div>
+                      <AppDropdown
+                        name="status"
+                        defaultValue={row.status ?? "new"}
+                        className="mt-1"
+                        triggerClassName="h-10"
+                        options={STATUS.map((s) => ({ value: s, label: s }))}
+                      />
+                      <label className="mt-2 inline-flex items-center gap-2 text-[11px] text-black/70">
+                        <input type="checkbox" name="force_cancel" value="1" className="rounded border-black/20" />
+                        Forcer annulation (ignore cutoff)
+                      </label>
+                      <textarea
+                        name="admin_note"
+                        defaultValue={row.admin_note ?? ""}
+                        placeholder="Note interne (motif, relance, details client)"
+                        className="mt-2 min-h-[110px] w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-xs text-black/75 outline-none focus:border-[rgb(var(--navy))]/30"
+                      />
+                      <button className="mt-2 h-10 w-full rounded-xl bg-[rgb(var(--navy))] px-3 text-xs font-semibold text-white hover:opacity-95">
+                        Enregistrer les modifications
+                      </button>
+                    </>
+                  )}
                 </form>
-              </div>
+                </div>
+              </details>
             </article>
           );
         })}
@@ -556,9 +689,11 @@ function StatCard({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+    <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] transition hover:shadow-md">
       <div className="inline-flex items-center gap-2 text-xs uppercase tracking-wide text-black/50">
-        {icon}
+        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-black/10 bg-slate-50 text-[rgb(var(--navy))]">
+          {icon}
+        </span>
         {label}
       </div>
       <div className="mt-2 text-2xl font-extrabold text-[rgb(var(--navy))]">{value}</div>
@@ -566,11 +701,65 @@ function StatCard({
   );
 }
 
-function OverviewItem({ label, value }: { label: string; value: string }) {
+function OverviewItem({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: string;
+  icon?: React.ReactNode;
+}) {
   return (
     <div className="rounded-xl border border-black/10 bg-white/80 p-2.5">
-      <div className="text-[10px] uppercase tracking-[0.12em] text-black/45">{label}</div>
+      <div className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.12em] text-black/45">
+        {icon}
+        {label}
+      </div>
       <div className="mt-1 text-xs font-semibold leading-5 text-slate-800">{value}</div>
+    </div>
+  );
+}
+
+function ExecutionLabel({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-lg border border-black/10 bg-white/80 px-2 py-1.5">
+      <div className="inline-flex items-center gap-1 text-[11px] font-medium text-black/60">
+        {icon}
+        {label}
+      </div>
+      <div className="text-[11px] font-semibold text-slate-800">{value}</div>
+    </div>
+  );
+}
+
+function StatusLegendItem({
+  status,
+  description,
+  action,
+}: {
+  status: string;
+  description: string;
+  action: string;
+}) {
+  return (
+    <div className="rounded-xl border border-black/10 bg-white p-2.5">
+      <div className="flex items-center gap-2">
+        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${statusPill(status)}`}>
+          {statusLabel(status)}
+        </span>
+        <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-black/45">{status}</span>
+      </div>
+      <p className="mt-1 text-xs text-black/70">{description}</p>
+      <p className="mt-1 text-xs font-medium text-[rgb(var(--navy))]">Action: {action}</p>
     </div>
   );
 }

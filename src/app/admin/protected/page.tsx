@@ -4,26 +4,18 @@ import { revalidatePath } from "next/cache";
 import {
   ArrowRight,
   Bath,
-  Bell,
   BedDouble,
   Building2,
   CalendarClock,
   Camera,
   CheckCircle2,
   Clock3,
-  FileCheck2,
   Home,
-  Hotel,
-  ListChecks,
   MapPin,
-  Plus,
   Ruler,
   Sparkles,
-  UserRound,
-  Users,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import AdminQuartiersDashboardAction from "@/components/admin/AdminQuartiersDashboardAction";
 import DeletePropertyForm from "@/components/admin/DeletePropertyForm";
 import AdminPropertiesFilters from "./AdminPropertiesFilters";
 
@@ -386,16 +378,6 @@ export default async function AdminPage({
             </div>
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2">
-            <QuickAction href="/admin/new" icon={<Plus size={15} />} label="Nouveau bien" kind="primary" />
-            <QuickAction href="/admin/protected/leads/owners" icon={<FileCheck2 size={15} />} label="Leads proprietaires" />
-            <QuickAction href="/admin/protected/leads/depot-tiers" icon={<ListChecks size={15} />} label="Depot tiers" />
-            <QuickAction href="/admin/protected/leads/reservations" icon={<Hotel size={15} />} label="Reservations" />
-            <QuickAction href="/admin/protected/notifications" icon={<Bell size={15} />} label="Notifications" />
-            <QuickAction href="/admin/protected/agencies" icon={<Users size={15} />} label="Agences" />
-            <QuickAction href="/admin/protected/users" icon={<UserRound size={15} />} label="Users & roles" />
-            <AdminQuartiersDashboardAction />
-          </div>
         </div>
 
         <div className="relative mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
@@ -599,31 +581,5 @@ function KpiCard({
       </div>
       <div className="mt-2 text-xl font-extrabold text-[rgb(var(--navy))]">{value}</div>
     </div>
-  );
-}
-
-function QuickAction({
-  href,
-  icon,
-  label,
-  kind = "default",
-}: {
-  href: string;
-  icon: React.ReactNode;
-  label: string;
-  kind?: "default" | "primary";
-}) {
-  return (
-    <Link
-      href={href}
-      className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold shadow-sm transition ${
-        kind === "primary"
-          ? "bg-[rgb(var(--navy))] text-white hover:opacity-95"
-          : "border border-black/10 bg-white text-[rgb(var(--navy))] hover:bg-black/5"
-      }`}
-    >
-      {icon}
-      {label}
-    </Link>
   );
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { hasAdminAccess } from "@/lib/admin-auth";
+import { hasAdminAccess, hasAdminWriteAccess } from "@/lib/admin-auth";
 import { DEFAULT_ORAN_QUARTIERS } from "@/lib/oran-locations";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -164,7 +164,8 @@ async function deriveQuartiersForCommuneFromDb(
   );
 }
 
-async function ensureAdminOrError() {
+async function ensureAdminOrError(options?: { requireWrite?: boolean }) {
+  const requireWrite = options?.requireWrite === true;
   const supabase = await createClient();
   const {
     data: { user },
@@ -174,8 +175,10 @@ async function ensureAdminOrError() {
     return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
 
-  const isAdmin = await hasAdminAccess(supabase, user);
-  if (!isAdmin) {
+  const hasAccess = requireWrite
+    ? await hasAdminWriteAccess(supabase, user)
+    : await hasAdminAccess(supabase, user);
+  if (!hasAccess) {
     return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
   }
 
@@ -303,7 +306,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const guard = await ensureAdminOrError();
+  const guard = await ensureAdminOrError({ requireWrite: true });
   if (guard.error) return guard.error;
 
   try {
@@ -379,7 +382,7 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  const guard = await ensureAdminOrError();
+  const guard = await ensureAdminOrError({ requireWrite: true });
   if (guard.error) return guard.error;
 
   try {
@@ -466,7 +469,7 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const guard = await ensureAdminOrError();
+  const guard = await ensureAdminOrError({ requireWrite: true });
   if (guard.error) return guard.error;
 
   try {

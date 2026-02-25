@@ -7,11 +7,14 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
+  Globe2,
   Image as ImageIcon,
   LoaderCircle,
+  Mail,
   MapPin,
   MessageCircle,
   PencilLine,
+  Phone,
   PlusCircle,
   Ruler,
   Tag,
@@ -19,6 +22,7 @@ import {
 } from "lucide-react";
 import DepositFilterChips from "./DepositFilterChips";
 import { createClient } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -81,6 +85,11 @@ function isMissingAgencyVisitNotificationsTable(message: string | undefined) {
 function isMissingColumnError(message: string | undefined) {
   const m = (message || "").toLowerCase();
   return m.includes("column") && m.includes("does not exist");
+}
+
+function isMissingStorefrontTable(message: string | undefined) {
+  const m = (message || "").toLowerCase();
+  return m.includes("agency_storefronts") && (m.includes("does not exist") || m.includes("relation"));
 }
 
 function fmt(value: string | null | undefined) {
@@ -159,6 +168,42 @@ function buildDepositLocation(lead: AgencyDepositLeadRow) {
   return deduped.length ? deduped.join(" | ") : "-";
 }
 
+function resolveAgencyLogoUrl(input: {
+  agency_logo_url?: string | null;
+  agency_logo_path?: string | null;
+  logo_url?: string | null;
+  avatar_url?: string | null;
+}) {
+  const candidates = [
+    input.agency_logo_url,
+    input.logo_url,
+    input.avatar_url,
+    input.agency_logo_path,
+  ]
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean);
+
+  for (const raw of candidates) {
+    if (/^https?:\/\//i.test(raw)) return raw;
+    const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!base) continue;
+    const clean = raw.replace(/^\/+/, "");
+    return `${base}/storage/v1/object/public/property-images/${clean}`;
+  }
+
+  return null;
+}
+
+function initials(input: string) {
+  const parts = String(input)
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+  if (!parts.length) return "AG";
+  return parts.map((part) => part[0]?.toUpperCase() ?? "").join("") || "AG";
+}
+
 function firstParam(input: string | string[] | undefined) {
   if (Array.isArray(input)) return input[0] ?? "";
   return input ?? "";
@@ -193,6 +238,11 @@ export default async function AgencyDashboardPage({
     agency_status?: string;
     agency_phone?: string;
     phone?: string;
+    agency_logo_url?: string;
+    agency_logo_path?: string;
+    logo_url?: string;
+    avatar_url?: string;
+    agency_storefront_slug?: string;
   };
 
   if (userMeta.account_type !== "agency") redirect("/agency/login");
@@ -203,6 +253,29 @@ export default async function AgencyDashboardPage({
   const agencyNameNorm = normalizeText(userMeta.agency_name || userMeta.company_name || null);
   const agencyEmailNorm = normalizeText(user.email);
   const agencyPhoneNorm = normalizeDigits(userMeta.agency_phone || userMeta.phone || user.phone || null);
+  const agencyLogoUrl = resolveAgencyLogoUrl(userMeta);
+  const agencyInitials = initials(agencyName);
+  const agencyContactPhone = fmt(userMeta.agency_phone || userMeta.phone || user.phone || null);
+  const agencyContactEmail = fmt(user.email);
+  const admin = supabaseAdmin();
+  const storefrontResult = await admin
+    .from("agency_storefronts")
+    .select("slug")
+    .eq("agency_user_id", user.id)
+    .maybeSingle();
+  if (storefrontResult.error && !isMissingStorefrontTable(storefrontResult.error.message)) {
+    throw new Error(storefrontResult.error.message);
+  }
+  const storefrontSlug =
+    normalizeText(
+      (storefrontResult.data as { slug?: string | null } | null)?.slug ||
+        userMeta.agency_storefront_slug ||
+        agencyName
+    )
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "") || "";
+  const storefrontHref = storefrontSlug ? `/agence/${encodeURIComponent(storefrontSlug)}` : "";
   let notifications: AgencyVisitNotificationRow[] = [];
   let deposits: AgencyDepositLeadRow[] = [];
 
@@ -324,18 +397,66 @@ export default async function AgencyDashboardPage({
       <section className="relative mx-auto w-full max-w-[1400px] space-y-6">
         <div className="rounded-3xl border border-black/10 bg-white/75 p-7 shadow-sm backdrop-blur md:p-10">
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
+            <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[rgb(var(--navy))]">Agency Dashboard</p>
-              <h1 className="mt-3 text-3xl font-extrabold text-[rgb(var(--navy))] md:text-4xl">{agencyName}</h1>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <div
+                  className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-[rgb(var(--navy))]/15 bg-[linear-gradient(160deg,rgba(15,23,42,0.12),rgba(15,23,42,0.03))] text-base font-extrabold tracking-wide text-[rgb(var(--navy))] shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]"
+                  style={
+                    agencyLogoUrl
+                      ? {
+                          backgroundImage: `url("${agencyLogoUrl}")`,
+                          backgroundSize: "cover",
+                          backgroundPosition: "center",
+                        }
+                      : undefined
+                  }
+                  aria-label="Agency logo"
+                >
+                  {agencyLogoUrl ? null : agencyInitials}
+                </div>
+                <div className="min-w-0">
+                  <h1 className="truncate text-3xl font-extrabold text-[rgb(var(--navy))] md:text-4xl">{agencyName}</h1>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-black/65">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2.5 py-1">
+                      <Phone size={12} />
+                      {agencyContactPhone}
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2.5 py-1">
+                      <Mail size={12} />
+                      {agencyContactEmail}
+                    </span>
+                  </div>
+                </div>
+              </div>
               <p className="mt-3 max-w-3xl text-sm text-black/65">
                 Deposez vos biens pour validation. Le backoffice controle chaque demande avant publication.
               </p>
             </div>
-            <form action="/agency/logout" method="post">
-              <button className="rounded-xl border border-black/10 bg-white px-4 py-2 text-sm font-medium text-[rgb(var(--navy))] hover:bg-black/5">
-                Logout
-              </button>
-            </form>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href="/agency/onboarding"
+                className="inline-flex h-10 items-center gap-2 rounded-xl border border-[rgb(var(--navy))]/20 bg-[rgb(var(--navy))]/8 px-3.5 text-sm font-semibold text-[rgb(var(--navy))] hover:bg-[rgb(var(--navy))]/12"
+              >
+                <Building2 size={14} />
+                Configurer vitrine
+              </Link>
+              {storefrontHref ? (
+                <Link
+                  href={storefrontHref}
+                  target="_blank"
+                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-black/10 bg-white px-3.5 text-sm font-semibold text-[rgb(var(--navy))] hover:bg-black/5"
+                >
+                  <Globe2 size={14} />
+                  Ouvrir vitrine
+                </Link>
+              ) : null}
+              <form action="/agency/logout" method="post">
+                <button className="rounded-xl border border-black/10 bg-white px-4 py-2 text-sm font-medium text-[rgb(var(--navy))] hover:bg-black/5">
+                  Logout
+                </button>
+              </form>
+            </div>
           </div>
         </div>
 

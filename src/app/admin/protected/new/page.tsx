@@ -1,4 +1,6 @@
 import NewPropertyForm from "@/components/admin/NewPropertyForm";
+import { getAdminAccess } from "@/lib/admin-auth";
+import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +30,12 @@ export default async function AdminNewPage({ searchParams }: AdminNewPageProps) 
   const params = (await searchParams) ?? {};
   const initialRef = normalizeRefParam(params.ref);
   const ownerLeadId = normalizeOwnerLeadIdParam(params.ownerLeadId);
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const access = user ? await getAdminAccess(supabase, user) : { canWrite: false };
+  const canCreate = access.canWrite === true;
 
   return (
     <main className="mx-auto w-full max-w-[1400px] px-4 py-8 sm:px-6 lg:px-8">
@@ -39,7 +47,7 @@ export default async function AdminNewPage({ searchParams }: AdminNewPageProps) 
       </div>
 
       <div className="mt-6">
-        <NewPropertyForm initialRef={initialRef} ownerLeadId={ownerLeadId} />
+        <NewPropertyForm initialRef={initialRef} ownerLeadId={ownerLeadId} canCreate={canCreate} />
       </div>
     </main>
   );

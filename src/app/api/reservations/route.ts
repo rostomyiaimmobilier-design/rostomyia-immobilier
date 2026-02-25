@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { isBackofficeAccount } from "@/lib/account-type";
+import { hasAdminAccess } from "@/lib/admin-auth";
 import {
   addIsoDaysUtc,
   deriveReservedUntilForDate,
@@ -329,9 +329,10 @@ export async function POST(req: Request) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (isBackofficeAccount(user)) {
+  const isAdmin = await hasAdminAccess(supabase, user);
+  if (isAdmin) {
     return NextResponse.json(
-      { error: "Agency/admin accounts cannot create customer reservations." },
+      { error: "Admin accounts cannot create customer reservations." },
       { status: 403 }
     );
   }

@@ -36,8 +36,9 @@ export default function ImageUploader({
 
       setFiles([]);
       onUploaded?.();
-    } catch (err: any) {
-      setError(err?.message ?? "Upload failed");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Upload failed";
+      setError(message);
     } finally {
       setLoading(false);
     }

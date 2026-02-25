@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { hasAdminWriteAccess } from "@/lib/admin-auth";
+import { notifyAdminEvent } from "@/lib/admin-notifications";
 import { upsertPropertySemanticIndex } from "@/lib/semantic-search";
 import { createClient } from "@/lib/supabase/server";
 
@@ -131,6 +133,31 @@ function toOptionalString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+}
+
+async function notifyAdminSafely(input: Parameters<typeof notifyAdminEvent>[0]) {
+  try {
+    await notifyAdminEvent(input);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "unknown_notification_error";
+    console.error("[leads.actions] admin notification failed:", reason);
+  }
+}
+
+async function ensureAdminWriteSupabase() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError) throw new Error(userError.message);
+  if (!user) throw new Error("Unauthorized.");
+
+  const canWrite = await hasAdminWriteAccess(supabase, user);
+  if (!canWrite) throw new Error("Permission refusee: admin en lecture seule.");
+
+  return supabase;
 }
 
 function normalizeText(value: string | null | undefined) {
@@ -326,33 +353,6 @@ function isScheduledStatus(value: string) {
 
 function shouldTriggerAgencyVisitNotification(previousStatus: string, nextStatus: string) {
   return !isScheduledStatus(previousStatus) && isScheduledStatus(nextStatus);
-}
-
-function normalizeRole(value: unknown) {
-  return String(value ?? "").trim().toLowerCase();
-}
-
-function isAdminRole(value: unknown) {
-  const role = normalizeRole(value);
-  return role === "admin" || role === "super_admin" || role === "superadmin";
-}
-
-function isAdminActor(user: {
-  user_metadata?: Record<string, unknown> | null;
-  app_metadata?: Record<string, unknown> | null;
-}) {
-  const userMeta = (user.user_metadata ?? {}) as Record<string, unknown>;
-  const appMeta = (user.app_metadata ?? {}) as Record<string, unknown>;
-
-  if (isAdminRole(userMeta.account_type) || isAdminRole(appMeta.account_type)) return true;
-  if (isAdminRole(userMeta.role) || isAdminRole(appMeta.role)) return true;
-  if (String(userMeta.is_admin ?? "").toLowerCase() === "true") return true;
-  if (String(appMeta.is_admin ?? "").toLowerCase() === "true") return true;
-
-  const appRoles = appMeta.roles;
-  if (Array.isArray(appRoles) && appRoles.some((role) => isAdminRole(role))) return true;
-
-  return false;
 }
 
 async function dispatchAgencyWhatsappNotification(input: {
@@ -893,7 +893,7 @@ async function notifyOwnerAfterVisitValidation(
 }
 
 export async function updateOwnerLeadStatus(id: string, status: string, validationNote?: string) {
-  const supabase = await createClient();
+  const supabase = await ensureAdminWriteSupabase();
 
   const {
     data: { user },
@@ -924,6 +924,21 @@ export async function updateOwnerLeadStatus(id: string, status: string, validati
   }
 
   if (error) throw new Error(error.message);
+  await notifyAdminSafely({
+    eventType: "owner_lead_status_updated",
+    title: "Statut lead proprietaire mis a jour",
+    body: `Lead: ${id} | Nouveau statut: ${normalizedStatus}`,
+    href: "/admin/protected/leads/owners",
+    iconKey: "house-plus",
+    entityTable: "owner_leads",
+    entityId: id,
+    metadata: {
+      owner_lead_id: id,
+      status: normalizedStatus,
+      validation_note: note || null,
+    },
+    dedupeSeconds: 8,
+  });
 
   revalidatePath("/admin/protected/leads/owners");
   revalidatePath("/admin/leads/owners");
@@ -942,7 +957,7 @@ export async function validateOwnerLeadAndPublish(id: string, validationNote?: s
   const leadId = id.trim();
   if (!leadId) throw new Error("Missing owner lead id.");
 
-  const supabase = await createClient();
+  const supabase = await ensureAdminWriteSupabase();
   const {
     data: { user },
     error: userError,
@@ -1006,6 +1021,21 @@ export async function validateOwnerLeadAndPublish(id: string, validationNote?: s
   }
 
   if (error) throw new Error(error.message);
+  await notifyAdminSafely({
+    eventType: "owner_lead_validated_publish",
+    title: "Lead valide et publie",
+    body: `Lead: ${leadId}${createdProperty?.ref ? ` | REF: ${createdProperty.ref}` : ""}`,
+    href: createdProperty?.ref ? `/biens/${createdProperty.ref}` : "/admin/protected/leads/owners",
+    iconKey: "house-plus",
+    entityTable: "owner_leads",
+    entityId: leadId,
+    metadata: {
+      owner_lead_id: leadId,
+      property_ref: createdProperty?.ref ?? null,
+      status: "validated",
+    },
+    dedupeSeconds: 8,
+  });
 
   revalidatePath("/admin/protected/leads/owners");
   revalidatePath("/admin/leads/owners");
@@ -1023,18 +1053,22 @@ export async function deleteOwnerLead(id: string) {
   const leadId = id.trim();
   if (!leadId) throw new Error("Missing owner lead id.");
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError) throw new Error(userError.message);
-  if (!user || !isAdminActor(user)) throw new Error("Unauthorized.");
+  await ensureAdminWriteSupabase();
 
   const admin = supabaseAdmin();
   const { error } = await admin.from("owner_leads").delete().eq("id", leadId);
   if (error) throw new Error(error.message);
+  await notifyAdminSafely({
+    eventType: "owner_lead_deleted",
+    title: "Lead proprietaire supprime",
+    body: `Lead: ${leadId}`,
+    href: "/admin/protected/leads/owners",
+    iconKey: "house-plus",
+    entityTable: "owner_leads",
+    entityId: leadId,
+    metadata: { owner_lead_id: leadId },
+    dedupeSeconds: 6,
+  });
 
   revalidatePath("/admin/protected/leads/owners");
   revalidatePath("/admin/leads/owners");
@@ -1044,7 +1078,7 @@ export async function deleteOwnerLead(id: string) {
 }
 
 export async function updateViewingRequestStatus(id: string, status: string) {
-  const supabase = await createClient();
+  const supabase = await ensureAdminWriteSupabase();
   const normalizedStatus = status.trim() || "new";
   const { data: requestData, error: requestError } = await supabase
     .from("viewing_requests")
@@ -1063,6 +1097,25 @@ export async function updateViewingRequestStatus(id: string, status: string) {
     .eq("id", id);
 
   if (error) throw new Error(error.message);
+  await notifyAdminSafely({
+    eventType: "viewing_request_status_updated",
+    title: "Statut demande de visite mis a jour",
+    body: `Demande: ${id} | ${previousStatus} -> ${normalizedStatus}`,
+    href:
+      normalizedStatus === "scheduled"
+        ? `/admin/protected/leads/visits/plan/${encodeURIComponent(id)}`
+        : "/admin/protected/leads/visits",
+    iconKey: "calendar-clock",
+    entityTable: "viewing_requests",
+    entityId: id,
+    metadata: {
+      viewing_request_id: id,
+      previous_status: previousStatus,
+      status: normalizedStatus,
+      property_ref: toOptionalString((requestData as { property_ref?: string | null }).property_ref ?? null),
+    },
+    dedupeSeconds: 8,
+  });
 
   const shouldNotifyOnValidation = shouldTriggerAgencyVisitNotification(previousStatus, normalizedStatus);
   if (shouldNotifyOnValidation) {
@@ -1133,7 +1186,7 @@ export async function updateShortStayReservationStatus(
   adminNote?: string,
   forceCancel = false
 ) {
-  const supabase = await createClient();
+  const supabase = await ensureAdminWriteSupabase();
   const normalizedStatus = status.trim().toLowerCase() || "new";
   if (!isAllowedShortStayReservationStatus(normalizedStatus)) {
     throw new Error("Invalid reservation status");
@@ -1220,6 +1273,22 @@ export async function updateShortStayReservationStatus(
   } catch {
     // Maintenance routine is optional when the RPC is missing.
   }
+
+  await notifyAdminSafely({
+    eventType: "short_stay_reservation_status_updated",
+    title: "Statut reservation court sejour mis a jour",
+    body: `Reservation: ${id} | Nouveau statut: ${normalizedStatus}`,
+    href: "/admin/protected/leads/reservations",
+    iconKey: "hotel",
+    entityTable: "short_stay_reservations",
+    entityId: id,
+    metadata: {
+      reservation_id: id,
+      status: normalizedStatus,
+      admin_note: note || null,
+    },
+    dedupeSeconds: 8,
+  });
 
   revalidatePath("/admin/protected/leads/reservations");
   revalidatePath("/admin/leads/reservations");

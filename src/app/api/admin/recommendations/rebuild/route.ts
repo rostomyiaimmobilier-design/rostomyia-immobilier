@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { hasAdminAccess } from "@/lib/admin-auth";
+import { hasAdminWriteAccess } from "@/lib/admin-auth";
 import { rebuildRecommendationsBatch } from "@/lib/recommendations-background";
 
 export async function POST(request: Request) {
@@ -13,8 +13,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const isAdmin = await hasAdminAccess(supabase, user);
-  if (!isAdmin) {
+  const canWrite = await hasAdminWriteAccess(supabase, user);
+  if (!canWrite) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

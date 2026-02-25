@@ -171,15 +171,22 @@ export default function Navbar() {
             <div className="flex items-center gap-3">
               <div className="hidden items-center gap-3 md:flex">
                 {authUser ? (
-                  <>
-                    {isAdminUser ? (
+                  isAdminUser ? (
+                    <>
                       <Link
                         href="/admin"
                         className="rounded-xl border border-slate-200 px-4 py-2 text-sm transition hover:bg-slate-50"
                       >
                         {t.admin}
                       </Link>
-                    ) : null}
+                      <Link
+                        href="/admin/protected/profile"
+                        className="rounded-xl border border-slate-200 px-4 py-2 text-sm transition hover:bg-slate-50"
+                      >
+                        Profile
+                      </Link>
+                    </>
+                  ) : (
                     <Link
                       href={accountHref}
                       aria-label={t.account}
@@ -189,7 +196,7 @@ export default function Navbar() {
                       <CircleUserRound size={18} />
                       <span className="sr-only">{t.account}</span>
                     </Link>
-                  </>
+                  )
                 ) : (
                   <>
                     <Link
@@ -328,8 +335,8 @@ export default function Navbar() {
 
               <div className="mt-2 space-y-2 border-t border-slate-200 pt-3">
                 {authUser ? (
-                  <>
-                    {isAdminUser ? (
+                  isAdminUser ? (
+                    <>
                       <Link
                         href="/admin"
                         onClick={() => setMobileOpen(false)}
@@ -337,7 +344,15 @@ export default function Navbar() {
                       >
                         {t.admin}
                       </Link>
-                    ) : null}
+                      <Link
+                        href="/admin/protected/profile"
+                        onClick={() => setMobileOpen(false)}
+                        className="block rounded-lg border border-slate-200 px-3 py-2 text-center text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                      >
+                        Profile
+                      </Link>
+                    </>
+                  ) : (
                     <Link
                       href={accountHref}
                       onClick={() => setMobileOpen(false)}
@@ -348,7 +363,7 @@ export default function Navbar() {
                       <CircleUserRound size={18} />
                       <span className="sr-only">{t.account}</span>
                     </Link>
-                  </>
+                  )
                 ) : (
                   <>
                     <Link

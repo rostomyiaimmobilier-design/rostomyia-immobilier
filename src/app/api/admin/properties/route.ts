@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getAdminAccess } from "@/lib/admin-auth";
 import { upsertPropertySemanticIndex } from "@/lib/semantic-search";
 
 function isMissingLocationTypeColumn(message: string | undefined) {
@@ -73,12 +74,6 @@ function toOptionalUuid(value: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
-function toOptionalString(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
-}
-
 function toOptionalDigitsString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const digits = value.replace(/\D/g, "");
@@ -100,6 +95,13 @@ export async function POST(req: Request) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  if (user) {
+    const access = await getAdminAccess(supabase, user);
+    if (access.isAdmin && !access.canWrite) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  }
 
   const body = await req.json();
   const explicitUploadedByTeam = toOptionalBoolean(body.uploaded_byteam);

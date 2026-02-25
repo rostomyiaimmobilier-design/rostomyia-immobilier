@@ -135,6 +135,7 @@ type NewPropertyFormProps = {
   initialRef?: string;
   ownerLeadId?: string;
   submissionMode?: "create" | "request";
+  canCreate?: boolean;
 };
 
 type AgencyRequestImageUploadResult = {
@@ -346,6 +347,7 @@ export default function NewPropertyForm({
   initialRef,
   ownerLeadId,
   submissionMode = "create",
+  canCreate = true,
 }: NewPropertyFormProps) {
   const router = useRouter();
   const supabase = createClient();
@@ -689,6 +691,11 @@ export default function NewPropertyForm({
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!isRequestMode && !canCreate) {
+      setError("Compte admin en lecture seule: creation de bien desactivee.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -1310,10 +1317,18 @@ export default function NewPropertyForm({
 
         <Button
           type="submit"
-          disabled={loading}
+          disabled={loading || (!isRequestMode && !canCreate)}
           className="h-11 rounded-2xl bg-gradient-to-r from-[rgb(var(--navy))] to-slate-800 px-6 text-white shadow-sm transition hover:opacity-95"
         >
-          {loading ? (isRequestMode ? "Envoi..." : "Creation...") : isRequestMode ? "Envoyer pour validation" : "Creer le bien"}
+          {!isRequestMode && !canCreate
+            ? "Creation desactivee (lecture seule)"
+            : loading
+              ? isRequestMode
+                ? "Envoi..."
+                : "Creation..."
+              : isRequestMode
+                ? "Envoyer pour validation"
+                : "Creer le bien"}
         </Button>
       </div>
 

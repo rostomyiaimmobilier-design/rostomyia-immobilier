@@ -20,7 +20,6 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { useLang } from "@/components/LanguageProvider";
 import { toUiErrorMessage } from "@/lib/ui-errors";
-import { isBackofficeAccount } from "@/lib/account-type";
 
 function toOptionalText(v: FormDataEntryValue | null): string | null {
   const s = String(v || "").trim();
@@ -132,10 +131,27 @@ export default function VisitePage() {
   const [lastPayload, setLastPayload] = useState<ViewingPayload | null>(null);
   const [nameValue, setNameValue] = useState("");
   const [phoneValue, setPhoneValue] = useState("");
-  const [isBackofficeBlocked, setIsBackofficeBlocked] = useState(false);
+  const [isAdminBlocked, setIsAdminBlocked] = useState(false);
 
   useEffect(() => {
     let alive = true;
+
+    const syncAdminAccess = async (hasUser: boolean) => {
+      if (!alive) return;
+      if (!hasUser) {
+        setIsAdminBlocked(false);
+        return;
+      }
+      try {
+        const response = await fetch("/api/account/admin-access", { cache: "no-store" });
+        const data = (await response.json().catch(() => ({}))) as { is_admin?: boolean };
+        if (!alive) return;
+        setIsAdminBlocked(Boolean(data?.is_admin));
+      } catch {
+        if (!alive) return;
+        setIsAdminBlocked(false);
+      }
+    };
 
     const applyUser = (user: {
       phone?: string | null;
@@ -145,10 +161,9 @@ export default function VisitePage() {
     } | null) => {
       if (!alive) return;
       if (!user) {
-        setIsBackofficeBlocked(false);
+        setIsAdminBlocked(false);
         return;
       }
-      setIsBackofficeBlocked(isBackofficeAccount(user));
       const userMeta = (user.user_metadata ?? {}) as Record<string, unknown>;
       const prefilledName = [
         userMeta.full_name,
@@ -180,19 +195,24 @@ export default function VisitePage() {
       const sessionUser = sessionResult.data.session?.user ?? null;
       if (sessionUser) {
         applyUser(sessionUser);
+        void syncAdminAccess(true);
         return;
       }
 
       const userResult = await supabase.auth.getUser();
       if (!alive) return;
-      applyUser(userResult.data.user ?? null);
+      const authUser = userResult.data.user ?? null;
+      applyUser(authUser);
+      void syncAdminAccess(Boolean(authUser));
     }
 
     prefillSignedInUser().catch(() => null);
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      applyUser(session?.user ?? null);
+      const authUser = session?.user ?? null;
+      applyUser(authUser);
+      void syncAdminAccess(Boolean(authUser));
     });
 
     return () => {
@@ -202,7 +222,7 @@ export default function VisitePage() {
   }, [supabase]);
 
   async function sendRequest(payload: ViewingPayload) {
-    if (isBackofficeBlocked) {
+    if (isAdminBlocked) {
       setErrorMsg(blockedActionMessage);
       setToast({ kind: "error", text: blockedActionMessage });
       setTimeout(() => setToast(null), 3200);
@@ -210,17 +230,22 @@ export default function VisitePage() {
     }
     setIsSubmitting(true);
     setErrorMsg(null);
-    const { error } = await supabase.from("viewing_requests").insert(payload);
+    const response = await fetch("/api/viewing-requests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
     setIsSubmitting(false);
 
-    if (!error) {
+    if (response.ok) {
       setSent(true);
       setToast({ kind: "ok", text: t.sentToast });
       setTimeout(() => setToast(null), 2600);
       return;
     }
 
-    setErrorMsg(toUiErrorMessage(error.message || t.sendError, { lang, context: "submit" }));
+    setErrorMsg(toUiErrorMessage(body.error || t.sendError, { lang, context: "submit" }));
     setToast({ kind: "error", text: t.errorToast });
     setTimeout(() => setToast(null), 3200);
   }
@@ -228,7 +253,7 @@ export default function VisitePage() {
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErrorMsg(null);
-    if (isBackofficeBlocked) {
+    if (isAdminBlocked) {
       setErrorMsg(blockedActionMessage);
       return;
     }
@@ -389,7 +414,7 @@ export default function VisitePage() {
           <p className="mt-2 text-sm text-black/60">{t.infoSubtitle}</p>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-            {isBackofficeBlocked ? (
+            {isAdminBlocked ? (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 {blockedActionMessage}
               </div>
@@ -475,11 +500,11 @@ export default function VisitePage() {
             ) : null}
 
             <button
-              disabled={isSubmitting || isBackofficeBlocked}
+              disabled={isSubmitting || isAdminBlocked}
               className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[rgb(var(--navy))] text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:opacity-60"
             >
               {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <CalendarDays size={16} />}
-              {isBackofficeBlocked ? blockedActionCta : isSubmitting ? t.sending : t.submit}
+              {isAdminBlocked ? blockedActionCta : isSubmitting ? t.sending : t.submit}
             </button>
           </form>
         </motion.section>

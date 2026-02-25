@@ -8,18 +8,19 @@ import {
   RefreshCcw,
   ShieldAlert,
   ShieldCheck,
-  UserRound,
   Users,
 } from "lucide-react";
 import UserSuspendActionButton from "@/components/admin/UserSuspendActionButton";
 import AppDropdown from "@/components/ui/app-dropdown";
+import { hasAdminWriteAccess } from "@/lib/admin-auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { createManagedUser, suspendManagedUser, unsuspendManagedUser } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 type SearchParams = Record<string, string | string[] | undefined>;
-type UserRole = "super_admin" | "admin" | "user" | "agency";
+type UserRole = "super_admin" | "admin" | "admin_read_only" | "user" | "agency";
 
 type AuthUserLike = {
   id: string;
@@ -40,6 +41,10 @@ type UserRow = AuthUserLike & {
   phone: string;
   isSuspended: boolean;
 };
+
+const PREMIUM_FIELD_LABEL_CLASS = "text-[11px] font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]/62";
+const PREMIUM_FIELD_INPUT_CLASS =
+  "h-10 w-full rounded-xl border border-[rgb(var(--navy))]/15 bg-[linear-gradient(180deg,#fff,rgba(248,250,252,0.96))] px-3 text-sm font-medium text-black/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.86)] outline-none transition placeholder:text-black/35 focus:border-[rgb(var(--navy))]/45 focus:ring-2 focus:ring-[rgb(var(--gold))]/20";
 
 function firstParam(input: string | string[] | undefined) {
   if (Array.isArray(input)) return input[0] ?? "";
@@ -76,19 +81,21 @@ function resolveRole(user: AuthUserLike): UserRole {
   const userMeta = (user.user_metadata ?? {}) as Record<string, unknown>;
   const appMeta = (user.app_metadata ?? {}) as Record<string, unknown>;
 
-  const accountType = String(userMeta.account_type ?? "").trim().toLowerCase();
-  if (accountType === "agency") return "agency";
-  if (accountType === "super_admin") return "super_admin";
-  if (accountType === "admin") return "admin";
-
   const roleCandidates = [userMeta.role, appMeta.role, Array.isArray(appMeta.roles) ? appMeta.roles[0] : null];
   for (const candidate of roleCandidates) {
     const role = String(candidate ?? "").trim().toLowerCase();
     if (role === "agency") return "agency";
     if (role === "super_admin") return "super_admin";
+    if (role === "admin_read_only") return "admin_read_only";
     if (role === "admin") return "admin";
     if (role === "user") return "user";
   }
+
+  const accountType = String(userMeta.account_type ?? "").trim().toLowerCase();
+  if (accountType === "agency") return "agency";
+  if (accountType === "super_admin") return "super_admin";
+  if (accountType === "admin_read_only") return "admin_read_only";
+  if (accountType === "admin") return "admin";
 
   if (isTruthy(userMeta.is_admin) || isTruthy(appMeta.is_admin)) return "admin";
   return "user";
@@ -96,6 +103,7 @@ function resolveRole(user: AuthUserLike): UserRole {
 
 function rolePill(role: UserRole) {
   if (role === "super_admin") return "border-amber-300 bg-amber-50 text-amber-700";
+  if (role === "admin_read_only") return "border-blue-300 bg-blue-50 text-blue-700";
   if (role === "admin") return "border-[rgb(var(--navy))]/20 bg-[rgb(var(--navy))]/10 text-[rgb(var(--navy))]";
   if (role === "agency") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   return "border-black/15 bg-black/5 text-black/70";
@@ -150,6 +158,12 @@ export default async function AdminUsersPage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
+  const supabase = await createClient();
+  const {
+    data: { user: actor },
+  } = await supabase.auth.getUser();
+  const canWrite = actor ? await hasAdminWriteAccess(supabase, actor) : false;
+
   const params = searchParams ? await searchParams : {};
   const successMessage = typeof params.success === "string" ? params.success : null;
   const errorMessage = typeof params.error === "string" ? params.error : null;
@@ -220,7 +234,7 @@ export default async function AdminUsersPage({
 
   const superAdminCount = rows.filter((row) => row.role === "super_admin").length;
   const adminCount = rows.filter((row) => row.role === "admin").length;
-  const userCount = rows.filter((row) => row.role === "user").length;
+  const readOnlyAdminCount = rows.filter((row) => row.role === "admin_read_only").length;
   const agencyCount = rows.filter((row) => row.role === "agency").length;
   const confirmedCount = rows.filter((row) => !!row.email_confirmed_at).length;
   const suspendedCount = rows.filter((row) => row.isSuspended).length;
@@ -266,7 +280,7 @@ export default async function AdminUsersPage({
             </div>
             <h1 className="mt-3 text-3xl font-extrabold text-[rgb(var(--navy))]">Gestion des utilisateurs</h1>
             <p className="mt-2 max-w-2xl text-sm text-black/65">
-              Les roles `admin`, `user` et `agency` sont gerables depuis ce tableau. Le role `super_admin` est lecture seule.
+              Les roles admin, admin lecture seule, user et agency sont gerables depuis ce tableau. Le role super_admin est lecture seule.
             </p>
           </div>
 
@@ -283,7 +297,7 @@ export default async function AdminUsersPage({
           <StatCard label="Total users" value={String(total)} icon={<Users size={15} />} />
           <StatCard label="Super admins" value={String(superAdminCount)} icon={<ShieldCheck size={15} />} />
           <StatCard label="Admins" value={String(adminCount)} icon={<ShieldAlert size={15} />} />
-          <StatCard label="Users" value={String(userCount)} icon={<UserRound size={15} />} />
+          <StatCard label="Admins read-only" value={String(readOnlyAdminCount)} icon={<ShieldAlert size={15} />} />
           <StatCard label="Agencies" value={String(agencyCount)} icon={<BadgeCheck size={15} />} />
         </div>
 
@@ -296,89 +310,97 @@ export default async function AdminUsersPage({
           Comptes suspendus: <span className="font-semibold">{suspendedCount}</span>
         </div>
 
-        <form action={createManagedUser} className="relative mt-5 rounded-2xl border border-black/10 bg-gradient-to-b from-white to-slate-50/70 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
-          <div className="text-sm font-semibold text-[rgb(var(--navy))]">Ajouter un utilisateur</div>
-          <div className="mt-3 grid gap-3 md:grid-cols-4">
-            <label className="space-y-1 text-sm md:col-span-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-black/50">Email</span>
-              <input
-                name="email"
-                type="email"
-                required
-                className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
-                placeholder="user@rostomyia.com"
-              />
-            </label>
-            <label className="space-y-1 text-sm">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-black/50">Mot de passe</span>
-              <input
-                name="password"
-                type="password"
-                minLength={8}
-                required
-                className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
-                placeholder="Minimum 8 caracteres"
-              />
-            </label>
-            <label className="space-y-1 text-sm">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-black/50">Role</span>
-              <AppDropdown
-                name="role"
-                defaultValue="user"
-                triggerClassName="h-10 bg-gradient-to-b from-white to-slate-50"
-                options={[
-                  { value: "user", label: "user" },
-                  { value: "admin", label: "admin" },
-                  { value: "agency", label: "agency" },
-                ]}
-              />
-            </label>
+        {canWrite ? (
+          <form action={createManagedUser} className="relative mt-5 rounded-2xl border border-black/10 bg-gradient-to-b from-white to-slate-50/70 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+            <div className="text-sm font-semibold text-[rgb(var(--navy))]">Ajouter un utilisateur</div>
+            <div className="mt-3 grid gap-3 md:grid-cols-4">
+              <label className="space-y-1 text-sm md:col-span-2">
+                <span className={PREMIUM_FIELD_LABEL_CLASS}>Email</span>
+                <input
+                  name="email"
+                  type="email"
+                  required
+                  className={PREMIUM_FIELD_INPUT_CLASS}
+                  placeholder="user@rostomyia.com"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className={PREMIUM_FIELD_LABEL_CLASS}>Mot de passe</span>
+                <input
+                  name="password"
+                  type="password"
+                  minLength={8}
+                  required
+                  className={PREMIUM_FIELD_INPUT_CLASS}
+                  placeholder="Minimum 8 caracteres"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className={PREMIUM_FIELD_LABEL_CLASS}>Role</span>
+                <AppDropdown
+                  name="role"
+                  defaultValue="user"
+                  triggerClassName="h-10 bg-[linear-gradient(180deg,#fff,rgba(248,250,252,0.96))]"
+                  options={[
+                    { value: "user", label: "user" },
+                    { value: "admin", label: "admin" },
+                    { value: "admin_read_only", label: "admin read only" },
+                    { value: "agency", label: "agency" },
+                  ]}
+                />
+              </label>
+            </div>
+            <p className="mt-3 text-xs text-black/55">
+              Le role <span className="font-semibold">super_admin</span> est reserve aux operations base de donnees.
+            </p>
+            <div className="mt-3">
+              <button
+                type="submit"
+                className="h-10 rounded-xl bg-[rgb(var(--navy))] px-5 text-xs font-semibold tracking-wide text-white shadow-sm transition hover:opacity-95"
+              >
+                Creer utilisateur
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="relative mt-5 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-800">
+            Compte admin en lecture seule: creation, suspension et modification des utilisateurs desactivees.
           </div>
-          <p className="mt-3 text-xs text-black/55">
-            Le role <span className="font-semibold">super_admin</span> est reserve aux operations base de donnees.
-          </p>
-          <div className="mt-3">
-            <button
-              type="submit"
-              className="h-10 rounded-xl bg-[rgb(var(--navy))] px-5 text-xs font-semibold tracking-wide text-white shadow-sm transition hover:opacity-95"
-            >
-              Creer utilisateur
-            </button>
-          </div>
-        </form>
+        )}
       </section>
 
       <section className="rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm backdrop-blur md:p-6">
         <form className="grid gap-3 md:grid-cols-5" method="get">
           <label className="space-y-1 text-sm md:col-span-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-black/50">Recherche</span>
+            <span className={PREMIUM_FIELD_LABEL_CLASS}>Recherche</span>
             <input
               name="q"
               defaultValue={q}
-              className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
+              className={PREMIUM_FIELD_INPUT_CLASS}
               placeholder="Email, nom, id, company..."
             />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-black/50">Role</span>
+            <span className={PREMIUM_FIELD_LABEL_CLASS}>Role</span>
             <AppDropdown
               name="role"
               defaultValue={roleFilter || "all"}
-              triggerClassName="h-10 bg-gradient-to-b from-white to-slate-50"
-              options={[
-                { value: "all", label: "all" },
-                { value: "admin", label: "admin" },
-                { value: "user", label: "user" },
-                { value: "agency", label: "agency" },
-              ]}
+              triggerClassName="h-10 bg-[linear-gradient(180deg,#fff,rgba(248,250,252,0.96))]"
+                options={[
+                  { value: "all", label: "all" },
+                  { value: "admin", label: "admin" },
+                  { value: "admin_read_only", label: "admin read only" },
+                  { value: "user", label: "user" },
+                  { value: "agency", label: "agency" },
+                ]}
             />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-black/50">Par page</span>
+            <span className={PREMIUM_FIELD_LABEL_CLASS}>Par page</span>
             <AppDropdown
               name="per_page"
               defaultValue={String(perPage)}
-              triggerClassName="h-10 bg-gradient-to-b from-white to-slate-50"
+              triggerClassName="h-10 bg-[linear-gradient(180deg,#fff,rgba(248,250,252,0.96))]"
               options={[
                 { value: "10", label: "10" },
                 { value: "20", label: "20" },
@@ -409,9 +431,9 @@ export default async function AdminUsersPage({
         </div>
       </section>
 
-      <div className="-mx-3 overflow-hidden rounded-3xl border border-black/10 bg-white shadow-sm ring-1 ring-black/5 sm:-mx-4 lg:-mx-8 xl:-mx-12">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1420px] text-left text-sm">
+      <div className="overflow-hidden rounded-3xl border border-black/10 bg-white shadow-sm ring-1 ring-black/5">
+        <div className="w-full overflow-x-auto">
+          <table className="w-full min-w-[1160px] text-left text-sm">
             <thead className="bg-gradient-to-b from-slate-50 to-slate-100/90">
               <tr className="border-b border-black/10 text-xs uppercase tracking-wide text-black/50">
                 <th className="px-4 py-3.5 font-semibold first:pl-6">Utilisateur</th>
@@ -436,7 +458,7 @@ export default async function AdminUsersPage({
                   </td>
                   <td className="px-4 py-4">
                     <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${rolePill(row.role)}`}>
-                      {row.role}
+                      {row.role === "admin_read_only" ? "admin read only" : row.role}
                     </span>
                   </td>
                   <td className="px-4 py-4">
@@ -466,7 +488,11 @@ export default async function AdminUsersPage({
                     </span>
                   </td>
                   <td className="px-4 py-4 last:pr-6">
-                    {row.role === "super_admin" ? (
+                    {!canWrite ? (
+                      <span className="inline-flex rounded-xl border border-black/10 bg-black/5 px-2.5 py-1 text-xs font-medium text-black/60">
+                        Lecture seule
+                      </span>
+                    ) : row.role === "super_admin" || row.role === "admin_read_only" ? (
                       <span className="inline-flex rounded-xl border border-black/10 bg-black/5 px-2.5 py-1 text-xs font-medium text-black/60">
                         Protege
                       </span>
@@ -492,7 +518,7 @@ export default async function AdminUsersPage({
       </div>
 
       {totalPages > 1 ? (
-        <div className="-mx-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-black/10 bg-white/75 p-4 text-sm sm:-mx-4 lg:-mx-8 xl:-mx-12">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-black/10 bg-white/75 p-4 text-sm">
           <div className="text-black/60">
             Page {currentPage} / {totalPages}
           </div>

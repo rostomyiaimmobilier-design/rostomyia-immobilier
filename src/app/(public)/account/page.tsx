@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { hasAdminAccess } from "@/lib/admin-auth";
 import AccountClient from "./AccountClient";
 
 export default async function AccountPage() {
@@ -9,6 +10,9 @@ export default async function AccountPage() {
   } = await supabase.auth.getUser();
 
   if (!user) redirect("/auth/login");
+
+  const isAdmin = await hasAdminAccess(supabase, user);
+  if (isAdmin) redirect("/admin/protected/profile");
 
   const accountType = String(user.user_metadata?.account_type ?? "")
     .trim()

@@ -32,7 +32,6 @@ import PropertyImageSlider from "@/components/PropertyImageSlider";
 import AppDropdown from "@/components/ui/app-dropdown";
 import { formatPaymentLabel, normalizeFold } from "@/lib/payment-fallback";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
-import { isBackofficeAccount } from "@/lib/account-type";
 
 type Dict = {
   back: string;
@@ -493,7 +492,7 @@ export default function PropertyDetailClient({
   const [reservationSubmitting, setReservationSubmitting] = useState(false);
   const [reservationSubmitError, setReservationSubmitError] = useState<string | null>(null);
   const [reservationSubmitSuccess, setReservationSubmitSuccess] = useState<string | null>(null);
-  const [isBackofficeBlocked, setIsBackofficeBlocked] = useState(false);
+  const [isAdminAccount, setIsAdminAccount] = useState(false);
   const isReservationMode = isShortStayLocationType(property.locationType);
   const reservationModeNorm = normalizeText(property.locationType);
   const reservationPresetOptions: ReservationOption[] =
@@ -529,9 +528,9 @@ export default function PropertyDetailClient({
   const reservationFallbackErrorLabel = isArabic
     ? "تعذر تسجيل الحجز حالياً. حاول مرة اخرى."
     : "Impossible d'enregistrer la reservation pour le moment.";
-  const reservationBlockedActionLabel = isArabic
-    ? "Ce compte ne peut pas creer de reservations client."
-    : "Ce compte ne peut pas creer de reservations client.";
+  const reservationAdminBlockedActionLabel = isArabic
+    ? "لا يمكن للحسابات الإدارية الحجز من هذه الواجهة."
+    : "Les comptes admin ne peuvent pas reserver depuis cette interface.";
   const reservationBlockedUntilLabel = isArabic
     ? "العقار محجوز حالياً حتى"
     : "Ce bien est reserve actuellement jusqu'au";
@@ -623,32 +622,50 @@ export default function PropertyDetailClient({
     let alive = true;
     const supabase = createBrowserSupabaseClient();
 
-    const applyUser = (user: {
-      user_metadata?: Record<string, unknown> | null;
-      app_metadata?: Record<string, unknown> | null;
-    } | null) => {
-      if (!alive) return;
-      setIsBackofficeBlocked(isBackofficeAccount(user));
-    };
+    async function refreshAdminAccess() {
+      try {
+        const response = await fetch("/api/account/admin-access", {
+          method: "GET",
+          cache: "no-store",
+        });
+        if (!alive) return;
+        if (!response.ok) {
+          setIsAdminAccount(false);
+          return;
+        }
+        const payload = (await response.json().catch(() => ({}))) as { is_admin?: boolean };
+        setIsAdminAccount(payload.is_admin === true);
+      } catch {
+        if (!alive) return;
+        setIsAdminAccount(false);
+      }
+    }
 
     async function hydrate() {
       const sessionResult = await supabase.auth.getSession();
       if (!alive) return;
-      const sessionUser = sessionResult.data.session?.user ?? null;
-      if (sessionUser) {
-        applyUser(sessionUser);
+      if (sessionResult.data.session?.user) {
+        await refreshAdminAccess();
         return;
       }
       const userResult = await supabase.auth.getUser();
       if (!alive) return;
-      applyUser(userResult.data.user ?? null);
+      if (!userResult.data.user) {
+        setIsAdminAccount(false);
+        return;
+      }
+      await refreshAdminAccess();
     }
 
     hydrate().catch(() => null);
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      applyUser(session?.user ?? null);
+      if (!session?.user) {
+        setIsAdminAccount(false);
+        return;
+      }
+      refreshAdminAccess().catch(() => null);
     });
 
     return () => {
@@ -765,8 +782,8 @@ export default function PropertyDetailClient({
 
   function openReservationModal() {
     if (!isReservationMode) return;
-    if (isBackofficeBlocked) {
-      setReservationSubmitError(reservationBlockedActionLabel);
+    if (isAdminAccount) {
+      setReservationSubmitError(reservationAdminBlockedActionLabel);
       setReservationSubmitSuccess(null);
       return;
     }
@@ -791,8 +808,8 @@ export default function PropertyDetailClient({
   async function submitReservation() {
     if (!isReservationMode) return;
     if (!isReservationRangeValid || reservationSubmitting) return;
-    if (isBackofficeBlocked) {
-      setReservationSubmitError(reservationBlockedActionLabel);
+    if (isAdminAccount) {
+      setReservationSubmitError(reservationAdminBlockedActionLabel);
       setReservationSubmitSuccess(null);
       return;
     }
@@ -1502,7 +1519,7 @@ export default function PropertyDetailClient({
               <button
                 type="button"
                 onClick={openReservationModal}
-                disabled={isBackofficeBlocked}
+                disabled={isAdminAccount}
                 className="group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[rgb(var(--navy))] to-slate-900 px-4 py-3
                            font-semibold text-white shadow-sm ring-1 ring-black/10 transition hover:translate-y-[-1px] hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -1739,7 +1756,7 @@ export default function PropertyDetailClient({
               <button
                 type="button"
                 onClick={submitReservation}
-                disabled={!isReservationRangeValid || reservationSubmitting || isBackofficeBlocked}
+                disabled={!isReservationRangeValid || reservationSubmitting || isAdminAccount}
                 className="inline-flex h-11 items-center justify-center rounded-xl bg-gradient-to-r from-[rgb(var(--navy))] to-slate-900 px-4 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-60"
               >
                 {reservationSubmitting ? reservationSavingLabel : reservationConfirmLabel}
@@ -1766,7 +1783,7 @@ export default function PropertyDetailClient({
               <button
                 type="button"
                 onClick={openReservationModal}
-                disabled={isBackofficeBlocked}
+                disabled={isAdminAccount}
                 className="inline-flex h-11 items-center justify-center gap-1 rounded-xl border border-black/10 bg-white px-2 text-xs font-semibold text-[rgb(var(--navy))]"
               >
                 <CalendarDays size={14} />

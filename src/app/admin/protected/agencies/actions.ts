@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { hasAdminAccess } from "@/lib/admin-auth";
+import { hasAdminWriteAccess } from "@/lib/admin-auth";
 import { sendAgencyLifecycleEmail } from "@/lib/agency-email";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -39,8 +39,8 @@ async function ensureAdmin() {
   } = await supabase.auth.getUser();
 
   if (!user) throw new Error("Unauthorized");
-  const isAdmin = await hasAdminAccess(supabase, user);
-  if (!isAdmin) throw new Error("Forbidden");
+  const canWrite = await hasAdminWriteAccess(supabase, user);
+  if (!canWrite) throw new Error("Permission refusee: admin en lecture seule.");
   return user;
 }
 
@@ -412,6 +412,39 @@ export async function createAgencyByAdmin(formData: FormData) {
 
     revalidatePath(AGENCIES_PATH);
     redirect(`${AGENCIES_PATH}?success=${encodeURIComponent("Nouvelle agence creee avec succes.")}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Operation impossible.";
+    redirect(`${AGENCIES_PATH}?error=${encodeURIComponent(message)}`);
+  }
+}
+
+export async function deleteAgencyByAdmin(formData: FormData) {
+  try {
+    const actor = await ensureAdmin();
+
+    const userId = String(formData.get("user_id") ?? "").trim();
+    if (!userId) throw new Error("Agence introuvable.");
+    if (userId === actor.id) {
+      throw new Error("Suppression refusee: vous ne pouvez pas supprimer votre propre compte.");
+    }
+
+    const admin = supabaseAdmin();
+    const { data: userData, error: getError } = await admin.auth.admin.getUserById(userId);
+    if (getError || !userData.user) throw new Error(getError?.message || "Agence introuvable.");
+
+    const target = userData.user;
+    const currentMeta = (target.user_metadata ?? {}) as Record<string, unknown>;
+    if (String(currentMeta.account_type ?? "") !== "agency") {
+      throw new Error("Ce compte n'est pas une agence.");
+    }
+
+    const { error: deleteError } = await admin.auth.admin.deleteUser(userId);
+    if (deleteError) throw new Error(deleteError.message);
+
+    revalidatePath(AGENCIES_PATH);
+    revalidatePath("/admin/protected");
+    revalidatePath("/admin/protected/users");
+    redirect(`${AGENCIES_PATH}?success=${encodeURIComponent("Agence supprimee avec succes.")}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Operation impossible.";
     redirect(`${AGENCIES_PATH}?error=${encodeURIComponent(message)}`);

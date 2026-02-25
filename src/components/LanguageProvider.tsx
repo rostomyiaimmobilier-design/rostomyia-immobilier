@@ -17,7 +17,7 @@ type LangContextValue = {
 
 const LangContext = createContext<LangContextValue | null>(null);
 
-export function LanguageProvider({
+export default function LanguageProvider({
   children,
   initialLang,
 }: {

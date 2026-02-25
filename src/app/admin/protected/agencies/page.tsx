@@ -1,9 +1,12 @@
 import Link from "next/link";
 import {
   ArrowLeft,
+  ArrowRight,
   BadgeCheck,
   Building2,
   Calendar,
+  ChevronDown,
+  ClipboardList,
   CheckCircle2,
   Clock3,
   Eye,
@@ -14,17 +17,22 @@ import {
   MessageCircle,
   Phone,
   ShieldAlert,
+  ShieldCheck,
   UserRound,
   Users,
   XCircle,
 } from "lucide-react";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { createAgencyByAdmin, updateAgencyDetails, updateAgencyStatus } from "./actions";
+import { createAgencyByAdmin, deleteAgencyByAdmin, updateAgencyDetails, updateAgencyStatus } from "./actions";
 import AddAgencyModal from "@/components/admin/AddAgencyModal";
 import AgencyFilters from "./AgencyFilters";
 import AppDropdown from "@/components/ui/app-dropdown";
+import ConfirmSubmitButton from "@/components/ui/confirm-submit-button";
 
 const AGENCIES_PATH = "/admin/protected/agencies";
+const PREMIUM_FIELD_LABEL_CLASS = "mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-black/55";
+const PREMIUM_FIELD_INPUT_CLASS =
+  "h-11 w-full rounded-xl border border-[rgb(var(--navy))]/15 bg-[linear-gradient(180deg,#ffffff,rgba(248,250,252,0.96))] px-3.5 text-sm font-medium text-black/80 outline-none transition focus:border-[rgb(var(--navy))]/45 focus:ring-2 focus:ring-[rgb(var(--gold))]/25";
 
 type AgencyUser = {
   id: string;
@@ -51,6 +59,10 @@ type AgencyUser = {
     agency_status_updated_at?: string | null;
     agency_activated_at?: string | null;
     agency_profile_updated_at?: string | null;
+    agency_logo_url?: string | null;
+    agency_logo_path?: string | null;
+    logo_url?: string | null;
+    avatar_url?: string | null;
   } | null;
 };
 
@@ -99,6 +111,39 @@ function normalizeFold(input: string | null | undefined) {
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
+}
+
+function resolveAgencyLogoUrl(meta: NonNullable<AgencyUser["user_metadata"]>) {
+  const candidates = [
+    meta.agency_logo_url,
+    meta.logo_url,
+    meta.avatar_url,
+    meta.agency_logo_path,
+  ]
+    .map((x) => String(x ?? "").trim())
+    .filter(Boolean);
+
+  if (!candidates.length) return null;
+
+  for (const raw of candidates) {
+    if (/^https?:\/\//i.test(raw)) return raw;
+    const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!base) continue;
+    const clean = raw.replace(/^\/+/, "");
+    return `${base}/storage/v1/object/public/property-images/${clean}`;
+  }
+
+  return null;
+}
+
+function initials(input: string) {
+  const parts = String(input)
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+  if (!parts.length) return "AG";
+  return parts.map((p) => p[0]?.toUpperCase() ?? "").join("") || "AG";
 }
 
 function firstParam(input: string | string[] | undefined) {
@@ -174,8 +219,7 @@ export default async function AgenciesManagementPage({
 
   const emailPendingAgencies = agencies.filter((u) => !u.email_confirmed_at);
 
-  const confirmedAgencies = agencies
-    .filter((u) => !!u.email_confirmed_at)
+  const sortedAgencies = [...agencies]
     .sort((a, b) => {
       const sa = a.user_metadata?.agency_status ?? "pending";
       const sb = b.user_metadata?.agency_status ?? "pending";
@@ -184,14 +228,14 @@ export default async function AgenciesManagementPage({
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
 
-  const total = confirmedAgencies.length;
-  const pending = confirmedAgencies.filter((u) => (u.user_metadata?.agency_status ?? "pending") === "pending").length;
-  const active = confirmedAgencies.filter((u) => (u.user_metadata?.agency_status ?? "pending") === "active").length;
-  const suspended = confirmedAgencies.filter((u) => (u.user_metadata?.agency_status ?? "pending") === "suspended").length;
+  const total = sortedAgencies.length;
+  const pending = sortedAgencies.filter((u) => (u.user_metadata?.agency_status ?? "pending") === "pending").length;
+  const active = sortedAgencies.filter((u) => (u.user_metadata?.agency_status ?? "pending") === "active").length;
+  const suspended = sortedAgencies.filter((u) => (u.user_metadata?.agency_status ?? "pending") === "suspended").length;
 
   const cityOptions = Array.from(
     new Set(
-      confirmedAgencies
+      sortedAgencies
         .map((agency) => String(agency.user_metadata?.agency_city ?? "").trim())
         .filter(Boolean)
     )
@@ -199,12 +243,12 @@ export default async function AgenciesManagementPage({
 
   const qFold = normalizeFold(q);
   const createdDays = createdFilter === "7" || createdFilter === "30" || createdFilter === "90" ? Number(createdFilter) : 0;
-  const referenceTs = confirmedAgencies
+  const referenceTs = sortedAgencies
     .map((agency) => new Date(agency.created_at).getTime())
     .filter((ts) => Number.isFinite(ts))
     .reduce<number | null>((max, ts) => (max === null || ts > max ? ts : max), null);
 
-  const filteredAgencies = confirmedAgencies.filter((agency) => {
+  const filteredAgencies = sortedAgencies.filter((agency) => {
     const meta = agency.user_metadata ?? {};
     const status = String(meta.agency_status ?? "pending").toLowerCase();
 
@@ -355,23 +399,39 @@ export default async function AgenciesManagementPage({
       </section>
 
       {recentActivity.length > 0 ? (
-        <section className="rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm backdrop-blur md:p-6">
-          <h2 className="text-lg font-bold text-[rgb(var(--navy))]">Activite recente</h2>
-          <div className="mt-3 space-y-2">
+        <section className="relative overflow-hidden rounded-[30px] border border-[rgb(var(--navy))]/12 bg-[linear-gradient(145deg,rgba(255,255,255,0.98),rgba(245,249,255,0.96))] p-5 shadow-[0_16px_42px_rgba(15,23,42,0.08)] md:p-6">
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute -left-14 top-0 h-40 w-40 rounded-full bg-[rgb(var(--gold))]/15 blur-3xl" />
+            <div className="absolute right-0 top-0 h-32 w-32 rounded-full bg-[rgb(var(--navy))]/10 blur-3xl" />
+          </div>
+          <div className="relative">
+            <div className="inline-flex items-center gap-2 rounded-xl bg-[rgb(var(--navy))]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]">
+              <ClipboardList size={13} />
+              Journal live
+            </div>
+            <h2 className="mt-2 text-lg font-bold text-[rgb(var(--navy))]">Activite recente</h2>
+          </div>
+          <div className="relative mt-3 space-y-2">
             {recentActivity.map((item) => (
-              <div key={item.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-xs text-black/70">
+              <div
+                key={item.id}
+                className="flex flex-wrap items-center gap-2 rounded-xl border border-[rgb(var(--navy))]/12 bg-white/90 px-3 py-2.5 text-xs text-black/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]"
+              >
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-[rgb(var(--navy))]/10 text-[rgb(var(--navy))]">
+                  <Clock3 size={12} />
+                </span>
                 <span className="font-semibold text-[rgb(var(--navy))]">{formatLogAction(item.action)}</span>
-                <span className="text-black/50">|</span>
+                <span className="text-black/35">|</span>
                 <span>{new Date(item.created_at).toLocaleString("fr-FR")}</span>
                 {item.previous_status || item.next_status ? (
                   <>
-                    <span className="text-black/50">|</span>
+                    <span className="text-black/35">|</span>
                     <span>
                       {item.previous_status || "-"} {"->"} {item.next_status || "-"}
                     </span>
                   </>
                 ) : null}
-                <span className="text-black/50">|</span>
+                <span className="text-black/35">|</span>
                 <span className="truncate">Agence: {item.agency_user_id}</span>
               </div>
             ))}
@@ -389,58 +449,125 @@ export default async function AgenciesManagementPage({
           const missing = checks.filter((x) => !x.ok);
           const canActivate = !!agency.email_confirmed_at && missing.length === 0;
           const completeness = `${checks.length - missing.length}/${checks.length}`;
+          const completenessPct = Math.round(((checks.length - missing.length) / checks.length) * 100);
           const agencyLogs = (activityByAgency.get(agency.id) ?? []).slice(0, 5);
+          const logoUrl = resolveAgencyLogoUrl(meta);
+          const agencyInitials = initials(agencyName);
 
           return (
             <article
               key={agency.id}
-              className="rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm backdrop-blur md:p-6"
+              className="relative overflow-hidden rounded-[30px] border border-[rgb(var(--navy))]/12 bg-[linear-gradient(145deg,rgba(255,255,255,0.98),rgba(245,249,255,0.96))] shadow-[0_18px_45px_rgba(15,23,42,0.08)]"
             >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="inline-flex items-center gap-2 rounded-xl bg-[rgb(var(--navy))]/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]">
-                    <Building2 size={13} />
-                    Agence
-                  </div>
-                  <h2 className="mt-2 text-xl font-extrabold tracking-tight text-[rgb(var(--navy))]">{agencyName}</h2>
-                  <div className="mt-1 inline-flex items-center gap-1.5 text-sm text-black/65">
-                    <Mail size={14} className="text-[rgb(var(--navy))]/70" />
-                    {agency.email || "-"}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                    <span className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2 py-1 text-black/60">
-                      <Calendar size={12} />
-                      Cree le {new Date(agency.created_at).toLocaleString("fr-FR")}
-                    </span>
-                    {agency.last_sign_in_at ? (
+              <div className="pointer-events-none absolute inset-0">
+                <div className="absolute -left-16 -top-20 h-44 w-44 rounded-full bg-[rgb(var(--gold))]/18 blur-3xl" />
+                <div className="absolute right-0 top-0 h-36 w-36 rounded-full bg-[rgb(var(--navy))]/10 blur-3xl" />
+              </div>
+
+              <div className="relative p-5 md:p-6">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="shrink-0">
+                      <div
+                        className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-[rgb(var(--navy))]/15 bg-[linear-gradient(160deg,rgba(15,23,42,0.12),rgba(15,23,42,0.03))] text-sm font-extrabold tracking-wide text-[rgb(var(--navy))] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]"
+                        style={
+                          logoUrl
+                            ? {
+                                backgroundImage: `url("${logoUrl}")`,
+                                backgroundSize: "cover",
+                                backgroundPosition: "center",
+                              }
+                            : undefined
+                        }
+                        aria-label="Agency logo"
+                      >
+                        {logoUrl ? null : agencyInitials}
+                      </div>
+                    </div>
+                    <div className="min-w-0">
+                    <div className="inline-flex items-center gap-2 rounded-xl bg-[rgb(var(--navy))]/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]">
+                      <Building2 size={13} />
+                      Agence
+                    </div>
+                    <h2 className="mt-2 truncate text-xl font-extrabold tracking-tight text-[rgb(var(--navy))] md:text-2xl">{agencyName}</h2>
+                    <div className="mt-1 inline-flex items-center gap-1.5 text-sm text-black/65">
+                      <Mail size={14} className="text-[rgb(var(--navy))]/70" />
+                      {agency.email || "-"}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs">
                       <span className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2 py-1 text-black/60">
-                        <Clock3 size={12} />
-                        Derniere connexion: {new Date(agency.last_sign_in_at).toLocaleString("fr-FR")}
+                        <Calendar size={12} />
+                        Cree le {new Date(agency.created_at).toLocaleString("fr-FR")}
                       </span>
-                    ) : null}
-                    {agency.email_confirmed_at ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">
-                        <MailCheck size={12} />
-                        Email confirme: {new Date(agency.email_confirmed_at).toLocaleString("fr-FR")}
-                      </span>
-                    ) : null}
+                      {agency.last_sign_in_at ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2 py-1 text-black/60">
+                          <Clock3 size={12} />
+                          Derniere connexion: {new Date(agency.last_sign_in_at).toLocaleString("fr-FR")}
+                        </span>
+                      ) : null}
+                      {agency.email_confirmed_at ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">
+                          <MailCheck size={12} />
+                          Email confirme: {new Date(agency.email_confirmed_at).toLocaleString("fr-FR")}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">
+                          <Mail size={12} />
+                          Email non confirme
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${statusPill(status)}`}>
+                      {status}
+                    </span>
+                    <div className="rounded-xl border border-black/10 bg-white/85 px-3 py-2 text-xs text-black/65">
+                      Dossier: <span className="font-semibold text-[rgb(var(--navy))]">{completeness}</span> ({completenessPct}%)
+                    </div>
+                    <div className="h-1.5 w-44 overflow-hidden rounded-full bg-black/10">
+                      <div
+                        className="h-full rounded-full bg-[rgb(var(--gold))]"
+                        style={{ width: `${completenessPct}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${statusPill(status)}`}>
-                  {status}
-                </span>
-              </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                  <MiniInfo
+                    label="Responsable"
+                    value={fmt(meta.agency_manager_name)}
+                    icon={<UserRound size={13} />}
+                  />
+                  <MiniInfo
+                    label="Telephone"
+                    value={fmt(meta.agency_phone)}
+                    icon={<Phone size={13} />}
+                  />
+                  <MiniInfo
+                    label="Ville"
+                    value={fmt(meta.agency_city)}
+                    icon={<MapPin size={13} />}
+                  />
+                </div>
 
-              <details className="group mt-4 overflow-hidden rounded-2xl border border-black/10 bg-white/70 shadow-sm">
-                <summary className="cursor-pointer list-none px-4 py-3 md:px-5">
-                  <span className="inline-flex h-10 items-center gap-2 rounded-xl border border-black/10 bg-white px-4 text-sm font-semibold text-[rgb(var(--navy))]">
-                    <Eye size={14} />
-                    Afficher les details
-                  </span>
-                </summary>
+                <details className="group mt-4 overflow-hidden rounded-2xl border border-black/10 bg-white/70 shadow-sm">
+                  <summary className="cursor-pointer list-none border-b border-transparent px-4 py-3 transition group-open:border-black/10 md:px-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="inline-flex h-10 items-center gap-2 rounded-xl border border-black/10 bg-white px-4 text-sm font-semibold text-[rgb(var(--navy))]">
+                        <Eye size={14} />
+                        Afficher les details
+                      </span>
+                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-black/10 bg-white text-black/60 transition group-open:rotate-180">
+                        <ChevronDown size={14} />
+                      </span>
+                    </div>
+                  </summary>
 
-                <div className="space-y-4 border-t border-black/10 px-4 pb-4 pt-4 md:px-5 md:pb-5">
+                  <div className="space-y-4 border-t border-black/10 px-4 pb-4 pt-4 md:px-5 md:pb-5">
                   <div className="grid gap-3 text-sm md:grid-cols-2">
                     <Info label="Responsable" value={fmt(meta.agency_manager_name)} icon={<UserRound size={15} />} tone="blue" />
                     <Info label="Telephone" value={fmt(meta.agency_phone)} icon={<Phone size={15} />} tone="blue" />
@@ -458,7 +585,10 @@ export default async function AgenciesManagementPage({
 
                   <div className="rounded-xl border border-black/10 bg-white p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-sm font-semibold text-[rgb(var(--navy))]">Validation dossier</div>
+                      <div className="inline-flex items-center gap-2 text-sm font-semibold text-[rgb(var(--navy))]">
+                        <ShieldCheck size={14} />
+                        Validation dossier
+                      </div>
                       <div className="text-xs font-medium text-black/60">Completude: {completeness}</div>
                     </div>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -484,7 +614,7 @@ export default async function AgenciesManagementPage({
                   </div>
 
                   <form
-                    className="rounded-xl border border-black/10 bg-white/80 p-3"
+                    className="rounded-2xl border border-[rgb(var(--navy))]/15 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,252,0.88))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]"
                     action={async (formData) => {
                       "use server";
                       await updateAgencyStatus(String(formData.get("user_id") || ""), String(formData.get("agency_status") || "pending"));
@@ -493,11 +623,11 @@ export default async function AgenciesManagementPage({
                     <input type="hidden" name="user_id" value={agency.id} />
                     <div className="flex flex-wrap items-end gap-2">
                       <label className="text-sm">
-                        <div className="mb-1 font-medium text-black/70">Statut</div>
+                        <div className={PREMIUM_FIELD_LABEL_CLASS}>Statut</div>
                         <AppDropdown
                           name="agency_status"
                           defaultValue={status}
-                          triggerClassName="h-10 min-w-[190px]"
+                          triggerClassName="h-11 min-w-[210px]"
                           options={[
                             { value: "pending", label: "en attente", disabled: isActive },
                             {
@@ -511,7 +641,7 @@ export default async function AgenciesManagementPage({
                       </label>
                       <button
                         type="submit"
-                        className="h-10 rounded-xl bg-[rgb(var(--navy))] px-5 text-xs font-semibold tracking-wide text-white shadow-sm transition hover:opacity-95"
+                        className="h-11 rounded-xl bg-[linear-gradient(135deg,rgb(var(--navy)),rgba(15,23,42,0.92))] px-5 text-xs font-semibold tracking-wide text-white shadow-sm transition hover:opacity-95"
                       >
                         Enregistrer statut
                       </button>
@@ -521,105 +651,132 @@ export default async function AgenciesManagementPage({
                     ) : null}
                   </form>
 
-                  <details className="group overflow-hidden rounded-2xl border border-black/10 bg-gradient-to-b from-white to-slate-50/70 shadow-sm">
+                  <form
+                    action={deleteAgencyByAdmin}
+                    className="rounded-2xl border border-red-200 bg-red-50/70 p-4"
+                  >
+                    <input type="hidden" name="user_id" value={agency.id} />
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-red-800">Suppression agence</div>
+                        <p className="mt-1 text-xs text-red-700">
+                          Action irreversible: supprime le compte agence et son acces.
+                        </p>
+                      </div>
+                      <ConfirmSubmitButton
+                        confirmMessage="Confirmer la suppression definitive de cette agence ?"
+                        className="h-10 rounded-xl border border-red-300 bg-white px-4 text-xs font-semibold tracking-wide text-red-700 transition hover:bg-red-100"
+                      >
+                        Supprimer agence
+                      </ConfirmSubmitButton>
+                    </div>
+                  </form>
+
+                  <details className="group overflow-hidden rounded-2xl border border-[rgb(var(--navy))]/15 bg-gradient-to-b from-white to-slate-50/70 shadow-sm">
                     <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-[rgb(var(--navy))] transition group-open:border-b group-open:border-black/10 md:px-5 md:py-4">
-                      Editer details agence
+                      <span className="inline-flex items-center gap-2">
+                        <UserRound size={14} />
+                        Editer details agence
+                      </span>
                     </summary>
-                    <form action={updateAgencyDetails} className="grid gap-3 border-t border-black/10 p-4 md:grid-cols-2 md:p-5">
+                    <form
+                      action={updateAgencyDetails}
+                      className="grid gap-3 border-t border-black/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.84))] p-4 md:grid-cols-2 md:p-5"
+                    >
                       <input type="hidden" name="user_id" value={agency.id} />
 
                       <label className="space-y-1.5 text-sm">
-                        <div className="mb-1 font-medium text-black/70">Nom agence *</div>
+                        <div className={PREMIUM_FIELD_LABEL_CLASS}>Nom agence *</div>
                         <input
                           name="agency_name"
                           required
                           defaultValue={String(meta.agency_name ?? "")}
-                          className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
+                          className={PREMIUM_FIELD_INPUT_CLASS}
                         />
                       </label>
 
                       <label className="space-y-1.5 text-sm">
-                        <div className="mb-1 font-medium text-black/70">Responsable *</div>
+                        <div className={PREMIUM_FIELD_LABEL_CLASS}>Responsable *</div>
                         <input
                           name="agency_manager_name"
                           required
                           defaultValue={String(meta.agency_manager_name ?? "")}
-                          className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
+                          className={PREMIUM_FIELD_INPUT_CLASS}
                         />
                       </label>
 
                       <label className="space-y-1.5 text-sm">
-                        <div className="mb-1 font-medium text-black/70">Telephone *</div>
+                        <div className={PREMIUM_FIELD_LABEL_CLASS}>Telephone *</div>
                         <input
                           name="agency_phone"
                           required
                           defaultValue={String(meta.agency_phone ?? "")}
-                          className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
+                          className={PREMIUM_FIELD_INPUT_CLASS}
                         />
                       </label>
 
                       <label className="space-y-1.5 text-sm">
-                        <div className="mb-1 font-medium text-black/70">WhatsApp</div>
+                        <div className={PREMIUM_FIELD_LABEL_CLASS}>WhatsApp</div>
                         <input
                           name="agency_whatsapp"
                           defaultValue={String(meta.agency_whatsapp ?? "")}
-                          className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
+                          className={PREMIUM_FIELD_INPUT_CLASS}
                         />
                       </label>
 
                       <label className="space-y-1.5 text-sm">
-                        <div className="mb-1 font-medium text-black/70">Ville *</div>
+                        <div className={PREMIUM_FIELD_LABEL_CLASS}>Ville *</div>
                         <input
                           name="agency_city"
                           required
                           defaultValue={String(meta.agency_city ?? "")}
-                          className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
+                          className={PREMIUM_FIELD_INPUT_CLASS}
                         />
                       </label>
 
                       <label className="space-y-1.5 text-sm">
-                        <div className="mb-1 font-medium text-black/70">Adresse *</div>
+                        <div className={PREMIUM_FIELD_LABEL_CLASS}>Adresse *</div>
                         <input
                           name="agency_address"
                           required
                           defaultValue={String(meta.agency_address ?? "")}
-                          className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
+                          className={PREMIUM_FIELD_INPUT_CLASS}
                         />
                       </label>
 
                       <label className="space-y-1.5 text-sm">
-                        <div className="mb-1 font-medium text-black/70">Site web</div>
+                        <div className={PREMIUM_FIELD_LABEL_CLASS}>Site web</div>
                         <input
                           name="agency_website"
                           defaultValue={String(meta.agency_website ?? "")}
-                          className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
+                          className={PREMIUM_FIELD_INPUT_CLASS}
                         />
                       </label>
 
                       <label className="space-y-1.5 text-sm">
-                        <div className="mb-1 font-medium text-black/70">Annees d&apos;experience</div>
+                        <div className={PREMIUM_FIELD_LABEL_CLASS}>Annees d&apos;experience</div>
                         <input
                           name="agency_years_experience"
                           type="number"
                           min={0}
                           defaultValue={String(meta.agency_years_experience ?? "")}
-                          className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
+                          className={PREMIUM_FIELD_INPUT_CLASS}
                         />
                       </label>
 
                       <label className="space-y-1.5 text-sm md:col-span-2">
-                        <div className="mb-1 font-medium text-black/70">Zones (separees par virgules)</div>
+                        <div className={PREMIUM_FIELD_LABEL_CLASS}>Zones (separees par virgules)</div>
                         <input
                           name="agency_service_areas"
                           defaultValue={serviceAreasForInput(meta.agency_service_areas)}
-                          className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
+                          className={PREMIUM_FIELD_INPUT_CLASS}
                         />
                       </label>
 
                       <div className="md:col-span-2">
                         <button
                           type="submit"
-                          className="h-10 rounded-xl bg-[rgb(var(--navy))] px-5 text-xs font-semibold tracking-wide text-white shadow-sm transition hover:opacity-95"
+                          className="h-11 rounded-xl bg-[linear-gradient(135deg,rgb(var(--navy)),rgba(15,23,42,0.92))] px-5 text-xs font-semibold tracking-wide text-white shadow-sm transition hover:opacity-95"
                         >
                           Enregistrer details
                         </button>
@@ -628,7 +785,10 @@ export default async function AgenciesManagementPage({
                   </details>
 
                   <div className="rounded-2xl border border-black/10 bg-white p-3">
-                    <div className="text-sm font-semibold text-[rgb(var(--navy))]">Historique agence</div>
+                    <div className="inline-flex items-center gap-2 text-sm font-semibold text-[rgb(var(--navy))]">
+                      <ClipboardList size={14} />
+                      Historique agence
+                    </div>
                     <div className="mt-2 space-y-2">
                       {agencyLogs.length > 0 ? (
                         agencyLogs.map((log) => (
@@ -649,6 +809,7 @@ export default async function AgenciesManagementPage({
                   </div>
                 </div>
               </details>
+              </div>
             </article>
           );
         })}
@@ -660,26 +821,34 @@ export default async function AgenciesManagementPage({
         )}
 
         {totalPages > 1 ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-black/10 bg-white/75 p-4 text-sm">
-            <div className="text-black/60">
-              Page {currentPage} / {totalPages}
+          <div className="rounded-[24px] border border-[rgb(var(--navy))]/12 bg-[linear-gradient(145deg,rgba(255,255,255,0.98),rgba(245,249,255,0.95))] p-4 shadow-[0_14px_34px_rgba(15,23,42,0.07)] text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-black/65">
+                <ClipboardList size={14} className="text-[rgb(var(--navy))]" />
+                Page {currentPage} / {totalPages}
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-black/60">
+                Elements: <span className="font-semibold text-[rgb(var(--navy))]">{totalFiltered}</span>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="mt-3 flex items-center gap-2">
               <Link
                 href={withParams({ page: Math.max(1, currentPage - 1) })}
-                className={`inline-flex h-9 items-center rounded-xl border border-black/10 px-3 ${
-                  currentPage <= 1 ? "pointer-events-none opacity-50" : "hover:bg-black/5"
+                className={`inline-flex h-10 items-center gap-1.5 rounded-xl border border-black/10 bg-white px-3.5 font-medium text-[rgb(var(--navy))] ${
+                  currentPage <= 1 ? "pointer-events-none opacity-45" : "hover:bg-black/5"
                 }`}
               >
+                <ArrowLeft size={14} />
                 Precedent
               </Link>
               <Link
                 href={withParams({ page: Math.min(totalPages, currentPage + 1) })}
-                className={`inline-flex h-9 items-center rounded-xl border border-black/10 px-3 ${
-                  currentPage >= totalPages ? "pointer-events-none opacity-50" : "hover:bg-black/5"
+                className={`inline-flex h-10 items-center gap-1.5 rounded-xl border border-black/10 bg-white px-3.5 font-medium text-[rgb(var(--navy))] ${
+                  currentPage >= totalPages ? "pointer-events-none opacity-45" : "hover:bg-black/5"
                 }`}
               >
                 Suivant
+                <ArrowRight size={14} />
               </Link>
             </div>
           </div>
@@ -687,7 +856,7 @@ export default async function AgenciesManagementPage({
 
         {emailPendingAgencies.length > 0 ? (
           <div className="rounded-2xl border border-black/10 bg-white/75 p-5 text-sm text-black/65">
-            <div className="font-semibold text-[rgb(var(--navy))]">Agences non visibles pour validation (email non confirme)</div>
+            <div className="font-semibold text-[rgb(var(--navy))]">Agences avec email non confirme</div>
             <div className="mt-2">
               {emailPendingAgencies
                 .slice(0, 10)
@@ -717,6 +886,26 @@ function StatCard({
         {label}
       </div>
       <div className="mt-2 text-2xl font-extrabold text-[rgb(var(--navy))]">{value}</div>
+    </div>
+  );
+}
+
+function MiniInfo({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-black/10 bg-white/85 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+      <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-black/50">
+        {icon}
+        {label}
+      </div>
+      <div className="mt-1.5 text-sm font-semibold text-[rgb(var(--navy))]">{value}</div>
     </div>
   );
 }

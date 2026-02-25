@@ -9,7 +9,13 @@ function norm(value: unknown) {
 
 function isRestrictedRole(value: unknown) {
   const role = norm(value);
-  return role === "agency" || role === "admin" || role === "super_admin" || role === "superadmin";
+  return (
+    role === "agency" ||
+    role === "admin" ||
+    role === "admin_read_only" ||
+    role === "super_admin" ||
+    role === "superadmin"
+  );
 }
 
 function isTruthy(value: unknown) {

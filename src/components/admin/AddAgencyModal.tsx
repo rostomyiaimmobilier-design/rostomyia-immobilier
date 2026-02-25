@@ -9,6 +9,10 @@ type Props = {
   action: (formData: FormData) => void | Promise<void>;
 };
 
+const PREMIUM_LABEL_CLASS = "text-[11px] font-semibold uppercase tracking-[0.12em] text-[rgb(var(--navy))]/62";
+const PREMIUM_INPUT_CLASS =
+  "h-10 w-full rounded-xl border border-[rgb(var(--navy))]/15 bg-[linear-gradient(180deg,#fff,rgba(248,250,252,0.96))] px-3 text-sm font-medium text-black/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.86)] outline-none transition placeholder:text-black/35 focus:border-[rgb(var(--navy))]/45 focus:ring-2 focus:ring-[rgb(var(--gold))]/20";
+
 export default function AddAgencyModal({ action }: Props) {
   const [open, setOpen] = useState(false);
   const canUseDom = typeof document !== "undefined";
@@ -67,112 +71,112 @@ export default function AddAgencyModal({ action }: Props) {
 
         <form action={action} className="mt-5 grid gap-3 md:grid-cols-2">
           <label className="space-y-1.5 text-sm">
-            <div className="font-medium text-black/70">Email *</div>
+            <div className={PREMIUM_LABEL_CLASS}>Email *</div>
             <input
               name="email"
               type="email"
               required
-              className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
+              className={PREMIUM_INPUT_CLASS}
             />
           </label>
 
           <label className="space-y-1.5 text-sm">
-            <div className="font-medium text-black/70">Mot de passe *</div>
+            <div className={PREMIUM_LABEL_CLASS}>Mot de passe *</div>
             <input
               name="password"
               type="password"
               required
               minLength={8}
-              className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
+              className={PREMIUM_INPUT_CLASS}
             />
           </label>
 
           <label className="space-y-1.5 text-sm">
-            <div className="font-medium text-black/70">Nom agence *</div>
+            <div className={PREMIUM_LABEL_CLASS}>Nom agence *</div>
             <input
               name="agency_name"
               required
-              className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
+              className={PREMIUM_INPUT_CLASS}
             />
           </label>
 
           <label className="space-y-1.5 text-sm">
-            <div className="font-medium text-black/70">Responsable *</div>
+            <div className={PREMIUM_LABEL_CLASS}>Responsable *</div>
             <input
               name="agency_manager_name"
               required
-              className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
+              className={PREMIUM_INPUT_CLASS}
             />
           </label>
 
           <label className="space-y-1.5 text-sm">
-            <div className="font-medium text-black/70">Telephone *</div>
+            <div className={PREMIUM_LABEL_CLASS}>Telephone *</div>
             <input
               name="agency_phone"
               required
-              className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
+              className={PREMIUM_INPUT_CLASS}
             />
           </label>
 
           <label className="space-y-1.5 text-sm">
-            <div className="font-medium text-black/70">WhatsApp</div>
+            <div className={PREMIUM_LABEL_CLASS}>WhatsApp</div>
             <input
               name="agency_whatsapp"
-              className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
+              className={PREMIUM_INPUT_CLASS}
             />
           </label>
 
           <label className="space-y-1.5 text-sm">
-            <div className="font-medium text-black/70">Ville *</div>
+            <div className={PREMIUM_LABEL_CLASS}>Ville *</div>
             <input
               name="agency_city"
               required
-              className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
+              className={PREMIUM_INPUT_CLASS}
             />
           </label>
 
           <label className="space-y-1.5 text-sm">
-            <div className="font-medium text-black/70">Adresse *</div>
+            <div className={PREMIUM_LABEL_CLASS}>Adresse *</div>
             <input
               name="agency_address"
               required
-              className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
+              className={PREMIUM_INPUT_CLASS}
             />
           </label>
 
           <label className="space-y-1.5 text-sm">
-            <div className="font-medium text-black/70">Site web</div>
+            <div className={PREMIUM_LABEL_CLASS}>Site web</div>
             <input
               name="agency_website"
-              className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
+              className={PREMIUM_INPUT_CLASS}
             />
           </label>
 
           <label className="space-y-1.5 text-sm">
-            <div className="font-medium text-black/70">Annees d&apos;experience</div>
+            <div className={PREMIUM_LABEL_CLASS}>Annees d&apos;experience</div>
             <input
               name="agency_years_experience"
               type="number"
               min={0}
-              className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
+              className={PREMIUM_INPUT_CLASS}
             />
           </label>
 
           <label className="space-y-1.5 text-sm md:col-span-2">
-            <div className="font-medium text-black/70">Zones (separees par virgules)</div>
+            <div className={PREMIUM_LABEL_CLASS}>Zones (separees par virgules)</div>
             <input
               name="agency_service_areas"
               placeholder="Oran, Bir El Djir, Es Senia"
-              className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 outline-none transition focus:border-[rgb(var(--navy))]/40"
+              className={PREMIUM_INPUT_CLASS}
             />
           </label>
 
           <label className="space-y-1.5 text-sm md:col-span-2">
-            <div className="font-medium text-black/70">Statut initial</div>
+            <div className={PREMIUM_LABEL_CLASS}>Statut initial</div>
             <AppDropdown
               name="agency_status"
               defaultValue="pending"
-              triggerClassName="h-10"
+              triggerClassName="h-10 bg-[linear-gradient(180deg,#fff,rgba(248,250,252,0.96))]"
               options={[
                 { value: "pending", label: "pending" },
                 { value: "active", label: "active" },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
@@ -43,14 +43,11 @@ export default function DepositFilterChips({
   const [isPending, startTransition] = useTransition();
   const [pendingFilter, setPendingFilter] = useState<DepositFilter | null>(null);
 
-  useEffect(() => {
-    if (!isPending) {
-      setPendingFilter(null);
-    }
-  }, [isPending]);
-
   function applyFilter(filter: DepositFilter) {
-    if (filter === selectedFilter) return;
+    if (filter === selectedFilter) {
+      setPendingFilter(null);
+      return;
+    }
     const params = new URLSearchParams(searchParams?.toString() ?? "");
     if (filter === "all") {
       params.delete("filter");
@@ -82,7 +79,7 @@ export default function DepositFilterChips({
     <div className="mt-4 flex flex-wrap gap-2">
       {chips.map((chip) => {
         const active = selectedFilter === chip.filter;
-        const pending = isPending && pendingFilter === chip.filter;
+        const pending = pendingFilter === chip.filter && (isPending || selectedFilter !== chip.filter);
         return (
           <button
             key={chip.filter}

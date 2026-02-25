@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { notifyAdminEvent } from "@/lib/admin-notifications";
 
 type AgencyLeadRow = {
   id: string;
@@ -228,6 +229,27 @@ export async function PUT(
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 400 });
+  }
+
+  try {
+    await notifyAdminEvent({
+      eventType: "agency_deposit_updated",
+      title: "Depot agence mis a jour",
+      body: `Lead: ${id}`,
+      href: "/admin/protected/leads/depot-tiers",
+      iconKey: "building-2",
+      entityTable: "owner_leads",
+      entityId: id,
+      metadata: {
+        owner_lead_id: id,
+        source: "agency_deposit_edit",
+      },
+      dedupeSeconds: 8,
+    });
+  } catch (notificationError) {
+    const reason =
+      notificationError instanceof Error ? notificationError.message : "unknown_notification_error";
+    console.error("[api/agency/deposits/:id] admin notification failed:", reason);
   }
 
   return NextResponse.json({ ok: true, id });
