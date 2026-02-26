@@ -58,7 +58,7 @@ export default function StorefrontLeadForm({ slug, brandPrimaryColor }: Storefro
   }
 
   return (
-    <form onSubmit={onSubmit} className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm">
+    <form onSubmit={onSubmit} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_20px_40px_-28px_rgba(15,23,42,0.5)]">
       <div className="text-sm font-bold" style={{ color: brandPrimaryColor }}>
         Demander un rappel
       </div>
@@ -69,28 +69,28 @@ export default function StorefrontLeadForm({ slug, brandPrimaryColor }: Storefro
           onChange={(e) => setName(e.target.value)}
           placeholder="Nom complet *"
           required
-          className="h-10 rounded-xl border border-black/12 bg-white px-3 text-sm outline-none focus:border-black/35"
+          className="h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900"
         />
         <input
           type="text"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           placeholder="Telephone"
-          className="h-10 rounded-xl border border-black/12 bg-white px-3 text-sm outline-none focus:border-black/35"
+          className="h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900"
         />
         <input
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="Email"
-          className="h-10 rounded-xl border border-black/12 bg-white px-3 text-sm outline-none focus:border-black/35 sm:col-span-2"
+          className="h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 sm:col-span-2"
         />
         <textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           placeholder="Votre besoin (achat, location, budget, quartier...)"
           rows={3}
-          className="rounded-xl border border-black/12 bg-white px-3 py-2 text-sm outline-none focus:border-black/35 sm:col-span-2"
+          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900 sm:col-span-2"
         />
       </div>
       {errorMsg ? <p className="mt-2 text-xs text-red-600">{errorMsg}</p> : null}
@@ -98,7 +98,7 @@ export default function StorefrontLeadForm({ slug, brandPrimaryColor }: Storefro
       <button
         type="submit"
         disabled={submitting}
-        className="mt-3 inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-sm font-semibold text-white disabled:opacity-60"
+        className="mt-3 inline-flex h-11 items-center gap-2 rounded-full px-5 text-sm font-semibold text-white shadow-sm disabled:opacity-60"
         style={{ backgroundColor: brandPrimaryColor }}
       >
         {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}

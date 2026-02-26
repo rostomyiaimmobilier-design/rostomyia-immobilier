@@ -2,6 +2,8 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 ALTER TABLE IF EXISTS public.agency_storefronts
   ADD COLUMN IF NOT EXISTS section_order jsonb NOT NULL DEFAULT '["about","services","contact","marketplace"]'::jsonb,
+  ADD COLUMN IF NOT EXISTS builder_type text NOT NULL DEFAULT 'native',
+  ADD COLUMN IF NOT EXISTS builder_payload jsonb,
   ADD COLUMN IF NOT EXISTS custom_domain text,
   ADD COLUMN IF NOT EXISTS custom_domain_status text NOT NULL DEFAULT 'unverified',
   ADD COLUMN IF NOT EXISTS custom_domain_verified_at timestamptz;
@@ -17,6 +19,20 @@ BEGIN
     ALTER TABLE public.agency_storefronts
       ADD CONSTRAINT agency_storefronts_section_order_array_check
       CHECK (section_order IS NULL OR jsonb_typeof(section_order) = 'array');
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'agency_storefronts_builder_type_check'
+      AND conrelid = 'public.agency_storefronts'::regclass
+  ) THEN
+    ALTER TABLE public.agency_storefronts
+      ADD CONSTRAINT agency_storefronts_builder_type_check
+      CHECK (builder_type IN ('native', 'puck', 'webstudio'));
   END IF;
 END $$;
 

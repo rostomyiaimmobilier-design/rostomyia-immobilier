@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import {
   BedDouble,
@@ -23,6 +24,7 @@ import {
 import DepositFilterChips from "./DepositFilterChips";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { ensureAgencyStorefrontForUser } from "@/lib/agency-storefront-defaults";
 
 export const dynamic = "force-dynamic";
 
@@ -257,6 +259,12 @@ export default async function AgencyDashboardPage({
   const agencyInitials = initials(agencyName);
   const agencyContactPhone = fmt(userMeta.agency_phone || userMeta.phone || user.phone || null);
   const agencyContactEmail = fmt(user.email);
+  const ensuredStorefront = await ensureAgencyStorefrontForUser({
+    id: user.id,
+    email: user.email,
+    phone: user.phone,
+    user_metadata: user.user_metadata,
+  });
   const admin = supabaseAdmin();
   const storefrontResult = await admin
     .from("agency_storefronts")
@@ -269,6 +277,7 @@ export default async function AgencyDashboardPage({
   const storefrontSlug =
     normalizeText(
       (storefrontResult.data as { slug?: string | null } | null)?.slug ||
+        ensuredStorefront.slug ||
         userMeta.agency_storefront_slug ||
         agencyName
     )
@@ -539,11 +548,13 @@ export default async function AgencyDashboardPage({
                     <div className="grid gap-0 md:grid-cols-[260px_1fr]">
                       <div className="relative min-h-[190px] bg-slate-100 md:min-h-full">
                         {cover ? (
-                          <img
+                          <Image
                             src={cover}
                             alt={fmt(item.title)}
+                            fill
+                            sizes="(max-width: 768px) 100vw, 260px"
                             className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
-                            loading="lazy"
+                            unoptimized
                           />
                         ) : (
                           <div className="flex h-full w-full items-center justify-center bg-[linear-gradient(130deg,rgba(15,23,42,0.08),rgba(15,23,42,0.02))]">

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import Image from "next/image";
@@ -90,22 +90,22 @@ export default function Navbar() {
       login: "Connexion",
       signup: "Inscription",
       account: "Mon compte",
-      logout: "Déconnexion",
+      logout: "DÃ©connexion",
       admin: "Admin",
     },
     ar: {
-      home: "الرئيسية",
-      listings: "العقارات",
-      submit: "اعرض عقارك",
-      contact: "اتصل بنا",
-      login: "دخول",
-      signup: "إنشاء حساب",
-      account: "حسابي",
-      logout: "تسجيل الخروج",
-      admin: "لوحة التحكم",
+      home: "Ø§Ù„Ø±Ø¦ÙŠØ³ÙŠØ©",
+      listings: "Ø§Ù„Ø¹Ù‚Ø§Ø±Ø§Øª",
+      submit: "Ø§Ø¹Ø±Ø¶ Ø¹Ù‚Ø§Ø±Ùƒ",
+      contact: "Ø§ØªØµÙ„ Ø¨Ù†Ø§",
+      login: "Ø¯Ø®ÙˆÙ„",
+      signup: "Ø¥Ù†Ø´Ø§Ø¡ Ø­Ø³Ø§Ø¨",
+      account: "Ø­Ø³Ø§Ø¨ÙŠ",
+      logout: "ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø®Ø±ÙˆØ¬",
+      admin: "Ù„ÙˆØ­Ø© Ø§Ù„ØªØ­ÙƒÙ…",
     },
   }[lang];
-  const agencyLabel = lang === "ar" ? "فضاء الوكالات" : "Espace Agence";
+  const agencyLabel = lang === "ar" ? "ÙØ¶Ø§Ø¡ Ø§Ù„ÙˆÙƒØ§Ù„Ø§Øª" : "Espace Agence";
 
   const shouldSkipRefreshOnLangSwitch = (() => {
     const p = String(pathname ?? "");
@@ -128,10 +128,12 @@ export default function Navbar() {
   const isAgencyUser = authUser?.accountType === "agency";
   const isAdminUser = authUser?.accountType === "admin" || authUser?.accountType === "super_admin";
   const accountHref = isAgencyUser ? "/agency/dashboard" : "/account";
+  const hideGlobalNavbar = pathname === "/agence" || pathname.startsWith("/agence/");
   const displayIdentity =
     authUser?.displayName ||
     authUser?.email?.split("@")[0] ||
-    (lang === "ar" ? "حساب" : "Compte");
+    (lang === "ar" ? "Ø­Ø³Ø§Ø¨" : "Compte");
+  if (hideGlobalNavbar) return null;
 
   return (
     <div dir={dir}>
@@ -416,4 +418,5 @@ export default function Navbar() {
     </div>
   );
 }
+
 

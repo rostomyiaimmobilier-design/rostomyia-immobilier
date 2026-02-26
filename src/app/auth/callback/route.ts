@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { ensureAgencyStorefrontForUser } from "@/lib/agency-storefront-defaults";
 
 function toSafePath(raw: string | null) {
   if (!raw) return null;
@@ -58,6 +59,28 @@ function resolveRedirectPath(
   return next ?? "/account";
 }
 
+async function ensureAgencyDefaults(
+  user: {
+    id: string;
+    email?: string | null;
+    phone?: string | null;
+    user_metadata?: Record<string, unknown> | null;
+    app_metadata?: Record<string, unknown> | null;
+  }
+) {
+  if (detectAccountType(user) !== "agency") return;
+  try {
+    await ensureAgencyStorefrontForUser({
+      id: user.id,
+      email: user.email,
+      phone: user.phone,
+      user_metadata: user.user_metadata,
+    });
+  } catch {
+    // Non-blocking: callback should still redirect even if storefront bootstrap fails.
+  }
+}
+
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
@@ -71,6 +94,7 @@ export async function GET(request: Request) {
     if (!user) return redirectTo(next ?? "/auth/login", requestUrl);
 
     const path = resolveRedirectPath(user, next);
+    await ensureAgencyDefaults(user);
     if (path === "/admin/login") {
       await supabase.auth.signOut();
       return redirectTo(path, requestUrl);
@@ -91,6 +115,7 @@ export async function GET(request: Request) {
     return redirectTo("/auth/login", requestUrl);
   }
   const path = resolveRedirectPath(user, next);
+  await ensureAgencyDefaults(user);
   if (path === "/admin/login") {
     await supabase.auth.signOut();
     return redirectTo(path, requestUrl);

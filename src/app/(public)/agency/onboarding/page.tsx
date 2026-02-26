@@ -1,6 +1,8 @@
-﻿import { redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { normalizeAgencyNativeStudioPayload } from "@/lib/agency-storefront-puck";
+import { ensureAgencyStorefrontForUser } from "@/lib/agency-storefront-defaults";
 import AgencyOnboardingClient from "./AgencyOnboardingClient";
 
 function normalizeSlug(input: string) {
@@ -81,9 +83,16 @@ export default async function AgencyOnboardingPage() {
   const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
   if (toText(meta.account_type).toLowerCase() !== "agency") redirect("/agency/login");
 
+  await ensureAgencyStorefrontForUser({
+    id: user.id,
+    email: user.email,
+    phone: user.phone,
+    user_metadata: user.user_metadata,
+  });
+
   const admin = supabaseAdmin();
   const extendedSelect =
-    "slug, tagline, description, cover_url, facebook_url, instagram_url, tiktok_url, whatsapp, is_enabled, hero_title, hero_subtitle, about_title, services, highlights, service_areas, languages_spoken, business_hours, contact_email, contact_phone, contact_address, cta_label, cta_url, marketplace_title, seo_title, seo_description, seo_keywords, brand_primary_color, brand_secondary_color, brand_accent_color, theme_preset, show_services_section, show_highlights_section, show_contact_section, show_marketplace_section, section_order, custom_domain, custom_domain_status";
+    "slug, tagline, description, cover_url, facebook_url, instagram_url, tiktok_url, whatsapp, is_enabled, hero_title, hero_subtitle, about_title, services, highlights, service_areas, languages_spoken, business_hours, contact_email, contact_phone, contact_address, cta_label, cta_url, marketplace_title, seo_title, seo_description, seo_keywords, brand_primary_color, brand_secondary_color, brand_accent_color, theme_preset, show_services_section, show_highlights_section, show_contact_section, show_marketplace_section, section_order, custom_domain, custom_domain_status, builder_type, builder_payload";
   const legacySelect =
     "slug, tagline, description, cover_url, facebook_url, instagram_url, tiktok_url, whatsapp, is_enabled";
 
@@ -143,10 +152,26 @@ export default async function AgencyOnboardingPage() {
         section_order?: unknown;
         custom_domain?: string | null;
         custom_domain_status?: string | null;
+        builder_type?: string | null;
+        builder_payload?: unknown;
       }
     | null;
 
   const agencyName = toText(meta.agency_name || user.email || "Agence");
+  const tagline = toText(storefront?.tagline || meta.agency_tagline);
+  const description = toText(storefront?.description || meta.agency_description);
+  const coverUrl = toText(storefront?.cover_url || meta.agency_cover_url);
+  const heroTitle = toText(storefront?.hero_title || meta.agency_hero_title);
+  const heroSubtitle = toText(storefront?.hero_subtitle || meta.agency_hero_subtitle);
+  const aboutTitle = toText(storefront?.about_title || meta.agency_about_title);
+  const servicesText = toListLines(storefront?.services || meta.agency_services);
+  const highlightsText = toListLines(storefront?.highlights || meta.agency_highlights);
+  const contactEmail = toText(storefront?.contact_email || meta.agency_contact_email || user.email);
+  const contactPhone = toText(storefront?.contact_phone || meta.agency_phone || meta.phone || user.phone);
+  const contactAddress = toText(storefront?.contact_address || meta.agency_address);
+  const ctaLabel = toText(storefront?.cta_label || meta.agency_cta_label);
+  const ctaUrl = toText(storefront?.cta_url || meta.agency_cta_url);
+  const marketplaceTitle = toText(storefront?.marketplace_title || meta.agency_marketplace_title);
   const slug = normalizeSlug(
     toText(storefront?.slug) || toText(meta.agency_storefront_slug) || toText(meta.agency_name) || toText(user.email)
   );
@@ -159,28 +184,28 @@ export default async function AgencyOnboardingPage() {
         agencyEmail: toText(user.email),
         agencyStatus: toText(meta.agency_status || "pending"),
         slug,
-        tagline: toText(storefront?.tagline || meta.agency_tagline),
-        description: toText(storefront?.description || meta.agency_description),
-        coverUrl: toText(storefront?.cover_url || meta.agency_cover_url),
+        tagline,
+        description,
+        coverUrl,
         facebookUrl: toText(storefront?.facebook_url || meta.agency_facebook_url),
         instagramUrl: toText(storefront?.instagram_url || meta.agency_instagram_url),
         tiktokUrl: toText(storefront?.tiktok_url || meta.agency_tiktok_url),
         whatsapp: toText(storefront?.whatsapp || meta.agency_whatsapp || meta.agency_phone || user.phone),
         logoUrl: resolveLogoUrl(meta),
-        heroTitle: toText(storefront?.hero_title || meta.agency_hero_title),
-        heroSubtitle: toText(storefront?.hero_subtitle || meta.agency_hero_subtitle),
-        aboutTitle: toText(storefront?.about_title || meta.agency_about_title),
-        servicesText: toListLines(storefront?.services || meta.agency_services),
-        highlightsText: toListLines(storefront?.highlights || meta.agency_highlights),
+        heroTitle,
+        heroSubtitle,
+        aboutTitle,
+        servicesText,
+        highlightsText,
         serviceAreas: toText(storefront?.service_areas || meta.agency_service_areas),
         languagesSpoken: toText(storefront?.languages_spoken || meta.agency_languages_spoken),
         businessHours: toText(storefront?.business_hours || meta.agency_business_hours),
-        contactEmail: toText(storefront?.contact_email || meta.agency_contact_email || user.email),
-        contactPhone: toText(storefront?.contact_phone || meta.agency_phone || meta.phone || user.phone),
-        contactAddress: toText(storefront?.contact_address || meta.agency_address),
-        ctaLabel: toText(storefront?.cta_label || meta.agency_cta_label),
-        ctaUrl: toText(storefront?.cta_url || meta.agency_cta_url),
-        marketplaceTitle: toText(storefront?.marketplace_title || meta.agency_marketplace_title),
+        contactEmail,
+        contactPhone,
+        contactAddress,
+        ctaLabel,
+        ctaUrl,
+        marketplaceTitle,
         seoTitle: toText(storefront?.seo_title || meta.agency_seo_title),
         seoDescription: toText(storefront?.seo_description || meta.agency_seo_description),
         seoKeywords: toText(storefront?.seo_keywords || meta.agency_seo_keywords),
@@ -197,6 +222,7 @@ export default async function AgencyOnboardingPage() {
           : ["about", "services", "contact", "marketplace"],
         customDomain: toText(storefront?.custom_domain),
         customDomainStatus: toText(storefront?.custom_domain_status || "unverified"),
+        builderPayload: normalizeAgencyNativeStudioPayload(storefront?.builder_payload),
       }}
     />
   );

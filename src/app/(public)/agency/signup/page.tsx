@@ -225,6 +225,18 @@ function normalizeServiceAreas(raw: string[]) {
   return out;
 }
 
+function normalizeStorefrontSlug(input: string) {
+  return String(input)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80);
+}
+
 type PremiumInputProps = InputHTMLAttributes<HTMLInputElement> & {
   icon: ReactNode;
 };
@@ -428,6 +440,7 @@ export default function AgencySignupPage() {
           years_experience: yearsExperience,
           // Agency-specific keys used by the app
           agency_name: form.agencyName.trim(),
+          agency_storefront_slug: normalizeStorefrontSlug(form.agencyName),
           agency_manager_name: form.managerName.trim(),
           agency_phone: form.phone.trim(),
           agency_whatsapp: form.whatsapp.trim() || null,

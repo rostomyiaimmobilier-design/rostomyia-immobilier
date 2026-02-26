@@ -1,7 +1,8 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { useLang } from "@/components/LanguageProvider";
 
 const copy = {
@@ -25,28 +26,32 @@ const copy = {
   },
   ar: {
     tagline:
-      "وكالة عقارية فاخرة في وهران. بيع وكراء وتسيير العقارات بمرافقة مخصصة.",
-    city: "وهران، الجزائر",
-    premiumService: "خدمة فاخرة",
-    supportTag: "استشارة ومتابعة",
-    navigation: "التنقل",
-    home: "الرئيسية",
-    listings: "العقارات",
-    contact: "اتصل بنا",
-    needSupport: "تحتاج مرافقة؟",
+      "ÙˆÙƒØ§Ù„Ø© Ø¹Ù‚Ø§Ø±ÙŠØ© ÙØ§Ø®Ø±Ø© ÙÙŠ ÙˆÙ‡Ø±Ø§Ù†. Ø¨ÙŠØ¹ ÙˆÙƒØ±Ø§Ø¡ ÙˆØªØ³ÙŠÙŠØ± Ø§Ù„Ø¹Ù‚Ø§Ø±Ø§Øª Ø¨Ù…Ø±Ø§ÙÙ‚Ø© Ù…Ø®ØµØµØ©.",
+    city: "ÙˆÙ‡Ø±Ø§Ù†ØŒ Ø§Ù„Ø¬Ø²Ø§Ø¦Ø±",
+    premiumService: "Ø®Ø¯Ù…Ø© ÙØ§Ø®Ø±Ø©",
+    supportTag: "Ø§Ø³ØªØ´Ø§Ø±Ø© ÙˆÙ…ØªØ§Ø¨Ø¹Ø©",
+    navigation: "Ø§Ù„ØªÙ†Ù‚Ù„",
+    home: "Ø§Ù„Ø±Ø¦ÙŠØ³ÙŠØ©",
+    listings: "Ø§Ù„Ø¹Ù‚Ø§Ø±Ø§Øª",
+    contact: "Ø§ØªØµÙ„ Ø¨Ù†Ø§",
+    needSupport: "ØªØ­ØªØ§Ø¬ Ù…Ø±Ø§ÙÙ‚Ø©ØŸ",
     supportText:
-      "نساعدك على العثور على العقار المناسب بخدمة فاخرة.",
-    rights: "جميع الحقوق محفوظة.",
-    design: "تصميم فاخر - وهران",
-    phone: "الهاتف",
-    address: "العنوان",
+      "Ù†Ø³Ø§Ø¹Ø¯Ùƒ Ø¹Ù„Ù‰ Ø§Ù„Ø¹Ø«ÙˆØ± Ø¹Ù„Ù‰ Ø§Ù„Ø¹Ù‚Ø§Ø± Ø§Ù„Ù…Ù†Ø§Ø³Ø¨ Ø¨Ø®Ø¯Ù…Ø© ÙØ§Ø®Ø±Ø©.",
+    rights: "Ø¬Ù…ÙŠØ¹ Ø§Ù„Ø­Ù‚ÙˆÙ‚ Ù…Ø­ÙÙˆØ¸Ø©.",
+    design: "ØªØµÙ…ÙŠÙ… ÙØ§Ø®Ø± - ÙˆÙ‡Ø±Ø§Ù†",
+    phone: "Ø§Ù„Ù‡Ø§ØªÙ",
+    address: "Ø§Ù„Ø¹Ù†ÙˆØ§Ù†",
   },
 } as const;
 
 export default function RostomyiaFooter() {
   const { lang, dir } = useLang();
+  const pathname = usePathname();
   const t = copy[lang];
-  const agencyLabel = lang === "ar" ? "فضاء الوكالات" : "Espace Agence";
+  const agencyLabel = lang === "ar" ? "ÙØ¶Ø§Ø¡ Ø§Ù„ÙˆÙƒØ§Ù„Ø§Øª" : "Espace Agence";
+  const hideGlobalFooter = pathname === "/agence" || pathname.startsWith("/agence/");
+
+  if (hideGlobalFooter) return null;
 
   return (
     <footer dir={dir} className="relative mt-auto overflow-hidden border-t border-white/10 bg-[#0B0F14] text-white">
@@ -139,7 +144,7 @@ export default function RostomyiaFooter() {
 
         <div className="mt-10 flex flex-col gap-2 border-t border-white/10 pt-6 text-xs text-white/55 sm:flex-row sm:items-center sm:justify-between">
           <span>
-            © {new Date().getFullYear()} Rostomyia Immobilier. {t.rights}
+            Â© {new Date().getFullYear()} Rostomyia Immobilier. {t.rights}
           </span>
           <span className="text-white/50">{t.design}</span>
         </div>
@@ -147,3 +152,4 @@ export default function RostomyiaFooter() {
     </footer>
   );
 }
+

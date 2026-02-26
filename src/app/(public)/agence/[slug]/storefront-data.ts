@@ -1,5 +1,10 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { propertyImageUrl } from "@/lib/property-image-url";
+import {
+  normalizeAgencyNativeStudioPayload,
+  type AgencyNativeStudioPayload,
+  type AgencyNativeStudioSnapshot,
+} from "@/lib/agency-storefront-puck";
 
 type AgencyUser = {
   id: string;
@@ -45,6 +50,8 @@ type StorefrontRow = {
   show_highlights_section: boolean | null;
   show_contact_section: boolean | null;
   show_marketplace_section: boolean | null;
+  builder_type: string | null;
+  builder_payload: unknown;
   is_enabled: boolean;
 };
 
@@ -146,6 +153,9 @@ export type AgencyStorefrontData = {
   showContactSection: boolean;
   showMarketplaceSection: boolean;
   sectionOrder: Array<"about" | "services" | "contact" | "marketplace">;
+  builderType: "native" | "puck" | "webstudio";
+  builderPayload: unknown;
+  nativeStudio: AgencyNativeStudioPayload;
   marketplaceTitle: string;
   marketplace: AgencyMarketplaceItem[];
 };
@@ -223,6 +233,63 @@ function toSlug(input: string) {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 80);
+}
+
+function normalizeBuilderType(value: unknown): "native" | "puck" | "webstudio" {
+  const normalized = normalizeText(value);
+  if (normalized === "puck") return "puck";
+  if (normalized === "webstudio") return "webstudio";
+  return "native";
+}
+
+function parseDateMs(value: string) {
+  const t = Date.parse(String(value || "").trim());
+  return Number.isFinite(t) ? t : null;
+}
+
+function applySnapshotToStudio(
+  studio: AgencyNativeStudioPayload,
+  snapshot: AgencyNativeStudioSnapshot
+): AgencyNativeStudioPayload {
+  return {
+    ...studio,
+    hero_variant: snapshot.hero_variant,
+    hero_image_alt: snapshot.hero_image_alt,
+    hero_image_focal_x: snapshot.hero_image_focal_x,
+    hero_image_focal_y: snapshot.hero_image_focal_y,
+    card_density: snapshot.card_density,
+    section_surface: snapshot.section_surface,
+    cta_style: snapshot.cta_style,
+    marketplace_columns: snapshot.marketplace_columns,
+    card_radius: snapshot.card_radius,
+    button_radius: snapshot.button_radius,
+    section_spacing: snapshot.section_spacing,
+    design_tokens: snapshot.design_tokens,
+    design_system: snapshot.design_system,
+    responsive_overrides: snapshot.responsive_overrides,
+    page_content: snapshot.page_content,
+    blocks: snapshot.blocks,
+    trust_badges: snapshot.trust_badges,
+    mobile_conversion_rail: snapshot.mobile_conversion_rail,
+  };
+}
+
+function resolvePublishedNativeStudio(studio: AgencyNativeStudioPayload): AgencyNativeStudioPayload {
+  if (studio.publish_state === "published") return studio;
+  if (studio.publish_state === "draft") {
+    if (studio.published_snapshot) return applySnapshotToStudio(studio, studio.published_snapshot);
+    return studio;
+  }
+
+  const scheduledAt = parseDateMs(studio.scheduled_publish_at);
+  if (!scheduledAt) {
+    return studio.published_snapshot ? applySnapshotToStudio(studio, studio.published_snapshot) : studio;
+  }
+  if (Date.now() < scheduledAt) {
+    return studio.published_snapshot ? applySnapshotToStudio(studio, studio.published_snapshot) : studio;
+  }
+  if (studio.scheduled_snapshot) return applySnapshotToStudio(studio, studio.scheduled_snapshot);
+  return studio;
 }
 
 function formatPrice(value: string | number | null | undefined) {
@@ -324,7 +391,7 @@ async function findAgencyBySlug(
   if (!normalized) return null;
 
   const extendedSelect =
-    "agency_user_id, slug, tagline, description, cover_url, facebook_url, instagram_url, tiktok_url, whatsapp, hero_title, hero_subtitle, about_title, services, highlights, service_areas, languages_spoken, business_hours, contact_email, contact_phone, contact_address, cta_label, cta_url, marketplace_title, seo_title, seo_description, seo_keywords, custom_domain, custom_domain_status, brand_primary_color, brand_secondary_color, brand_accent_color, section_order, show_services_section, show_highlights_section, show_contact_section, show_marketplace_section, is_enabled";
+    "agency_user_id, slug, tagline, description, cover_url, facebook_url, instagram_url, tiktok_url, whatsapp, hero_title, hero_subtitle, about_title, services, highlights, service_areas, languages_spoken, business_hours, contact_email, contact_phone, contact_address, cta_label, cta_url, marketplace_title, seo_title, seo_description, seo_keywords, custom_domain, custom_domain_status, brand_primary_color, brand_secondary_color, brand_accent_color, section_order, show_services_section, show_highlights_section, show_contact_section, show_marketplace_section, builder_type, builder_payload, is_enabled";
   const legacySelect =
     "agency_user_id, slug, tagline, description, cover_url, facebook_url, instagram_url, tiktok_url, whatsapp, is_enabled";
 
@@ -521,7 +588,7 @@ async function loadMarketplace(
         area: typeof property.area === "number" ? `${property.area} m2` : "-",
         beds: typeof property.beds === "number" ? String(property.beds) : "-",
         baths: typeof property.baths === "number" ? String(property.baths) : "-",
-        imageUrl: coverPath ? propertyImageUrl(coverPath) : "",
+        imageUrl: coverPath ? propertyImageUrl(coverPath, { width: 960, quality: 72, format: "webp" }) : "",
       };
     });
   }
@@ -545,7 +612,7 @@ async function loadMarketplace(
 
 export async function getAgencyStorefrontData(
   slug: string,
-  options: { includeMarketplace?: boolean } = {}
+  options: { includeMarketplace?: boolean; locale?: "fr" | "ar" } = {}
 ): Promise<AgencyStorefrontData | null> {
   const resolved = await findAgencyBySlug(slug);
   if (!resolved) return null;
@@ -599,13 +666,32 @@ export async function getAgencyStorefrontData(
   const showContactSection = storefront?.show_contact_section ?? true;
   const showMarketplaceSection = storefront?.show_marketplace_section ?? true;
   const sectionOrder = normalizeSectionOrder(storefront?.section_order);
+  const builderType = normalizeBuilderType(storefront?.builder_type);
+  const builderPayload = storefront?.builder_payload ?? null;
+  const nativeStudio = resolvePublishedNativeStudio(normalizeAgencyNativeStudioPayload(builderPayload));
+  const locale = options.locale === "ar" ? "ar" : "fr";
+  const arTranslations = nativeStudio.translations?.ar ?? {};
+  const localizedHeroTitle =
+    locale === "ar" ? toText(arTranslations.hero_title || heroTitle) : heroTitle;
+  const localizedHeroSubtitle =
+    locale === "ar" ? toText(arTranslations.hero_subtitle || heroSubtitle) : heroSubtitle;
+  const localizedTagline =
+    locale === "ar" ? toText(arTranslations.tagline || agencyTagline) : agencyTagline;
+  const localizedDescription =
+    locale === "ar" ? toText(arTranslations.description || agencyDescription) : agencyDescription;
+  const localizedAboutTitle =
+    locale === "ar" ? toText(arTranslations.about_title || aboutTitle) : aboutTitle;
+  const localizedCtaLabel =
+    locale === "ar" ? toText(arTranslations.cta_label || ctaLabel) : ctaLabel;
+  const localizedMarketplaceTitle =
+    locale === "ar" ? toText(arTranslations.marketplace_title || marketplaceTitle) : marketplaceTitle;
   const agencyInitials = initials(agencyName);
 
   const socialLinks = [
     { href: facebookUrl, label: "Facebook" },
     { href: instagramUrl, label: "Instagram" },
     { href: tiktokUrl, label: "TikTok" },
-  ].filter((item) => /^https?:\/\//i.test(item.href));
+  ];
 
   const whatsappDigits = normalizeDigits(agencyWhatsapp);
   const whatsappHref = whatsappDigits
@@ -623,11 +709,11 @@ export async function getAgencyStorefrontData(
     slug: toSlug(slug),
     agencyName,
     agencyInitials,
-    agencyTagline,
-    agencyDescription,
-    heroTitle,
-    heroSubtitle,
-    aboutTitle,
+    agencyTagline: localizedTagline,
+    agencyDescription: localizedDescription,
+    heroTitle: localizedHeroTitle,
+    heroSubtitle: localizedHeroSubtitle,
+    aboutTitle: localizedAboutTitle,
     seoTitle,
     seoDescription,
     seoKeywords,
@@ -644,7 +730,7 @@ export async function getAgencyStorefrontData(
     agencyAddress,
     agencyCity,
     agencyWebsite,
-    ctaLabel,
+    ctaLabel: localizedCtaLabel,
     ctaHref,
     whatsappHref,
     logoUrl,
@@ -658,7 +744,10 @@ export async function getAgencyStorefrontData(
     showContactSection,
     showMarketplaceSection,
     sectionOrder,
-    marketplaceTitle,
+    builderType,
+    builderPayload,
+    nativeStudio,
+    marketplaceTitle: localizedMarketplaceTitle,
     marketplace,
   };
 }

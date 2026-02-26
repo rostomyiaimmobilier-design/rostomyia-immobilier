@@ -1733,7 +1733,6 @@ export default function ListingsClient({
 
     if (!hasAny) return;
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFilters((f) => ({
       ...f,
       q,
@@ -3318,7 +3317,6 @@ export default function ListingsClient({
       .filter((preset) => preset.amenities.length > 0)
       .slice(0, AI_MAX_CUSTOM_PRESETS);
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAiPresetStats(savedStats);
     setCustomAiPresets(normalizedCustom);
     setAiTrendNow(Date.now());

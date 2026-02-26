@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import dayjs, { type Dayjs } from "dayjs";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -495,26 +495,32 @@ export default function PropertyDetailClient({
   const [isAdminAccount, setIsAdminAccount] = useState(false);
   const isReservationMode = isShortStayLocationType(property.locationType);
   const reservationModeNorm = normalizeText(property.locationType);
-  const reservationPresetOptions: ReservationOption[] =
-    reservationModeNorm.includes("par_nuit") || reservationModeNorm.includes("nuit")
-      ? [
-          { value: "par_nuit", label: isArabic ? "بالليلة" : "Par nuit", nights: 1 },
-          { value: "weekend", label: isArabic ? "عطلة نهاية الأسبوع" : "Week-end", nights: 2 },
-          { value: "semaine", label: isArabic ? "أسبوع" : "Semaine", nights: 7 },
-        ]
-      : [
-          { value: "court_sejour", label: isArabic ? "إقامة قصيرة" : "Court sejour", nights: 3 },
-          { value: "3_nuits", label: isArabic ? "3 ليالٍ" : "3 nuits", nights: 3 },
-          { value: "7_nuits", label: isArabic ? "7 ليالٍ" : "7 nuits", nights: 7 },
-        ];
-  const reservationOptions: ReservationOption[] = [
-    {
-      value: RESERVATION_BY_DATES_VALUE,
-      label: isArabic ? "حسب تواريخك" : "Selon vos dates",
-      nights: null,
-    },
-    ...reservationPresetOptions,
-  ];
+  const reservationPresetOptions: ReservationOption[] = useMemo(
+    () =>
+      reservationModeNorm.includes("par_nuit") || reservationModeNorm.includes("nuit")
+        ? [
+            { value: "par_nuit", label: isArabic ? "بالليلة" : "Par nuit", nights: 1 },
+            { value: "weekend", label: isArabic ? "عطلة نهاية الأسبوع" : "Week-end", nights: 2 },
+            { value: "semaine", label: isArabic ? "أسبوع" : "Semaine", nights: 7 },
+          ]
+        : [
+            { value: "court_sejour", label: isArabic ? "إقامة قصيرة" : "Court sejour", nights: 3 },
+            { value: "3_nuits", label: isArabic ? "3 ليالٍ" : "3 nuits", nights: 3 },
+            { value: "7_nuits", label: isArabic ? "7 ليالٍ" : "7 nuits", nights: 7 },
+          ],
+    [isArabic, reservationModeNorm]
+  );
+  const reservationOptions: ReservationOption[] = useMemo(
+    () => [
+      {
+        value: RESERVATION_BY_DATES_VALUE,
+        label: isArabic ? "حسب تواريخك" : "Selon vos dates",
+        nights: null,
+      },
+      ...reservationPresetOptions,
+    ],
+    [isArabic, reservationPresetOptions]
+  );
   const reservationButtonLabel = isArabic ? "حجز" : "Reservation";
   const reservationModalTitle = isArabic ? "تأكيد الحجز" : "Confirmer la reservation";
   const reservationOptionLabel = isArabic ? "خيار الحجز" : "Option de reservation";

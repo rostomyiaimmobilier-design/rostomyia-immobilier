@@ -9,6 +9,7 @@ type StorefrontSectionNavProps = {
   showServicesSection: boolean;
   showContactSection: boolean;
   showMarketplaceSection: boolean;
+  builderType?: "native" | "puck" | "webstudio";
 };
 
 export default function StorefrontSectionNav({
@@ -18,6 +19,7 @@ export default function StorefrontSectionNav({
   showServicesSection,
   showContactSection,
   showMarketplaceSection,
+  builderType = "native",
 }: StorefrontSectionNavProps) {
   const sectionKeys = sectionOrder?.length
     ? sectionOrder
@@ -33,7 +35,7 @@ export default function StorefrontSectionNav({
           key,
           label: "Services",
           href: `/agence/${encodeURIComponent(slug)}/services`,
-          enabled: showServicesSection,
+          enabled: builderType !== "native" ? true : showServicesSection,
         };
       }
       if (key === "contact") {
@@ -41,14 +43,14 @@ export default function StorefrontSectionNav({
           key,
           label: "Contact",
           href: `/agence/${encodeURIComponent(slug)}/contact`,
-          enabled: showContactSection,
+          enabled: builderType !== "native" ? true : showContactSection,
         };
       }
       return {
         key: "marketplace",
         label: "Marketplace",
         href: `/agence/${encodeURIComponent(slug)}/marketplace`,
-        enabled: showMarketplaceSection,
+        enabled: builderType !== "native" ? true : showMarketplaceSection,
       };
     });
 
@@ -58,7 +60,7 @@ export default function StorefrontSectionNav({
   ];
 
   return (
-    <nav className="mt-6 rounded-2xl border border-black/10 bg-white/90 p-2 shadow-sm">
+    <nav className="mt-6 rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-[0_16px_38px_-28px_rgba(15,23,42,0.52)]">
       <div className="flex flex-wrap gap-2">
         {entries
           .filter((entry) => entry.enabled || entry.key === active)
@@ -68,8 +70,8 @@ export default function StorefrontSectionNav({
               href={entry.href}
               className={`inline-flex h-10 items-center rounded-xl px-3.5 text-sm font-semibold transition ${
                 active === entry.key
-                  ? "bg-[rgb(var(--navy))] text-white"
-                  : "border border-black/10 bg-white text-[rgb(var(--navy))] hover:bg-black/5"
+                  ? "bg-slate-900 text-white shadow-sm"
+                  : "border border-transparent bg-white text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900"
               }`}
             >
               {entry.label}

@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum SectionType {
+  HERO
+  FEATURES
+  SERVICES
+  PROJECTS
+  TESTIMONIALS
+  CTA
+  CONTACT
+}
+
+model SiteSettings {
+  id              String   @id @default("default")
+  brandName       String
+  logoUrl         String?
+  primaryColor    String   @default("#0f172a")
+  secondaryColor  String   @default("#f8fafc")
+  accentColor     String   @default("#d4af37")
+  headingFont     String?  @default("Cormorant Garamond")
+  bodyFont        String?  @default("Manrope")
+  footerColumns   Json?
+  socials         Json?
+  copyrightText   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Page {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  title       String
+  seoTitle    String?
+  seoDesc     String?
+  isPublished Boolean   @default(true)
+  order       Int       @default(0)
+  sections    Section[]
+  navItem     NavItem?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([order])
+}
+
+model Section {
+  id        String      @id @default(cuid())
+  pageId    String
+  page      Page        @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  type      SectionType
+  order     Int         @default(0)
+  isHidden  Boolean     @default(false)
+  content   Json
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([pageId, order])
+}
+
+model Media {
+  id        String   @id @default(cuid())
+  path      String
+  alt       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model NavItem {
+  id        String   @id @default(cuid())
+  label     String
+  href      String
+  order     Int      @default(0)
+  isHidden  Boolean  @default(false)
+  pageId    String?  @unique
+  page      Page?    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([order])
+}
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  phone     String?
+  message   String
+  pageSlug  String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}

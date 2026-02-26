@@ -1,6 +1,5 @@
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { makeImagePath } from "@/lib/storage";
-import { propertyImageUrl } from "@/lib/property-image-url";
 
 export async function uploadPropertyImages(params: {
   propertyId: string;
@@ -29,13 +28,6 @@ export async function uploadPropertyImages(params: {
     if (upErr) throw upErr;
     uploadedPaths.push(path);
   }
-
-  const rows = uploadedPaths.map((path, idx) => ({
-    property_id: params.propertyId,
-    path,
-    url: propertyImageUrl(path),
-    sort: idx,
-  }));
 
   // Send uploaded paths to server API to insert DB rows (avoids RLS errors
   // when running from an unauthenticated browser client).
